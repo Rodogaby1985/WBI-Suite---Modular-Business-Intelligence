@@ -96,6 +96,13 @@ class WBI_Export_Module {
                 $data = $this->engine->get_sales_by_period('day', $start, $end);
                 foreach($data as $r) fputcsv($output, [$r->period, $r->orders, $r->total]);
                 break;
+
+            case 'sales_province':
+                fputcsv($output, ['Reporte', 'Ventas por Provincia', $start . ' al ' . $end]);
+                fputcsv($output, ['Provincia', 'Cant. Pedidos', 'Total']);
+                $data = $this->engine->get_sales_by_province($start, $end);
+                foreach($data as $r) fputcsv($output, [$r->province ?: 'Desconocida', $r->orders, $r->total]);
+                break;
         }
 
         fclose( $output );

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WBI Suite - Modular Business Intelligence
  * Description: Suite modular para B2B, Estadísticas y Gestión de Stock.
- * Version: 2.1.0
+ * Version: 3.0.0
  * Author: Rodrigo Castañera
  */
 
@@ -69,6 +69,18 @@ class WBI_Suite_Loader {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-report-products.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-report-products.php';
                 new WBI_Report_Products();
+            }
+
+            // G. Sistema de Alertas de Stock
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-stock-alerts.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-stock-alerts.php';
+                new WBI_Stock_Alerts();
+            }
+
+            // H. Reportes Automáticos por Email
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-reports.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-reports.php';
+                new WBI_Email_Reports();
             }
         }
     }

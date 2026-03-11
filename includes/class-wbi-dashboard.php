@@ -27,6 +27,8 @@ class WBI_Dashboard_View {
 
     public function enqueue_assets( $hook ) {
         if ( 'toplevel_page_wbi-dashboard-view' !== $hook ) return;
+
+        wp_enqueue_script( 'wbi-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '4.4.0', true );
         
         wp_register_style( 'wbi-admin-css', false );
         wp_enqueue_style( 'wbi-admin-css' );
@@ -50,6 +52,10 @@ class WBI_Dashboard_View {
             /* TYPOGRAPHY */
             .wbi-number { font-size: 28px; font-weight: 700; color: #1d2327; margin: 10px 0 5px; line-height:1; }
             .wbi-label { text-transform: uppercase; font-size: 11px; color: #646970; font-weight: 600; letter-spacing: 0.5px; }
+            .wbi-compare-value { font-size: 13px; color: #646970; margin-top: 4px; }
+            .wbi-delta { font-weight: 700; }
+            .wbi-delta.positive { color: #00a32a; }
+            .wbi-delta.negative { color: #d63638; }
             
             /* TABLES */
             .wbi-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -60,6 +66,9 @@ class WBI_Dashboard_View {
             /* FILTERS BAR */
             .wbi-filter-bar { background: #fff; padding: 15px 20px; border: 1px solid #c3c4c7; margin-bottom: 25px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; border-radius: 3px; border-left: 4px solid #2271b1; }
             .wbi-date-inputs { display: inline-flex; gap: 10px; align-items: center; background: #f0f0f1; padding: 5px 10px; border-radius: 4px; }
+            
+            /* CHARTS */
+            .wbi-chart-container { position: relative; max-height: 300px; }
         ");
     }
 
@@ -93,12 +102,30 @@ class WBI_Dashboard_View {
             }
         }
 
-        // --- 2. OBTENER DATOS (Protegidos) ---
+        // --- 2. COMPARACIÓN DE PERIODO ---
+        $compare = isset($_GET['wbi_compare']) ? sanitize_text_field($_GET['wbi_compare']) : 'none';
+        $prev_start = '';
+        $prev_end   = '';
+
+        if ( $compare !== 'none' ) {
+            $current_diff = (int) round( ( strtotime($end_date) - strtotime($start_date) ) / DAY_IN_SECONDS );
+            if ( $compare === 'prev_period' ) {
+                $prev_end   = date('Y-m-d', strtotime($start_date) - DAY_IN_SECONDS);
+                $prev_start = date('Y-m-d', strtotime($prev_end) - $current_diff * DAY_IN_SECONDS);
+            } elseif ( $compare === 'prev_year' ) {
+                $prev_start = date('Y-m-d', strtotime($start_date . ' -1 year'));
+                $prev_end   = date('Y-m-d', strtotime($end_date . ' -1 year'));
+            } elseif ( $compare === 'custom_compare' && !empty($_GET['wbi_prev_start']) && !empty($_GET['wbi_prev_end']) ) {
+                $prev_start = sanitize_text_field($_GET['wbi_prev_start']);
+                $prev_end   = sanitize_text_field($_GET['wbi_prev_end']);
+            }
+        }
+
+        // --- 3. OBTENER DATOS ---
         $revenue = $this->engine->get_revenue($start_date, $end_date) ?: 0;
-        $units = $this->engine->get_units_sold($start_date, $end_date) ?: 0;
+        $units   = $this->engine->get_units_sold($start_date, $end_date) ?: 0;
         
-        // Obtener Estados y procesarlos seguramente
-        $status_raw = $this->engine->get_order_status_counts();
+        $status_raw   = $this->engine->get_order_status_counts();
         $c_completed  = $this->get_safe_count($status_raw, 'wc-completed');
         $c_processing = $this->get_safe_count($status_raw, 'wc-processing');
         $c_hold       = $this->get_safe_count($status_raw, 'wc-on-hold');
@@ -106,7 +133,32 @@ class WBI_Dashboard_View {
         $c_failed     = $this->get_safe_count($status_raw, 'wc-failed');
 
         $least_sold = $this->engine->get_least_sold($start_date, $end_date);
-        $best_sold = $this->engine->get_best_sellers($start_date, $end_date);
+        $best_sold  = $this->engine->get_best_sellers($start_date, $end_date);
+
+        // Period data for chart
+        $period_data = $this->engine->get_sales_by_period('day', $start_date, $end_date);
+
+        // Comparison data
+        $prev_revenue = 0;
+        $prev_units   = 0;
+        if ( $compare !== 'none' && $prev_start && $prev_end ) {
+            $prev_revenue = $this->engine->get_revenue($prev_start, $prev_end) ?: 0;
+            $prev_units   = $this->engine->get_units_sold($prev_start, $prev_end) ?: 0;
+        }
+
+        // Build chart data arrays
+        $chart_labels  = array();
+        $chart_totals  = array();
+        foreach ( $period_data as $row ) {
+            $chart_labels[] = $row->period;
+            $chart_totals[] = (float) $row->total;
+        }
+        $chart_labels_json = wp_json_encode( $chart_labels );
+        $chart_totals_json = wp_json_encode( $chart_totals );
+
+        // Doughnut chart data for order statuses
+        $donut_labels = wp_json_encode( array('Completados','En Proceso','En Espera','Cancelados','Fallidos') );
+        $donut_data   = wp_json_encode( array($c_completed, $c_processing, $c_hold, $c_cancelled, $c_failed) );
 
         ?>
         <div class="wrap wbi-wrap">
@@ -132,9 +184,23 @@ class WBI_Dashboard_View {
                 </select>
 
                 <div id="wbi_custom_dates" class="wbi-date-inputs" style="display: <?php echo ($range === 'custom') ? 'inline-flex' : 'none'; ?>;">
-                    <input type="date" name="wbi_start" value="<?php echo $start_date; ?>">
+                    <input type="date" name="wbi_start" value="<?php echo esc_attr($start_date); ?>">
                     <span class="dashicons dashicons-arrow-right-alt"></span>
-                    <input type="date" name="wbi_end" value="<?php echo $end_date; ?>">
+                    <input type="date" name="wbi_end" value="<?php echo esc_attr($end_date); ?>">
+                </div>
+
+                <label style="font-weight:600; margin-left:10px;">🔄 Comparar con:</label>
+                <select name="wbi_compare" id="wbi_compare" onchange="toggleCompareDates(this.value)">
+                    <option value="none" <?php selected($compare, 'none'); ?>>Sin comparación</option>
+                    <option value="prev_period" <?php selected($compare, 'prev_period'); ?>>Período Anterior</option>
+                    <option value="prev_year" <?php selected($compare, 'prev_year'); ?>>Mismo Período Año Anterior</option>
+                    <option value="custom_compare" <?php selected($compare, 'custom_compare'); ?>>Fechas Personalizadas...</option>
+                </select>
+
+                <div id="wbi_compare_dates" class="wbi-date-inputs" style="display: <?php echo ($compare === 'custom_compare') ? 'inline-flex' : 'none'; ?>;">
+                    <input type="date" name="wbi_prev_start" value="<?php echo esc_attr($prev_start); ?>">
+                    <span class="dashicons dashicons-arrow-right-alt"></span>
+                    <input type="date" name="wbi_prev_end" value="<?php echo esc_attr($prev_end); ?>">
                 </div>
 
                 <button type="submit" class="button button-primary">Aplicar Filtros</button>
@@ -142,12 +208,14 @@ class WBI_Dashboard_View {
 
             <script>
                 function toggleCustomDates(val) {
-                    const box = document.getElementById('wbi_custom_dates');
-                    box.style.display = (val === 'custom') ? 'inline-flex' : 'none';
+                    document.getElementById('wbi_custom_dates').style.display = (val === 'custom') ? 'inline-flex' : 'none';
+                }
+                function toggleCompareDates(val) {
+                    document.getElementById('wbi_compare_dates').style.display = (val === 'custom_compare') ? 'inline-flex' : 'none';
                 }
             </script>
 
-            <!-- SECCIÓN 1: ESTADO GLOBAL PEDIDOS (DISEÑO GRID DE COLORES) -->
+            <!-- SECCIÓN 1: ESTADO GLOBAL PEDIDOS -->
             <h2 class="wbi-section-title">📦 Estado Global de Pedidos</h2>
             <div class="wbi-grid-4">
                 <div class="wbi-card green">
@@ -171,17 +239,49 @@ class WBI_Dashboard_View {
             <!-- SECCIÓN 2: RENDIMIENTO ECONÓMICO -->
             <h2 class="wbi-section-title">📈 Rendimiento (<?php echo date('d/m', strtotime($start_date)) . ' - ' . date('d/m', strtotime($end_date)); ?>)</h2>
             <div class="wbi-grid-4">
-                 <div class="wbi-card blue">
+                <div class="wbi-card blue">
                     <div class="wbi-label">Facturación Periodo</div>
                     <div class="wbi-number"><?php echo wc_price($revenue); ?></div>
+                    <?php if ( $compare !== 'none' && $prev_start ) : 
+                        $rev_delta = $this->calc_delta($revenue, $prev_revenue);
+                    ?>
+                    <div class="wbi-compare-value">
+                        Anterior: <?php echo wc_price($prev_revenue); ?>
+                        <?php echo $this->render_delta($rev_delta); ?>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <div class="wbi-card">
                     <div class="wbi-label">Unidades Vendidas</div>
                     <div class="wbi-number"><?php echo $units; ?></div>
+                    <?php if ( $compare !== 'none' && $prev_start ) :
+                        $units_delta = $this->calc_delta($units, $prev_units);
+                    ?>
+                    <div class="wbi-compare-value">
+                        Anterior: <?php echo $prev_units; ?>
+                        <?php echo $this->render_delta($units_delta); ?>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
-            <!-- SECCIÓN 3: PRODUCTOS TOP/BOTTOM -->
+            <!-- SECCIÓN 3: GRÁFICOS -->
+            <div class="wbi-grid-2">
+                <div class="wbi-card">
+                    <h3 style="margin-top:0;">📊 Facturación por Día</h3>
+                    <div class="wbi-chart-container">
+                        <canvas id="wbiRevenueChart"></canvas>
+                    </div>
+                </div>
+                <div class="wbi-card">
+                    <h3 style="margin-top:0;">🥧 Distribución de Pedidos por Estado</h3>
+                    <div class="wbi-chart-container" style="max-height:260px; display:flex; justify-content:center;">
+                        <canvas id="wbiStatusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 4: PRODUCTOS TOP/BOTTOM -->
             <div class="wbi-grid-2">
                 <div class="wbi-card">
                     <h3 style="margin-top:0;">🔥 Productos Más Vendidos</h3>
@@ -190,7 +290,7 @@ class WBI_Dashboard_View {
                         <tbody>
                             <?php if(!empty($best_sold) && is_array($best_sold)): foreach(array_slice($best_sold, 0, 5) as $p): ?>
                                 <tr>
-                                    <td><?php echo $p->name; ?></td>
+                                    <td><?php echo esc_html($p->name); ?></td>
                                     <td style="text-align:right;"><strong><?php echo $p->qty; ?></strong></td>
                                 </tr>
                             <?php endforeach; else: echo "<tr><td colspan='2'>Sin ventas en este periodo</td></tr>"; endif; ?>
@@ -206,7 +306,7 @@ class WBI_Dashboard_View {
                         <tbody>
                             <?php if(!empty($least_sold) && is_array($least_sold)): foreach(array_slice($least_sold, 0, 5) as $p): ?>
                                 <tr>
-                                    <td><?php echo $p->name; ?></td>
+                                    <td><?php echo esc_html($p->name); ?></td>
                                     <td style="text-align:right;"><strong><?php echo $p->qty; ?></strong></td>
                                 </tr>
                             <?php endforeach; else: echo "<tr><td colspan='2'>Sin datos</td></tr>"; endif; ?>
@@ -215,7 +315,72 @@ class WBI_Dashboard_View {
                 </div>
             </div>
 
+            <script>
+            (function() {
+                // Bar chart: revenue by day
+                var revenueCtx = document.getElementById('wbiRevenueChart');
+                if (revenueCtx) {
+                    new Chart(revenueCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: <?php echo $chart_labels_json; ?>,
+                            datasets: [{
+                                label: 'Facturación',
+                                data: <?php echo $chart_totals_json; ?>,
+                                backgroundColor: 'rgba(34, 113, 177, 0.7)',
+                                borderColor: '#2271b1',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true } }
+                        }
+                    });
+                }
+
+                // Doughnut chart: order status
+                var statusCtx = document.getElementById('wbiStatusChart');
+                if (statusCtx) {
+                    new Chart(statusCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: <?php echo $donut_labels; ?>,
+                            datasets: [{
+                                data: <?php echo $donut_data; ?>,
+                                backgroundColor: ['#00a32a','#2271b1','#dba617','#d63638','#8c3130'],
+                                borderWidth: 2,
+                                borderColor: '#fff'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: { legend: { position: 'bottom' } }
+                        }
+                    });
+                }
+            })();
+            </script>
+
         </div>
         <?php
+    }
+
+    private function calc_delta( $current, $previous ) {
+        if ( (float) $previous === 0.0 ) return null;
+        return round( ( ( $current - $previous ) / $previous ) * 100, 1 );
+    }
+
+    private function render_delta( $delta ) {
+        if ( $delta === null ) return '';
+        if ( $delta > 0 ) {
+            return '<span class="wbi-delta positive">▲ ' . $delta . '%</span>';
+        } elseif ( $delta < 0 ) {
+            return '<span class="wbi-delta negative">▼ ' . abs($delta) . '%</span>';
+        }
+        return '<span class="wbi-delta">→ 0%</span>';
     }
 }

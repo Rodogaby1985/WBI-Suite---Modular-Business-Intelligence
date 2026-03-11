@@ -9,6 +9,7 @@ class WBI_Report_Sales {
         $this->engine = new WBI_Metrics_Engine();
         // CORRECCIÓN: Prioridad 100 para asegurar que el padre existe
         add_action( 'admin_menu', array( $this, 'register' ), 100 );
+        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
     }
 
     public function register() {
@@ -22,11 +23,15 @@ class WBI_Report_Sales {
         );
     }
 
+    public function enqueue_assets( $hook ) {
+        if ( strpos( $hook, 'wbi-sales-report' ) === false ) return;
+        wp_enqueue_script( 'wbi-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '4.4.0', true );
+    }
+
     public function render() {
-        $tab = isset($_GET['tab']) ? $_GET['tab'] : 'period';
-        // Fechas por defecto: Mes actual
-        $start = isset($_GET['start']) ? $_GET['start'] : date('Y-m-01'); 
-        $end = isset($_GET['end']) ? $_GET['end'] : date('Y-m-d');
+        $tab   = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'period';
+        $start = isset($_GET['start']) ? sanitize_text_field($_GET['start']) : date('Y-m-01'); 
+        $end   = isset($_GET['end'])   ? sanitize_text_field($_GET['end'])   : date('Y-m-d');
         ?>
         <div class="wrap">
             <h1 class="wp-heading-inline">📊 Análisis Profundo de Ventas</h1>
@@ -37,53 +42,110 @@ class WBI_Report_Sales {
                 <a href="?page=wbi-sales-report&tab=source" class="nav-tab <?php echo $tab=='source'?'nav-tab-active':'';?>">Por Origen</a>
                 <a href="?page=wbi-sales-report&tab=cat" class="nav-tab <?php echo $tab=='cat'?'nav-tab-active':'';?>">Por Categoría</a>
                 <a href="?page=wbi-sales-report&tab=collection" class="nav-tab <?php echo $tab=='collection'?'nav-tab-active':'';?>">Por Colección</a>
+                <a href="?page=wbi-sales-report&tab=province" class="nav-tab <?php echo $tab=='province'?'nav-tab-active':'';?>">Por Provincia</a>
             </nav>
             
             <div style="background:#fff; padding:15px; border:1px solid #c3c4c7; border-top:none; margin-bottom:20px;">
                 <form method="get" style="display:flex; align-items:center; gap:10px;">
                     <input type="hidden" name="page" value="wbi-sales-report">
-                    <input type="hidden" name="tab" value="<?php echo $tab; ?>">
+                    <input type="hidden" name="tab" value="<?php echo esc_attr($tab); ?>">
                     
                     <label>Desde:</label> 
-                    <input type="date" name="start" value="<?php echo $start; ?>"> 
+                    <input type="date" name="start" value="<?php echo esc_attr($start); ?>"> 
                     
                     <label>Hasta:</label> 
-                    <input type="date" name="end" value="<?php echo $end; ?>">
+                    <input type="date" name="end" value="<?php echo esc_attr($end); ?>">
                     
                     <button class="button button-primary">Filtrar Resultados</button>
+
+                    <?php if ( $tab === 'period' ) : ?>
+                        <a href="<?php echo esc_url(admin_url("admin-post.php?action=wbi_export_dynamic&report_type=sales_period&start={$start}&end={$end}")); ?>" class="button">📥 Exportar CSV</a>
+                    <?php elseif ( $tab === 'province' ) : ?>
+                        <a href="<?php echo esc_url(admin_url("admin-post.php?action=wbi_export_dynamic&report_type=sales_province&start={$start}&end={$end}")); ?>" class="button">📥 Exportar CSV</a>
+                    <?php endif; ?>
                 </form>
             </div>
 
             <div style="background:#fff; padding:20px; border:1px solid #c3c4c7; box-shadow:0 1px 1px rgba(0,0,0,0.04);">
                 <?php 
-                if($tab=='period') {
+                if ( $tab === 'period' ) {
                     $data = $this->engine->get_sales_by_period('day', $start, $end);
-                    if ($data) {
+                    if ( $data ) {
+                        // Chart
+                        $labels = wp_json_encode( array_map( function($r){ return $r->period; }, $data ) );
+                        $totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
+                        echo '<canvas id="wbiSalesPeriodChart" style="max-height:280px; margin-bottom:20px;"></canvas>';
+                        echo '<script>
+                        (function(){
+                            var ctx = document.getElementById("wbiSalesPeriodChart");
+                            if(ctx) new Chart(ctx, {type:"bar", data:{labels:' . $labels . ', datasets:[{label:"Facturación",data:' . $totals . ',backgroundColor:"rgba(34,113,177,0.7)",borderColor:"#2271b1",borderWidth:1}]}, options:{responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}});
+                        })();
+                        </script>';
+
                         echo '<table class="widefat striped"><thead><tr><th>Fecha</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
-                        foreach($data as $r) echo "<tr><td>{$r->period}</td><td>{$r->orders}</td><td><strong>".wc_price($r->total)."</strong></td></tr>";
+                        foreach($data as $r) echo "<tr><td>" . esc_html($r->period) . "</td><td>" . intval($r->orders) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
                         echo '</tbody></table>';
                     } else { echo '<p>Sin datos en este periodo.</p>'; }
                     
-                } elseif($tab=='source') {
+                } elseif ( $tab === 'source' ) {
                     $data = $this->engine->get_sales_by_source($start, $end);
+                    if ( $data ) {
+                        $src_labels = wp_json_encode( array_map( function($r){ return $r->source ?: 'Web/Directo'; }, $data ) );
+                        $src_totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
+                        echo '<canvas id="wbiSourceChart" style="max-height:260px; max-width:400px; margin-bottom:20px;"></canvas>';
+                        echo '<script>
+                        (function(){
+                            var ctx = document.getElementById("wbiSourceChart");
+                            if(ctx) new Chart(ctx, {type:"pie", data:{labels:' . $src_labels . ', datasets:[{data:' . $src_totals . ',backgroundColor:["#2271b1","#00a32a","#dba617","#d63638","#8c3130","#50575e"]}]}, options:{responsive:true, maintainAspectRatio:true, plugins:{legend:{position:"right"}}}});
+                        })();
+                        </script>';
+                    }
                     echo '<table class="widefat striped"><thead><tr><th>Origen</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
-                    if($data) foreach($data as $r) echo "<tr><td>".ucfirst($r->source?:'Web/Directo')."</td><td>{$r->count}</td><td><strong>".wc_price($r->total)."</strong></td></tr>";
+                    if($data) foreach($data as $r) echo "<tr><td>" . esc_html(ucfirst($r->source?:'Web/Directo')) . "</td><td>" . intval($r->count) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
                     else echo "<tr><td colspan=3>No se ha definido origen para las ventas de este periodo.</td></tr>";
                     echo '</tbody></table>';
                     
-                } elseif($tab=='cat') {
+                } elseif ( $tab === 'cat' ) {
                     $data = $this->engine->get_sales_by_taxonomy('product_cat', $start, $end);
+                    if ( $data ) {
+                        $cat_labels = wp_json_encode( array_map( function($r){ return $r->name; }, $data ) );
+                        $cat_totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
+                        echo '<canvas id="wbiCatChart" style="max-height:260px; max-width:400px; margin-bottom:20px;"></canvas>';
+                        echo '<script>
+                        (function(){
+                            var ctx = document.getElementById("wbiCatChart");
+                            if(ctx) new Chart(ctx, {type:"pie", data:{labels:' . $cat_labels . ', datasets:[{data:' . $cat_totals . ',backgroundColor:["#2271b1","#00a32a","#dba617","#d63638","#8c3130","#50575e","#72aee6","#68de7c"]}]}, options:{responsive:true, maintainAspectRatio:true, plugins:{legend:{position:"right"}}}});
+                        })();
+                        </script>';
+                    }
                     echo '<table class="widefat striped"><thead><tr><th>Categoría</th><th>Unidades Vendidas</th><th>Total Generado ($)</th></tr></thead><tbody>';
-                    if($data) foreach($data as $r) echo "<tr><td>{$r->name}</td><td>{$r->qty}</td><td><strong>".wc_price($r->total)."</strong></td></tr>";
+                    if($data) foreach($data as $r) echo "<tr><td>" . esc_html($r->name) . "</td><td>" . intval($r->qty) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
                     else echo "<tr><td colspan=3>Sin datos.</td></tr>";
                     echo '</tbody></table>';
                     
-                } elseif($tab=='collection') {
-                    // Nota: Asegúrate de que el slug de tu taxonomía sea 'coleccion' o cámbialo aquí
+                } elseif ( $tab === 'collection' ) {
                     $data = $this->engine->get_sales_by_taxonomy('coleccion', $start, $end);
                     echo '<table class="widefat striped"><thead><tr><th>Colección</th><th>Unidades Vendidas</th><th>Total Generado ($)</th></tr></thead><tbody>';
-                    if($data) foreach($data as $r) echo "<tr><td>{$r->name}</td><td>{$r->qty}</td><td><strong>".wc_price($r->total)."</strong></td></tr>";
+                    if($data) foreach($data as $r) echo "<tr><td>" . esc_html($r->name) . "</td><td>" . intval($r->qty) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
                     else echo "<tr><td colspan=3>No se encontraron ventas asociadas a colecciones en este periodo (o la taxonomía 'coleccion' no existe).</td></tr>";
+                    echo '</tbody></table>';
+
+                } elseif ( $tab === 'province' ) {
+                    $data = $this->engine->get_sales_by_province($start, $end);
+                    if ( $data ) {
+                        $prov_labels = wp_json_encode( array_map( function($r){ return $r->province ?: 'Desconocida'; }, $data ) );
+                        $prov_totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
+                        echo '<canvas id="wbiProvinceChart" style="max-height:320px; margin-bottom:20px;"></canvas>';
+                        echo '<script>
+                        (function(){
+                            var ctx = document.getElementById("wbiProvinceChart");
+                            if(ctx) new Chart(ctx, {type:"bar", data:{labels:' . $prov_labels . ', datasets:[{label:"Facturación",data:' . $prov_totals . ',backgroundColor:"rgba(34,113,177,0.7)",borderColor:"#2271b1",borderWidth:1}]}, options:{indexAxis:"y", responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}}}});
+                        })();
+                        </script>';
+                    }
+                    echo '<table class="widefat striped"><thead><tr><th>Provincia</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
+                    if($data) foreach($data as $r) echo "<tr><td>" . esc_html($r->province?:'Desconocida') . "</td><td>" . intval($r->orders) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
+                    else echo "<tr><td colspan=3>Sin datos de provincia en este periodo.</td></tr>";
                     echo '</tbody></table>';
                 }
                 ?>
