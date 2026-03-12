@@ -138,15 +138,51 @@ class WBI_Metrics_Engine {
         return $this->wpdb->get_results( $sql );
     }
     
+    /**
+     * Check if WooCommerce HPOS (High-Performance Order Storage) is active.
+     * HPOS stores orders in wp_wc_orders instead of wp_posts.
+     *
+     * @return bool
+     */
+    private function is_hpos_active() {
+        $table = $this->wpdb->prefix . 'wc_orders';
+        return (bool) $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+    }
+
     // --- 3. STOCK (Funciones necesarias para los otros tabs) ---
     public function get_realtime_stock() {
-        return $this->wpdb->get_results("SELECT p.post_title, pm.meta_value as stock FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND p.post_status='publish' AND pm.meta_key='_stock' ORDER BY CAST(stock AS SIGNED) DESC LIMIT 100");
+        $results = $this->wpdb->get_results( "SELECT p.post_title, pm.meta_value as stock FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND p.post_status='publish' AND pm.meta_key='_stock' ORDER BY CAST(stock AS SIGNED) DESC LIMIT 100" );
+        return is_array( $results ) ? $results : array();
     }
+
     public function get_committed_stock() {
-        return $this->wpdb->get_results("SELECT i.order_item_name as name, m.meta_value as qty, p.ID as order_id FROM {$this->wpdb->prefix}woocommerce_order_items i JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta m ON i.order_item_id=m.order_item_id JOIN {$this->wpdb->posts} p ON i.order_id=p.ID WHERE m.meta_key='_qty' AND p.post_status IN ('wc-processing','wc-on-hold')");
+        // Try HPOS-compatible query first (WooCommerce 7.1+ with HPOS enabled)
+        if ( $this->is_hpos_active() ) {
+            $sql = "SELECT i.order_item_name as name, m.meta_value as qty, o.id as order_id
+                    FROM {$this->wpdb->prefix}woocommerce_order_items i
+                    JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta m ON i.order_item_id = m.order_item_id
+                    JOIN {$this->wpdb->prefix}wc_orders o ON i.order_id = o.id
+                    WHERE m.meta_key = '_qty'
+                    AND o.status IN ('wc-processing','wc-on-hold')";
+            $results = $this->wpdb->get_results( $sql );
+            return is_array( $results ) ? $results : array();
+        }
+
+        // Fallback: traditional wp_posts query
+        $sql = "SELECT i.order_item_name as name, m.meta_value as qty, p.ID as order_id
+                FROM {$this->wpdb->prefix}woocommerce_order_items i
+                JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta m ON i.order_item_id = m.order_item_id
+                JOIN {$this->wpdb->posts} p ON i.order_id = p.ID
+                WHERE m.meta_key = '_qty'
+                AND p.post_type = 'shop_order'
+                AND p.post_status IN ('wc-processing','wc-on-hold')";
+        $results = $this->wpdb->get_results( $sql );
+        return is_array( $results ) ? $results : array();
     }
+
     public function get_dormant_stock() {
-        return $this->wpdb->get_results("SELECT p.post_title, pm.meta_value as stock, p.post_modified FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND pm.meta_key='_stock' AND pm.meta_value > 0 AND p.post_modified < DATE_SUB(NOW(), INTERVAL 90 DAY)");
+        $results = $this->wpdb->get_results( "SELECT p.post_title, pm.meta_value as stock, p.post_modified FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND pm.meta_key='_stock' AND pm.meta_value > 0 AND p.post_modified < DATE_SUB(NOW(), INTERVAL 90 DAY)" );
+        return is_array( $results ) ? $results : array();
     }
 
     // --- 4. DETALLES AVANZADOS (Para reportes) ---
