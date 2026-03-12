@@ -17,13 +17,22 @@ class WBI_Report_Products {
 
     public function enqueue_assets( $hook ) {
         if ( strpos( $hook, 'wbi-products-report' ) === false ) return;
-        wp_enqueue_script( 'wbi-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '4.4.0', true );
+        wp_enqueue_script( 'wbi-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '4.4.0', false );
     }
 
     public function render() {
         $tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'stock';
         $start = isset($_GET['start']) ? sanitize_text_field($_GET['start']) : date('Y-01-01');
         $end   = isset($_GET['end'])   ? sanitize_text_field($_GET['end'])   : date('Y-m-d');
+        $default_statuses = array('wc-completed', 'wc-processing');
+        $statuses = isset($_GET['statuses']) ? array_map('sanitize_text_field', (array)$_GET['statuses']) : $default_statuses;
+
+        $all_statuses = array(
+            'wc-completed'  => '✅ Completado',
+            'wc-processing' => '🔄 En proceso',
+            'wc-on-hold'    => '⏸ En espera',
+            'wc-pending'    => '⏳ Pendiente',
+        );
 
         // Mapeo para saber qué reporte pedir al exportador
         $export_map = [
@@ -34,9 +43,8 @@ class WBI_Report_Products {
             'worst'     => 'worst_sellers'
         ];
         $export_type = $export_map[$tab] ?? 'stock_real';
-
-        // URL de exportación
-        $export_url = admin_url("admin-post.php?action=wbi_export_dynamic&report_type={$export_type}&start={$start}&end={$end}");
+        $statuses_qs = implode('', array_map(function($s){ return '&statuses[]=' . rawurlencode($s); }, $statuses));
+        $export_url = admin_url("admin-post.php?action=wbi_export_dynamic&report_type={$export_type}&start={$start}&end={$end}{$statuses_qs}");
 
         ?>
         <div class="wrap">
@@ -54,13 +62,20 @@ class WBI_Report_Products {
 
             <!-- FILTRO DE FECHAS: SOLO PARA MÁS/MENOS VENDIDOS -->
             <?php if( $tab == 'best' || $tab == 'worst' ): ?>
-            <div style="background:#fff; padding:15px; border:1px solid #c3c4c7; border-top:none; margin-bottom:15px; display:flex; align-items:center; gap:10px;">
+            <div style="background:#fff; padding:15px; border:1px solid #c3c4c7; border-top:none; margin-bottom:15px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                 <form method="get">
                     <input type="hidden" name="page" value="wbi-products-report">
                     <input type="hidden" name="tab" value="<?php echo esc_attr($tab); ?>">
                     <strong>📅 Filtrar Periodo:</strong> 
                     Desde <input type="date" name="start" value="<?php echo esc_attr($start); ?>"> 
                     Hasta <input type="date" name="end" value="<?php echo esc_attr($end); ?>">
+
+                    <strong style="margin-left:8px;">Estados:</strong>
+                    <select name="statuses[]" multiple size="4" style="height:72px; min-width:140px;" title="Mantené Ctrl/Cmd para seleccionar múltiples">
+                        <?php foreach ( $all_statuses as $val => $label ) : ?>
+                            <option value="<?php echo esc_attr($val); ?>" <?php echo in_array($val, $statuses, true) ? 'selected' : ''; ?>><?php echo esc_html($label); ?></option>
+                        <?php endforeach; ?>
+                    </select>
                     <button class="button button-primary">Actualizar</button>
                 </form>
             </div>
@@ -71,23 +86,23 @@ class WBI_Report_Products {
                 if($tab=='stock'){
                     $data = $this->engine->get_realtime_stock();
                     echo '<p><i>Inventario físico actual en sistema.</i></p>';
-                    echo '<table class="widefat striped"><thead><tr><th>Producto</th><th>Stock Actual</th></tr></thead><tbody>';
+                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Stock Actual</th></tr></thead><tbody>';
                     foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td><span class='badge'>" . intval($d->stock) . "</span></td></tr>";
                     echo '</tbody></table>';
                 } elseif($tab=='committed'){
                     $data = $this->engine->get_committed_stock();
                     echo '<p><i>Productos reservados en pedidos pendientes de envío.</i></p>';
-                    echo '<table class="widefat striped"><thead><tr><th>Producto</th><th>Cant.</th><th>Pedido</th></tr></thead><tbody>';
+                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Cant.</th><th>Pedido</th></tr></thead><tbody>';
                     foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td>" . intval($d->qty) . "</td><td><a href='post.php?post=" . intval($d->order_id) . "&action=edit'>#" . intval($d->order_id) . "</a></td></tr>";
                     echo '</tbody></table>';
                 } elseif($tab=='dormant'){
                     $data = $this->engine->get_dormant_stock();
                     echo '<p style="color:red;"><i>Productos con stock positivo sin movimiento en 90 días.</i></p>';
-                    echo '<table class="widefat striped"><thead><tr><th>Producto</th><th>Stock Inmovilizado</th><th>Último Mov.</th></tr></thead><tbody>';
+                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Stock Inmovilizado</th><th>Último Mov.</th></tr></thead><tbody>';
                     foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td>" . intval($d->stock) . "</td><td>" . date('d/m/Y', strtotime($d->post_modified)) . "</td></tr>";
                     echo '</tbody></table>';
                 } elseif($tab=='best'){
-                    $data = $this->engine->get_best_sellers($start, $end);
+                    $data = $this->engine->get_best_sellers($start, $end, $statuses);
                     echo "<p>Ranking del <b>" . esc_html($start) . "</b> al <b>" . esc_html($end) . "</b>.</p>";
 
                     if ( $data ) {
@@ -97,17 +112,17 @@ class WBI_Report_Products {
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiBestChart");
-                            if(ctx) new Chart(ctx, {type:"bar", data:{labels:' . $prod_names . ', datasets:[{label:"Unidades",data:' . $prod_qtys . ',backgroundColor:"rgba(0,163,42,0.7)",borderColor:"#00a32a",borderWidth:1}]}, options:{indexAxis:"y", responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}}}});
+                            if(ctx && typeof Chart !== "undefined") new Chart(ctx, {type:"bar", data:{labels:' . $prod_names . ', datasets:[{label:"Unidades",data:' . $prod_qtys . ',backgroundColor:"rgba(0,163,42,0.7)",borderColor:"#00a32a",borderWidth:1}]}, options:{indexAxis:"y", responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}}}});
                         })();
                         </script>';
                     }
 
-                    echo '<table class="widefat striped"><thead><tr><th>Producto</th><th>Unidades Vendidas</th></tr></thead><tbody>';
+                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Unidades Vendidas</th></tr></thead><tbody>';
                     if($data) foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td><strong>" . intval($d->qty) . "</strong></td></tr>";
                     else echo "<tr><td colspan=2>Sin ventas en este periodo.</td></tr>";
                     echo '</tbody></table>';
                 } elseif($tab=='worst'){
-                    $data = $this->engine->get_least_sold($start, $end);
+                    $data = $this->engine->get_least_sold($start, $end, $statuses);
                     echo "<p>Productos con menor salida del <b>" . esc_html($start) . "</b> al <b>" . esc_html($end) . "</b> (pero con al menos 1 venta).</p>";
 
                     if ( $data ) {
@@ -117,12 +132,12 @@ class WBI_Report_Products {
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiWorstChart");
-                            if(ctx) new Chart(ctx, {type:"bar", data:{labels:' . $prod_names . ', datasets:[{label:"Unidades",data:' . $prod_qtys . ',backgroundColor:"rgba(214,54,56,0.7)",borderColor:"#d63638",borderWidth:1}]}, options:{indexAxis:"y", responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}}}});
+                            if(ctx && typeof Chart !== "undefined") new Chart(ctx, {type:"bar", data:{labels:' . $prod_names . ', datasets:[{label:"Unidades",data:' . $prod_qtys . ',backgroundColor:"rgba(214,54,56,0.7)",borderColor:"#d63638",borderWidth:1}]}, options:{indexAxis:"y", responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}}}});
                         })();
                         </script>';
                     }
 
-                    echo '<table class="widefat striped"><thead><tr><th>Producto</th><th>Unidades Vendidas</th></tr></thead><tbody>';
+                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Unidades Vendidas</th></tr></thead><tbody>';
                     if($data) foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td>" . intval($d->qty) . "</td></tr>";
                     else echo "<tr><td colspan=2>Sin datos.</td></tr>";
                     echo '</tbody></table>';

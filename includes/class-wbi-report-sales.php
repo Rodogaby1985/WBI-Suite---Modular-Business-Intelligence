@@ -25,13 +25,25 @@ class WBI_Report_Sales {
 
     public function enqueue_assets( $hook ) {
         if ( strpos( $hook, 'wbi-sales-report' ) === false ) return;
-        wp_enqueue_script( 'wbi-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '4.4.0', true );
+        wp_enqueue_script( 'wbi-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '4.4.0', false );
     }
 
     public function render() {
-        $tab   = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'period';
-        $start = isset($_GET['start']) ? sanitize_text_field($_GET['start']) : date('Y-m-01'); 
-        $end   = isset($_GET['end'])   ? sanitize_text_field($_GET['end'])   : date('Y-m-d');
+        $tab      = isset($_GET['tab'])      ? sanitize_text_field($_GET['tab'])      : 'period';
+        $start    = isset($_GET['start'])    ? sanitize_text_field($_GET['start'])    : date('Y-m-01'); 
+        $end      = isset($_GET['end'])      ? sanitize_text_field($_GET['end'])      : date('Y-m-d');
+        $default_statuses = array('wc-completed', 'wc-processing');
+        $statuses = isset($_GET['statuses']) ? array_map('sanitize_text_field', (array)$_GET['statuses']) : $default_statuses;
+
+        $all_statuses = array(
+            'wc-completed'  => '✅ Completado',
+            'wc-processing' => '🔄 En proceso',
+            'wc-on-hold'    => '⏸ En espera',
+            'wc-pending'    => '⏳ Pendiente',
+        );
+
+        // Build statuses query string for export URLs
+        $statuses_qs = implode('', array_map(function($s){ return '&statuses[]=' . rawurlencode($s); }, $statuses));
         ?>
         <div class="wrap">
             <h1 class="wp-heading-inline">📊 Análisis Profundo de Ventas</h1>
@@ -46,7 +58,7 @@ class WBI_Report_Sales {
             </nav>
             
             <div style="background:#fff; padding:15px; border:1px solid #c3c4c7; border-top:none; margin-bottom:20px;">
-                <form method="get" style="display:flex; align-items:center; gap:10px;">
+                <form method="get" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                     <input type="hidden" name="page" value="wbi-sales-report">
                     <input type="hidden" name="tab" value="<?php echo esc_attr($tab); ?>">
                     
@@ -55,13 +67,20 @@ class WBI_Report_Sales {
                     
                     <label>Hasta:</label> 
                     <input type="date" name="end" value="<?php echo esc_attr($end); ?>">
+
+                    <label style="font-weight:600;">Estados:</label>
+                    <select name="statuses[]" multiple size="4" style="height:72px; min-width:140px;" title="Mantené Ctrl/Cmd para seleccionar múltiples">
+                        <?php foreach ( $all_statuses as $val => $label ) : ?>
+                            <option value="<?php echo esc_attr($val); ?>" <?php echo in_array($val, $statuses, true) ? 'selected' : ''; ?>><?php echo esc_html($label); ?></option>
+                        <?php endforeach; ?>
+                    </select>
                     
                     <button class="button button-primary">Filtrar Resultados</button>
 
                     <?php if ( $tab === 'period' ) : ?>
-                        <a href="<?php echo esc_url(admin_url("admin-post.php?action=wbi_export_dynamic&report_type=sales_period&start={$start}&end={$end}")); ?>" class="button">📥 Exportar CSV</a>
+                        <a href="<?php echo esc_url(admin_url("admin-post.php?action=wbi_export_dynamic&report_type=sales_period&start={$start}&end={$end}{$statuses_qs}")); ?>" class="button">📥 Exportar CSV</a>
                     <?php elseif ( $tab === 'province' ) : ?>
-                        <a href="<?php echo esc_url(admin_url("admin-post.php?action=wbi_export_dynamic&report_type=sales_province&start={$start}&end={$end}")); ?>" class="button">📥 Exportar CSV</a>
+                        <a href="<?php echo esc_url(admin_url("admin-post.php?action=wbi_export_dynamic&report_type=sales_province&start={$start}&end={$end}{$statuses_qs}")); ?>" class="button">📥 Exportar CSV</a>
                     <?php endif; ?>
                 </form>
             </div>
@@ -69,26 +88,26 @@ class WBI_Report_Sales {
             <div style="background:#fff; padding:20px; border:1px solid #c3c4c7; box-shadow:0 1px 1px rgba(0,0,0,0.04);">
                 <?php 
                 if ( $tab === 'period' ) {
-                    $data = $this->engine->get_sales_by_period('day', $start, $end);
+                    $data = $this->engine->get_sales_by_period('day', $start, $end, $statuses);
                     if ( $data ) {
-                        // Chart
                         $labels = wp_json_encode( array_map( function($r){ return $r->period; }, $data ) );
                         $totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
                         echo '<canvas id="wbiSalesPeriodChart" style="max-height:280px; margin-bottom:20px;"></canvas>';
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiSalesPeriodChart");
-                            if(ctx) new Chart(ctx, {type:"bar", data:{labels:' . $labels . ', datasets:[{label:"Facturación",data:' . $totals . ',backgroundColor:"rgba(34,113,177,0.7)",borderColor:"#2271b1",borderWidth:1}]}, options:{responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}});
+                            if(ctx && typeof Chart !== "undefined") new Chart(ctx, {type:"bar", data:{labels:' . $labels . ', datasets:[{label:"Facturación",data:' . $totals . ',backgroundColor:"rgba(34,113,177,0.7)",borderColor:"#2271b1",borderWidth:1}]}, options:{responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}});
                         })();
                         </script>';
+                    }
 
-                        echo '<table class="widefat striped"><thead><tr><th>Fecha</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
-                        foreach($data as $r) echo "<tr><td>" . esc_html($r->period) . "</td><td>" . intval($r->orders) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
-                        echo '</tbody></table>';
-                    } else { echo '<p>Sin datos en este periodo.</p>'; }
+                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Fecha</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
+                    if ( $data ) foreach($data as $r) echo "<tr><td>" . esc_html($r->period) . "</td><td>" . intval($r->orders) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
+                    else echo '<tr><td colspan="3">Sin datos en este periodo.</td></tr>';
+                    echo '</tbody></table>';
                     
                 } elseif ( $tab === 'source' ) {
-                    $data = $this->engine->get_sales_by_source($start, $end);
+                    $data = $this->engine->get_sales_by_source($start, $end, $statuses);
                     if ( $data ) {
                         $src_labels = wp_json_encode( array_map( function($r){ return $r->source ?: 'Web/Directo'; }, $data ) );
                         $src_totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
@@ -96,17 +115,17 @@ class WBI_Report_Sales {
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiSourceChart");
-                            if(ctx) new Chart(ctx, {type:"pie", data:{labels:' . $src_labels . ', datasets:[{data:' . $src_totals . ',backgroundColor:["#2271b1","#00a32a","#dba617","#d63638","#8c3130","#50575e"]}]}, options:{responsive:true, maintainAspectRatio:true, plugins:{legend:{position:"right"}}}});
+                            if(ctx && typeof Chart !== "undefined") new Chart(ctx, {type:"pie", data:{labels:' . $src_labels . ', datasets:[{data:' . $src_totals . ',backgroundColor:["#2271b1","#00a32a","#dba617","#d63638","#8c3130","#50575e"]}]}, options:{responsive:true, maintainAspectRatio:true, plugins:{legend:{position:"right"}}}});
                         })();
                         </script>';
                     }
-                    echo '<table class="widefat striped"><thead><tr><th>Origen</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
+                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Origen</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
                     if($data) foreach($data as $r) echo "<tr><td>" . esc_html(ucfirst($r->source?:'Web/Directo')) . "</td><td>" . intval($r->count) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
                     else echo "<tr><td colspan=3>No se ha definido origen para las ventas de este periodo.</td></tr>";
                     echo '</tbody></table>';
                     
                 } elseif ( $tab === 'cat' ) {
-                    $data = $this->engine->get_sales_by_taxonomy('product_cat', $start, $end);
+                    $data = $this->engine->get_sales_by_taxonomy('product_cat', $start, $end, $statuses);
                     if ( $data ) {
                         $cat_labels = wp_json_encode( array_map( function($r){ return $r->name; }, $data ) );
                         $cat_totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
@@ -114,38 +133,42 @@ class WBI_Report_Sales {
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiCatChart");
-                            if(ctx) new Chart(ctx, {type:"pie", data:{labels:' . $cat_labels . ', datasets:[{data:' . $cat_totals . ',backgroundColor:["#2271b1","#00a32a","#dba617","#d63638","#8c3130","#50575e","#72aee6","#68de7c"]}]}, options:{responsive:true, maintainAspectRatio:true, plugins:{legend:{position:"right"}}}});
+                            if(ctx && typeof Chart !== "undefined") new Chart(ctx, {type:"pie", data:{labels:' . $cat_labels . ', datasets:[{data:' . $cat_totals . ',backgroundColor:["#2271b1","#00a32a","#dba617","#d63638","#8c3130","#50575e","#72aee6","#68de7c"]}]}, options:{responsive:true, maintainAspectRatio:true, plugins:{legend:{position:"right"}}}});
                         })();
                         </script>';
                     }
-                    echo '<table class="widefat striped"><thead><tr><th>Categoría</th><th>Unidades Vendidas</th><th>Total Generado ($)</th></tr></thead><tbody>';
+                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Categoría</th><th>Unidades Vendidas</th><th>Total Generado ($)</th></tr></thead><tbody>';
                     if($data) foreach($data as $r) echo "<tr><td>" . esc_html($r->name) . "</td><td>" . intval($r->qty) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
                     else echo "<tr><td colspan=3>Sin datos.</td></tr>";
                     echo '</tbody></table>';
                     
                 } elseif ( $tab === 'collection' ) {
-                    $data = $this->engine->get_sales_by_taxonomy('coleccion', $start, $end);
-                    echo '<table class="widefat striped"><thead><tr><th>Colección</th><th>Unidades Vendidas</th><th>Total Generado ($)</th></tr></thead><tbody>';
+                    $data = $this->engine->get_sales_by_taxonomy('coleccion', $start, $end, $statuses);
+                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Colección</th><th>Unidades Vendidas</th><th>Total Generado ($)</th></tr></thead><tbody>';
                     if($data) foreach($data as $r) echo "<tr><td>" . esc_html($r->name) . "</td><td>" . intval($r->qty) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
                     else echo "<tr><td colspan=3>No se encontraron ventas asociadas a colecciones en este periodo (o la taxonomía 'coleccion' no existe).</td></tr>";
                     echo '</tbody></table>';
 
                 } elseif ( $tab === 'province' ) {
-                    $data = $this->engine->get_sales_by_province($start, $end);
+                    $data = $this->engine->get_sales_by_province($start, $end, $statuses);
                     if ( $data ) {
-                        $prov_labels = wp_json_encode( array_map( function($r){ return $r->province ?: 'Desconocida'; }, $data ) );
+                        $prov_labels = wp_json_encode( array_map( function($r){
+                            return WBI_Metrics_Engine::get_province_name( $r->province ?: '' ) ?: 'Desconocida';
+                        }, $data ) );
                         $prov_totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
                         echo '<canvas id="wbiProvinceChart" style="max-height:320px; margin-bottom:20px;"></canvas>';
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiProvinceChart");
-                            if(ctx) new Chart(ctx, {type:"bar", data:{labels:' . $prov_labels . ', datasets:[{label:"Facturación",data:' . $prov_totals . ',backgroundColor:"rgba(34,113,177,0.7)",borderColor:"#2271b1",borderWidth:1}]}, options:{indexAxis:"y", responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}}}});
+                            if(ctx && typeof Chart !== "undefined") new Chart(ctx, {type:"bar", data:{labels:' . $prov_labels . ', datasets:[{label:"Facturación",data:' . $prov_totals . ',backgroundColor:"rgba(34,113,177,0.7)",borderColor:"#2271b1",borderWidth:1}]}, options:{indexAxis:"y", responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}}}});
                         })();
                         </script>';
                     }
-                    echo '<table class="widefat striped"><thead><tr><th>Provincia</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
-                    if($data) foreach($data as $r) echo "<tr><td>" . esc_html($r->province?:'Desconocida') . "</td><td>" . intval($r->orders) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
-                    else echo "<tr><td colspan=3>Sin datos de provincia en este periodo.</td></tr>";
+                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Provincia</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
+                    if($data) foreach($data as $r) {
+                        $prov_name = WBI_Metrics_Engine::get_province_name( $r->province ?: '' ) ?: 'Desconocida';
+                        echo "<tr><td>" . esc_html($prov_name) . "</td><td>" . intval($r->orders) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
+                    } else echo "<tr><td colspan=3>Sin datos de provincia en este periodo.</td></tr>";
                     echo '</tbody></table>';
                 }
                 ?>
