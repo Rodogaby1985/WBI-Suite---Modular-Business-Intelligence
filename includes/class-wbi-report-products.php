@@ -87,19 +87,31 @@ class WBI_Report_Products {
                     $data = $this->engine->get_realtime_stock();
                     echo '<p><i>Inventario físico actual en sistema.</i></p>';
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Stock Actual</th></tr></thead><tbody>';
-                    foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td><span class='badge'>" . intval($d->stock) . "</span></td></tr>";
+                    if ( ! empty( $data ) ) {
+                        foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td><span class='badge'>" . intval($d->stock) . "</span></td></tr>";
+                    } else {
+                        echo '<tr><td colspan="2">No hay productos con stock registrado.</td></tr>';
+                    }
                     echo '</tbody></table>';
                 } elseif($tab=='committed'){
                     $data = $this->engine->get_committed_stock();
                     echo '<p><i>Productos reservados en pedidos pendientes de envío.</i></p>';
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Cant.</th><th>Pedido</th></tr></thead><tbody>';
-                    foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td>" . intval($d->qty) . "</td><td><a href='post.php?post=" . intval($d->order_id) . "&action=edit'>#" . intval($d->order_id) . "</a></td></tr>";
+                    if ( ! empty( $data ) ) {
+                        foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td>" . intval($d->qty) . "</td><td><a href='post.php?post=" . intval($d->order_id) . "&action=edit'>#" . intval($d->order_id) . "</a></td></tr>";
+                    } else {
+                        echo '<tr><td colspan="3">No hay stock comprometido actualmente.</td></tr>';
+                    }
                     echo '</tbody></table>';
                 } elseif($tab=='dormant'){
                     $data = $this->engine->get_dormant_stock();
                     echo '<p style="color:red;"><i>Productos con stock positivo sin movimiento en 90 días.</i></p>';
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Stock Inmovilizado</th><th>Último Mov.</th></tr></thead><tbody>';
-                    foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td>" . intval($d->stock) . "</td><td>" . date('d/m/Y', strtotime($d->post_modified)) . "</td></tr>";
+                    if ( ! empty( $data ) ) {
+                        foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td>" . intval($d->stock) . "</td><td>" . date('d/m/Y', strtotime($d->post_modified)) . "</td></tr>";
+                    } else {
+                        echo '<tr><td colspan="3">No hay productos con stock dormido.</td></tr>';
+                    }
                     echo '</tbody></table>';
                 } elseif($tab=='best'){
                     $data = $this->engine->get_best_sellers($start, $end, $statuses);
