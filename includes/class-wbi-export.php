@@ -36,9 +36,10 @@ class WBI_Export_Module {
     public function process_dynamic_export() {
         if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Sin permisos' );
 
-        $type  = isset($_GET['report_type']) ? sanitize_text_field($_GET['report_type']) : '';
-        $start = isset($_GET['start']) ? sanitize_text_field($_GET['start']) : date('Y-m-01');
-        $end   = isset($_GET['end']) ? sanitize_text_field($_GET['end']) : date('Y-m-d');
+        $type     = isset($_GET['report_type']) ? sanitize_text_field($_GET['report_type']) : '';
+        $start    = isset($_GET['start']) ? sanitize_text_field($_GET['start']) : date('Y-m-01');
+        $end      = isset($_GET['end']) ? sanitize_text_field($_GET['end']) : date('Y-m-d');
+        $statuses = isset($_GET['statuses']) ? array_map('sanitize_text_field', (array)$_GET['statuses']) : null;
 
         $output = $this->prepare_csv( 'wbi_reporte_' . $type );
 
@@ -65,14 +66,14 @@ class WBI_Export_Module {
             case 'best_sellers':
                 fputcsv($output, ['Reporte', 'Productos Más Vendidos', $start . ' al ' . $end]);
                 fputcsv($output, ['Producto', 'Unidades Vendidas']);
-                $data = $this->engine->get_best_sellers($start, $end);
+                $data = $this->engine->get_best_sellers($start, $end, $statuses);
                 foreach($data as $r) fputcsv($output, [$r->name, $r->qty]);
                 break;
 
             case 'worst_sellers':
                 fputcsv($output, ['Reporte', 'Productos Menos Vendidos', $start . ' al ' . $end]);
                 fputcsv($output, ['Producto', 'Unidades Vendidas']);
-                $data = $this->engine->get_least_sold($start, $end);
+                $data = $this->engine->get_least_sold($start, $end, $statuses);
                 foreach($data as $r) fputcsv($output, [$r->name, $r->qty]);
                 break;
 
@@ -80,7 +81,7 @@ class WBI_Export_Module {
             case 'clients_ranking':
                 fputcsv($output, ['Reporte', 'Ranking Clientes', $start . ' al ' . $end]);
                 fputcsv($output, ['Cliente', 'Email', 'Total Facturado', 'Cant. Pedidos']);
-                $data = $this->engine->get_clients_ranking('revenue', $start, $end);
+                $data = $this->engine->get_clients_ranking('revenue', $start, $end, $statuses);
                 foreach($data as $r) fputcsv($output, [$r->display_name, $r->user_email, $r->total_val, $r->count_val]);
                 break;
 
@@ -93,15 +94,18 @@ class WBI_Export_Module {
              // --- VENTAS ---
             case 'sales_period':
                 fputcsv($output, ['Fecha', 'Pedidos', 'Total']);
-                $data = $this->engine->get_sales_by_period('day', $start, $end);
+                $data = $this->engine->get_sales_by_period('day', $start, $end, $statuses);
                 foreach($data as $r) fputcsv($output, [$r->period, $r->orders, $r->total]);
                 break;
 
             case 'sales_province':
                 fputcsv($output, ['Reporte', 'Ventas por Provincia', $start . ' al ' . $end]);
                 fputcsv($output, ['Provincia', 'Cant. Pedidos', 'Total']);
-                $data = $this->engine->get_sales_by_province($start, $end);
-                foreach($data as $r) fputcsv($output, [$r->province ?: 'Desconocida', $r->orders, $r->total]);
+                $data = $this->engine->get_sales_by_province($start, $end, $statuses);
+                foreach($data as $r) {
+                    $prov_name = WBI_Metrics_Engine::get_province_name( $r->province ?: '' ) ?: 'Desconocida';
+                    fputcsv($output, [$prov_name, $r->orders, $r->total]);
+                }
                 break;
         }
 

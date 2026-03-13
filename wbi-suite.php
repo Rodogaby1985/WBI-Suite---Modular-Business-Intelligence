@@ -135,3 +135,97 @@ class WBI_Suite_Loader {
 
 // Iniciar Plugin
 new WBI_Suite_Loader();
+
+// Inyectar CSS/JS de ordenamiento de tablas en todas las páginas WBI
+add_action( 'admin_footer', function() {
+    $screen = get_current_screen();
+    if ( ! $screen ) return;
+    // Solo en páginas del plugin (el ID de pantalla contiene 'wbi')
+    if ( strpos( $screen->id, 'wbi' ) === false ) return;
+    ?>
+    <style>
+    .wbi-sortable thead th { cursor: pointer; user-select: none; white-space: nowrap; }
+    .wbi-sortable thead th:hover { background-color: #f0f0f1; }
+    .wbi-sortable thead th.wbi-sort-asc::after  { content: ' \25b2'; font-size: 10px; opacity: 0.7; }
+    .wbi-sortable thead th.wbi-sort-desc::after { content: ' \25bc'; font-size: 10px; opacity: 0.7; }
+    </style>
+    <script>
+    (function() {
+        function wbiParseNum(str) {
+            // Remove currency symbols/spaces, then handle thousands/decimal separators.
+            // Supports formats like "$1.234,56" (AR) or "1,234.56" (US)
+            var s = str.replace(/[^\d,.\-]/g, '');
+            if (s.indexOf('.') !== -1 && s.indexOf(',') !== -1) {
+                // Both separators present: assume last one is decimal (e.g. 1.234,56 -> 1234.56)
+                var lastDot   = s.lastIndexOf('.');
+                var lastComma = s.lastIndexOf(',');
+                if (lastComma > lastDot) {
+                    s = s.replace(/\./g, '').replace(',', '.');
+                } else {
+                    s = s.replace(/,/g, '');
+                }
+            } else if (s.indexOf(',') !== -1) {
+                s = s.replace(',', '.');
+            }
+            return parseFloat(s);
+        }
+        function wbiSortByCol(table, colIdx, asc) {
+            var tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            var rows = Array.from(tbody.querySelectorAll('tr'));
+            rows.sort(function(a, b) {
+                var aCells = a.querySelectorAll('td');
+                var bCells = b.querySelectorAll('td');
+                if (!aCells[colIdx] || !bCells[colIdx]) return 0;
+                var aText = aCells[colIdx].textContent.trim();
+                var bText = bCells[colIdx].textContent.trim();
+                var aNum = wbiParseNum(aText);
+                var bNum = wbiParseNum(bText);
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return asc ? aNum - bNum : bNum - aNum;
+                }
+                // Try date in dd/mm/yyyy format
+                var dParts = aText.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                var eParts = bText.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                if (dParts && eParts) {
+                    var aDate = new Date(dParts[3], dParts[2]-1, dParts[1]);
+                    var bDate = new Date(eParts[3], eParts[2]-1, eParts[1]);
+                    return asc ? aDate - bDate : bDate - aDate;
+                }
+                return asc ? aText.localeCompare(bText, 'es') : bText.localeCompare(aText, 'es');
+            });
+            rows.forEach(function(row) { tbody.appendChild(row); });
+        }
+        function wbiInitSortable() {
+            document.querySelectorAll('table.wbi-sortable').forEach(function(table) {
+                var headers = table.querySelectorAll('thead tr:first-child th');
+                headers.forEach(function(th, colIdx) {
+                    th.setAttribute('tabindex', '0');
+                    th.setAttribute('role', 'button');
+                    function doSort() {
+                        var isAsc = th.classList.contains('wbi-sort-asc');
+                        headers.forEach(function(h) {
+                            h.classList.remove('wbi-sort-asc', 'wbi-sort-desc');
+                        });
+                        th.classList.add(isAsc ? 'wbi-sort-desc' : 'wbi-sort-asc');
+                        wbiSortByCol(table, colIdx, !isAsc);
+                    }
+                    th.addEventListener('click', doSort);
+                    th.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            doSort();
+                        }
+                    });
+                });
+            });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', wbiInitSortable);
+        } else {
+            wbiInitSortable();
+        }
+    })();
+    </script>
+    <?php
+} );
