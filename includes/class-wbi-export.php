@@ -90,6 +90,24 @@ class WBI_Export_Module {
                 $data = $this->engine->get_active_customers_list();
                 foreach($data as $r) fputcsv($output, [$r->display_name, $r->user_email, $r->last_buy]);
                 break;
+
+            case 'clients_zone_detail':
+                $city = isset($_GET['city']) ? sanitize_text_field($_GET['city']) : '';
+                fputcsv($output, ['Nombre', 'Email', 'Fecha de Registro', 'Ciudad']);
+                if ( $city ) {
+                    $data = $this->engine->get_customers_by_city( $city );
+                    if ( is_array($data) ) {
+                        foreach($data as $u) {
+                            fputcsv($output, [
+                                $u->display_name,
+                                $u->user_email,
+                                date('d/m/Y', strtotime($u->user_registered)),
+                                $u->city
+                            ]);
+                        }
+                    }
+                }
+                break;
              
              // --- VENTAS ---
             case 'sales_period':
@@ -105,6 +123,26 @@ class WBI_Export_Module {
                 foreach($data as $r) {
                     $prov_name = WBI_Metrics_Engine::get_province_name( $r->province ?: '' ) ?: 'Desconocida';
                     fputcsv($output, [$prov_name, $r->orders, $r->total]);
+                }
+                break;
+
+            case 'sales_province_detail':
+                $province = isset($_GET['province']) ? sanitize_text_field($_GET['province']) : '';
+                fputcsv($output, ['#Pedido', 'Fecha', 'Cliente', 'Email', 'Total', 'Estado']);
+                if ( $province ) {
+                    $data = $this->engine->get_orders_by_province( $province, $start, $end, $statuses );
+                    if ( is_array($data) ) {
+                        foreach($data as $o) {
+                            fputcsv($output, [
+                                $o->order_id,
+                                date('d/m/Y', strtotime($o->post_date)),
+                                trim($o->first_name . ' ' . $o->last_name),
+                                $o->email,
+                                $o->total,
+                                $o->post_status
+                            ]);
+                        }
+                    }
                 }
                 break;
         }
