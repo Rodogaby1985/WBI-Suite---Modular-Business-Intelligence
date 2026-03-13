@@ -7,18 +7,30 @@ class WBI_B2B_Module {
         // 1. Crear Rol Mayorista
         add_action( 'init', array( $this, 'create_role' ) );
 
-        // 2. Lógica Frontend (Ocultar precios)
+        // 2. Lógica Frontend (Ocultar precios / aplicar precio mayorista)
         add_filter( 'woocommerce_get_price_html', array( $this, 'hide_prices' ), 10, 2 );
         add_filter( 'woocommerce_is_purchasable', array( $this, 'restrict_purchase' ), 10, 2 );
+        add_filter( 'woocommerce_product_get_price', array( $this, 'apply_wholesale_price' ), 10, 2 );
+        add_filter( 'woocommerce_product_get_regular_price', array( $this, 'apply_wholesale_price' ), 10, 2 );
+        add_filter( 'woocommerce_product_variation_get_price', array( $this, 'apply_wholesale_price' ), 10, 2 );
+        add_filter( 'woocommerce_product_variation_get_regular_price', array( $this, 'apply_wholesale_price' ), 10, 2 );
         add_action( 'woocommerce_account_dashboard', array( $this, 'show_status_message' ) );
 
-        // 3. ADMIN UI - Lista de Usuarios (Lo que te faltaba)
+        // 3. ADMIN UI - Lista de Usuarios
         add_filter( 'manage_users_columns', array( $this, 'add_status_column' ) );
         add_filter( 'manage_users_custom_column', array( $this, 'show_status_column_content' ), 10, 3 );
         add_filter( 'user_row_actions', array( $this, 'add_approval_actions' ), 10, 2 );
         
         // 4. Procesar la acción de aprobar/rechazar
         add_action( 'admin_init', array( $this, 'process_approval_action' ) );
+
+        // 5. Precio Mayorista por Producto (Simple)
+        add_action( 'woocommerce_product_options_pricing', array( $this, 'add_wholesale_price_field' ) );
+        add_action( 'woocommerce_process_product_meta', array( $this, 'save_wholesale_price_field' ) );
+
+        // 6. Precio Mayorista por Variación
+        add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'add_variation_wholesale_price_field' ), 10, 3 );
+        add_action( 'woocommerce_save_product_variation', array( $this, 'save_variation_wholesale_price_field' ), 10, 2 );
     }
 
     /**
@@ -110,7 +122,7 @@ class WBI_B2B_Module {
         exit;
     }
 
-    // --- LÓGICA DE PRECIOS (Igual que antes) ---
+    // --- LÓGICA DE PRECIOS ---
     private function is_authorized() {
         if ( ! is_user_logged_in() ) return false;
         $user = wp_get_current_user();
@@ -121,11 +133,88 @@ class WBI_B2B_Module {
         return true; 
     }
 
-    public function hide_prices( $price, $product ) {
-        if ( ! $this->is_authorized() ) {
-            return '<span class="price-hidden" style="color:#d63638; font-weight:bold;">PRECIO MAYORISTA OCULTO</span>';
+    public function apply_wholesale_price( $price, $product ) {
+        if ( ! is_user_logged_in() ) return $price;
+        $user = wp_get_current_user();
+        if ( ! in_array( 'mayorista', $user->roles ) ) return $price;
+        if ( get_user_meta( $user->ID, 'wbi_status', true ) !== 'approved' ) return $price;
+
+        $wholesale = get_post_meta( $product->get_id(), '_wbi_wholesale_price', true );
+        if ( $wholesale !== '' && $wholesale !== false && is_numeric( $wholesale ) ) {
+            return $wholesale;
         }
         return $price;
+    }
+
+    public function hide_prices( $price, $product ) {
+        if ( ! is_user_logged_in() ) {
+            return '<span class="price-hidden" style="color:#d63638; font-weight:bold;">PRECIO MAYORISTA OCULTO</span>';
+        }
+        $user = wp_get_current_user();
+        if ( in_array( 'administrator', $user->roles ) ) return $price;
+
+        if ( in_array( 'mayorista', $user->roles ) ) {
+            if ( get_user_meta( $user->ID, 'wbi_status', true ) !== 'approved' ) {
+                return '<span class="price-hidden" style="color:#d63638; font-weight:bold;">PRECIO MAYORISTA OCULTO</span>';
+            }
+            // Show wholesale price if set
+            $wholesale = get_post_meta( $product->get_id(), '_wbi_wholesale_price', true );
+            if ( $wholesale !== '' && $wholesale !== false && is_numeric( $wholesale ) ) {
+                return '<span class="woocommerce-Price-amount amount">' . wc_price( $wholesale ) . '</span> <small style="color:#888;">(Precio Mayorista)</small>';
+            }
+        }
+        return $price;
+    }
+
+    // --- CAMPO PRECIO MAYORISTA (Producto Simple) ---
+    public function add_wholesale_price_field() {
+        woocommerce_wp_text_input( array(
+            'id'          => '_wbi_wholesale_price',
+            'label'       => __( 'Precio Mayorista ($)', 'wbi-suite' ),
+            'placeholder' => __( 'Dejar vacío para usar precio regular', 'wbi-suite' ),
+            'desc_tip'    => true,
+            'description' => __( 'Precio especial para clientes mayoristas aprobados. Si se configura, reemplaza al precio regular para esos clientes.', 'wbi-suite' ),
+            'type'        => 'number',
+            'custom_attributes' => array(
+                'step' => 'any',
+                'min'  => '0',
+            ),
+        ) );
+    }
+
+    public function save_wholesale_price_field( $post_id ) {
+        if ( ! current_user_can( 'edit_post', $post_id ) ) return;
+        if ( isset( $_POST['_wbi_wholesale_price'] ) ) {
+            $price = sanitize_text_field( $_POST['_wbi_wholesale_price'] );
+            update_post_meta( $post_id, '_wbi_wholesale_price', $price );
+        }
+    }
+
+    // --- CAMPO PRECIO MAYORISTA (Variaciones) ---
+    public function add_variation_wholesale_price_field( $loop, $variation_data, $variation ) {
+        woocommerce_wp_text_input( array(
+            'id'            => '_wbi_wholesale_price[' . $loop . ']',
+            'name'          => '_wbi_wholesale_price[' . $loop . ']',
+            'value'         => get_post_meta( $variation->ID, '_wbi_wholesale_price', true ),
+            'label'         => __( 'Precio Mayorista ($)', 'wbi-suite' ),
+            'placeholder'   => __( 'Opcional', 'wbi-suite' ),
+            'desc_tip'      => true,
+            'description'   => __( 'Precio especial mayorista para esta variación.', 'wbi-suite' ),
+            'type'          => 'number',
+            'custom_attributes' => array(
+                'step' => 'any',
+                'min'  => '0',
+            ),
+            'wrapper_class' => 'form-row form-row-first',
+        ) );
+    }
+
+    public function save_variation_wholesale_price_field( $variation_id, $i ) {
+        if ( ! current_user_can( 'edit_post', $variation_id ) ) return;
+        if ( isset( $_POST['_wbi_wholesale_price'][$i] ) ) {
+            $price = sanitize_text_field( $_POST['_wbi_wholesale_price'][$i] );
+            update_post_meta( $variation_id, '_wbi_wholesale_price', $price );
+        }
     }
 
     public function restrict_purchase( $purchasable, $product ) {

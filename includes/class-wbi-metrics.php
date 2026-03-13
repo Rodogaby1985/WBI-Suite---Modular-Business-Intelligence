@@ -85,10 +85,159 @@ class WBI_Metrics_Engine {
     }
 
     // --- 4. DETALLES AVANZADOS (Para reportes) ---
-    public function get_sales_by_period($type, $s, $e) { /* Simplificado para evitar errores */ return array(); }
-    public function get_sales_by_source($s, $e) { return $this->wpdb->get_results("SELECT pm.meta_value as source, COUNT(p.ID) as count, SUM(pm_total.meta_value) as total FROM {$this->wpdb->postmeta} pm JOIN {$this->wpdb->posts} p ON pm.post_id=p.ID JOIN {$this->wpdb->postmeta} pm_total ON p.ID=pm_total.post_id WHERE pm.meta_key='wbi_sales_source' AND pm_total.meta_key='_order_total' $d GROUP BY pm.meta_value"); }
-    public function get_sales_by_taxonomy($tax, $s, $e) { return array(); }
-    public function get_clients_ranking($by, $s, $e) { return array(); }
-    public function get_active_customers_list() { return array(); }
-    public function get_new_customers_zones() { return array(); }
+
+    public function get_sales_by_period( $type, $s, $e ) {
+        $d = $this->get_date_query( $s, $e, 'p' );
+        switch ( $type ) {
+            case 'week':
+                $group = "DATE_FORMAT(p.post_date, '%Y-%u')";
+                $label = "DATE_FORMAT(p.post_date, '%Y-Sem%u')";
+                break;
+            case 'month':
+                $group = "DATE_FORMAT(p.post_date, '%Y-%m')";
+                $label = "DATE_FORMAT(p.post_date, '%Y-%m')";
+                break;
+            default: // day
+                $group = 'DATE(p.post_date)';
+                $label = 'DATE(p.post_date)';
+        }
+        $sql = "SELECT {$label} as period, COUNT(p.ID) as orders, SUM(pm.meta_value) as total
+                FROM {$this->wpdb->posts} p
+                JOIN {$this->wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_order_total'
+                WHERE p.post_type = 'shop_order'
+                AND p.post_status IN ('wc-completed','wc-processing')
+                {$d}
+                GROUP BY {$group}
+                ORDER BY {$group} ASC";
+        return $this->wpdb->get_results( $sql );
+    }
+
+    public function get_sales_by_source( $s, $e ) {
+        $d = $this->get_date_query( $s, $e, 'p' );
+        $sql = "SELECT pm.meta_value as source, COUNT(p.ID) as count, SUM(pm_total.meta_value) as total
+                FROM {$this->wpdb->postmeta} pm
+                JOIN {$this->wpdb->posts} p ON pm.post_id = p.ID
+                JOIN {$this->wpdb->postmeta} pm_total ON p.ID = pm_total.post_id AND pm_total.meta_key = '_order_total'
+                WHERE pm.meta_key = 'wbi_sales_source'
+                AND p.post_type = 'shop_order'
+                AND p.post_status IN ('wc-completed','wc-processing')
+                {$d}
+                GROUP BY pm.meta_value
+                ORDER BY total DESC";
+        return $this->wpdb->get_results( $sql );
+    }
+
+    public function get_sales_by_taxonomy( $tax, $s, $e ) {
+        $d   = $this->get_date_query( $s, $e, 'p' );
+        $sql = $this->wpdb->prepare(
+            "SELECT t.name,
+                    SUM(oim_qty.meta_value) as qty,
+                    SUM(oim_total.meta_value) as total
+             FROM {$this->wpdb->prefix}woocommerce_order_items oi
+             JOIN {$this->wpdb->posts} p ON oi.order_id = p.ID
+             JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta oim_prod
+                  ON oi.order_item_id = oim_prod.order_item_id AND oim_prod.meta_key = '_product_id'
+             JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta oim_qty
+                  ON oi.order_item_id = oim_qty.order_item_id AND oim_qty.meta_key = '_qty'
+             JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta oim_total
+                  ON oi.order_item_id = oim_total.order_item_id AND oim_total.meta_key = '_line_total'
+             JOIN {$this->wpdb->term_relationships} tr ON tr.object_id = oim_prod.meta_value
+             JOIN {$this->wpdb->term_taxonomy} tt
+                  ON tr.term_taxonomy_id = tt.term_taxonomy_id AND tt.taxonomy = %s
+             JOIN {$this->wpdb->terms} t ON tt.term_id = t.term_id
+             WHERE p.post_type = 'shop_order'
+             AND p.post_status IN ('wc-completed','wc-processing')
+             {$d}
+             GROUP BY t.term_id
+             ORDER BY total DESC",
+            $tax
+        );
+        return $this->wpdb->get_results( $sql );
+    }
+
+    public function get_clients_ranking( $by, $s, $e ) {
+        $d   = $this->get_date_query( $s, $e, 'p' );
+        $sql = "SELECT u.display_name, u.user_email,
+                       SUM(pm_total.meta_value) as total_val,
+                       COUNT(p.ID) as count_val
+                FROM {$this->wpdb->posts} p
+                JOIN {$this->wpdb->postmeta} pm_cust
+                     ON p.ID = pm_cust.post_id AND pm_cust.meta_key = '_customer_user'
+                JOIN {$this->wpdb->postmeta} pm_total
+                     ON p.ID = pm_total.post_id AND pm_total.meta_key = '_order_total'
+                JOIN {$this->wpdb->users} u ON u.ID = pm_cust.meta_value
+                WHERE p.post_type = 'shop_order'
+                AND p.post_status IN ('wc-completed','wc-processing')
+                AND pm_cust.meta_value > 0
+                {$d}
+                GROUP BY u.ID
+                ORDER BY total_val DESC
+                LIMIT 50";
+        return $this->wpdb->get_results( $sql );
+    }
+
+    public function get_active_customers_list() {
+        $sql = "SELECT u.display_name, u.user_email, MAX(p.post_date) as last_buy
+                FROM {$this->wpdb->posts} p
+                JOIN {$this->wpdb->postmeta} pm
+                     ON p.ID = pm.post_id AND pm.meta_key = '_customer_user'
+                JOIN {$this->wpdb->users} u ON u.ID = pm.meta_value
+                WHERE p.post_type = 'shop_order'
+                AND p.post_status IN ('wc-completed','wc-processing')
+                AND pm.meta_value > 0
+                AND p.post_date >= DATE_SUB(NOW(), INTERVAL 60 DAY)
+                GROUP BY u.ID
+                ORDER BY last_buy DESC";
+        return $this->wpdb->get_results( $sql );
+    }
+
+    public function get_new_customers_zones() {
+        $sql = "SELECT um.meta_value as city, COUNT(u.ID) as count
+                FROM {$this->wpdb->users} u
+                JOIN {$this->wpdb->usermeta} um
+                     ON u.ID = um.user_id AND um.meta_key = 'billing_city'
+                WHERE u.user_registered >= DATE_SUB(NOW(), INTERVAL 60 DAY)
+                GROUP BY um.meta_value
+                ORDER BY count DESC";
+        return $this->wpdb->get_results( $sql );
+    }
+
+    public function get_sales_by_province( $s, $e ) {
+        $d   = $this->get_date_query( $s, $e, 'p' );
+        $sql = "SELECT pm_state.meta_value as province,
+                       COUNT(p.ID) as orders,
+                       SUM(pm_total.meta_value) as total
+                FROM {$this->wpdb->posts} p
+                JOIN {$this->wpdb->postmeta} pm_state
+                     ON p.ID = pm_state.post_id AND pm_state.meta_key = '_billing_state'
+                JOIN {$this->wpdb->postmeta} pm_total
+                     ON p.ID = pm_total.post_id AND pm_total.meta_key = '_order_total'
+                WHERE p.post_type = 'shop_order'
+                AND p.post_status IN ('wc-completed','wc-processing')
+                {$d}
+                GROUP BY pm_state.meta_value
+                ORDER BY total DESC";
+        return $this->wpdb->get_results( $sql );
+    }
+
+    public function get_low_stock_products( $threshold = 5 ) {
+        $threshold = intval( $threshold );
+        $sql = $this->wpdb->prepare(
+            "SELECT p.ID, p.post_title,
+                    pm_stock.meta_value as stock,
+                    pm_sku.meta_value as sku
+             FROM {$this->wpdb->posts} p
+             JOIN {$this->wpdb->postmeta} pm_stock
+                  ON p.ID = pm_stock.post_id AND pm_stock.meta_key = '_stock'
+             LEFT JOIN {$this->wpdb->postmeta} pm_sku
+                  ON p.ID = pm_sku.post_id AND pm_sku.meta_key = '_sku'
+             WHERE p.post_type IN ('product','product_variation')
+             AND p.post_status = 'publish'
+             AND pm_stock.meta_value > 0
+             AND CAST(pm_stock.meta_value AS SIGNED) <= %d
+             ORDER BY CAST(pm_stock.meta_value AS SIGNED) ASC",
+            $threshold
+        );
+        return $this->wpdb->get_results( $sql );
+    }
 }
