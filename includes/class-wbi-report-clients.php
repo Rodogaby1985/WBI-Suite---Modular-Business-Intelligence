@@ -29,9 +29,19 @@ class WBI_Report_Clients {
         );
 
         // Determinar tipo de exportación
-        $export_type = ($tab == 'active') ? 'clients_active' : 'clients_ranking';
+        $city = isset($_GET['city']) ? sanitize_text_field($_GET['city']) : '';
+        if ( $tab === 'zones' && $city !== '' ) {
+            $export_type = 'clients_zone_detail';
+        } elseif ( $tab == 'active' ) {
+            $export_type = 'clients_active';
+        } else {
+            $export_type = 'clients_ranking';
+        }
         $statuses_qs = implode('', array_map(function($s){ return '&statuses[]=' . rawurlencode($s); }, $statuses));
         $export_url = admin_url("admin-post.php?action=wbi_export_dynamic&report_type={$export_type}&start={$start}&end={$end}{$statuses_qs}");
+        if ( $tab === 'zones' && $city !== '' ) {
+            $export_url .= '&city=' . rawurlencode( $city );
+        }
 
         ?>
         <div class="wrap">
@@ -84,12 +94,47 @@ class WBI_Report_Clients {
                     else echo "<tr><td colspan=3>Sin actividad.</td></tr>";
                     echo '</tbody></table>';
                 } elseif($tab=='zones'){
-                    $zones = $this->engine->get_new_customers_zones();
-                    echo '<h3>🗺️ Nuevos registros (Últimos 60 días)</h3>';
-                    echo '<table class="widefat striped wbi-sortable" style="max-width:500px;"><thead><tr><th>Ciudad</th><th>Nuevos Registros</th></tr></thead><tbody>';
-                    if($zones) foreach($zones as $z) echo "<tr><td>" . esc_html($z->city?:'Desconocido') . "</td><td>{$z->count}</td></tr>";
-                    else echo "<tr><td colspan=2>Sin datos.</td></tr>";
-                    echo '</tbody></table>';
+                    if ( $city !== '' ) {
+                        // Detail view: show users for the selected city
+                        $back_url = esc_url( add_query_arg(
+                            array( 'page' => 'wbi-clients-report', 'tab' => 'zones' ),
+                            admin_url( 'admin.php' )
+                        ) );
+                        echo '<p><a href="' . $back_url . '">← Volver al listado de zonas</a></p>';
+                        $customers = $this->engine->get_customers_by_city( $city );
+                        $count = $customers ? count( $customers ) : 0;
+                        echo '<h3>👥 Detalle de usuarios en: ' . esc_html( $city ) . ' (' . intval( $count ) . ')</h3>';
+                        echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Fecha de Registro</th><th>Ciudad</th></tr></thead><tbody>';
+                        if ( $customers ) {
+                            foreach ( $customers as $u ) {
+                                echo '<tr><td>' . esc_html( $u->display_name ) . '</td><td>' . esc_html( $u->user_email ) . '</td><td>' . esc_html( date( 'd/m/Y', strtotime( $u->user_registered ) ) ) . '</td><td>' . esc_html( $u->city ) . '</td></tr>';
+                            }
+                        } else {
+                            echo '<tr><td colspan="4">Sin datos.</td></tr>';
+                        }
+                        echo '</tbody></table>';
+                    } else {
+                        // Summary view: show zones table with clickable counts
+                        $zones = $this->engine->get_new_customers_zones();
+                        echo '<h3>🗺️ Nuevos registros (Últimos 60 días)</h3>';
+                        echo '<table class="widefat striped wbi-sortable" style="max-width:500px;"><thead><tr><th>Ciudad</th><th>Nuevos Registros</th></tr></thead><tbody>';
+                        if ( $zones ) {
+                            foreach ( $zones as $z ) {
+                                if ( $z->city ) {
+                                    $zone_url = esc_url( add_query_arg(
+                                        array( 'page' => 'wbi-clients-report', 'tab' => 'zones', 'city' => $z->city ),
+                                        admin_url( 'admin.php' )
+                                    ) );
+                                    echo '<tr><td>' . esc_html( $z->city ) . '</td><td><a href="' . $zone_url . '"><strong>' . intval( $z->count ) . '</strong></a></td></tr>';
+                                } else {
+                                    echo '<tr><td>Desconocido</td><td>' . intval( $z->count ) . '</td></tr>';
+                                }
+                            }
+                        } else {
+                            echo '<tr><td colspan="2">Sin datos.</td></tr>';
+                        }
+                        echo '</tbody></table>';
+                    }
                 }
                 ?>
             </div>

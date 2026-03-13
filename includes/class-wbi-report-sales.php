@@ -80,7 +80,15 @@ class WBI_Report_Sales {
                     <?php if ( $tab === 'period' ) : ?>
                         <a href="<?php echo esc_url(admin_url("admin-post.php?action=wbi_export_dynamic&report_type=sales_period&start={$start}&end={$end}{$statuses_qs}")); ?>" class="button">📥 Exportar CSV</a>
                     <?php elseif ( $tab === 'province' ) : ?>
-                        <a href="<?php echo esc_url(admin_url("admin-post.php?action=wbi_export_dynamic&report_type=sales_province&start={$start}&end={$end}{$statuses_qs}")); ?>" class="button">📥 Exportar CSV</a>
+                        <?php
+                        $province_export = isset($_GET['province']) ? sanitize_text_field($_GET['province']) : '';
+                        if ( $province_export !== '' ) {
+                            $province_export_url = esc_url( admin_url( "admin-post.php?action=wbi_export_dynamic&report_type=sales_province_detail&start={$start}&end={$end}{$statuses_qs}&province=" . rawurlencode( $province_export ) ) );
+                        } else {
+                            $province_export_url = esc_url( admin_url( "admin-post.php?action=wbi_export_dynamic&report_type=sales_province&start={$start}&end={$end}{$statuses_qs}" ) );
+                        }
+                        ?>
+                        <a href="<?php echo $province_export_url; ?>" class="button">📥 Exportar CSV</a>
                     <?php endif; ?>
                 </form>
             </div>
@@ -150,26 +158,83 @@ class WBI_Report_Sales {
                     echo '</tbody></table>';
 
                 } elseif ( $tab === 'province' ) {
-                    $data = $this->engine->get_sales_by_province($start, $end, $statuses);
-                    if ( $data ) {
-                        $prov_labels = wp_json_encode( array_map( function($r){
-                            return WBI_Metrics_Engine::get_province_name( $r->province ?: '' ) ?: 'Desconocida';
-                        }, $data ) );
-                        $prov_totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
-                        echo '<canvas id="wbiProvinceChart" style="max-height:320px; margin-bottom:20px;"></canvas>';
-                        echo '<script>
-                        (function(){
-                            var ctx = document.getElementById("wbiProvinceChart");
-                            if(ctx && typeof Chart !== "undefined") new Chart(ctx, {type:"bar", data:{labels:' . $prov_labels . ', datasets:[{label:"Facturación",data:' . $prov_totals . ',backgroundColor:"rgba(34,113,177,0.7)",borderColor:"#2271b1",borderWidth:1}]}, options:{indexAxis:"y", responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}}}});
-                        })();
-                        </script>';
+                    $province = isset($_GET['province']) ? sanitize_text_field($_GET['province']) : '';
+                    if ( $province !== '' ) {
+                        // Detail view: show orders for the selected province
+                        $back_url = esc_url( add_query_arg(
+                            array_merge(
+                                array( 'page' => 'wbi-sales-report', 'tab' => 'province', 'start' => $start, 'end' => $end ),
+                                array( 'statuses' => $statuses )
+                            ),
+                            admin_url( 'admin.php' )
+                        ) );
+                        echo '<p><a href="' . $back_url . '">← Volver al resumen por provincia</a></p>';
+                        $orders = $this->engine->get_orders_by_province( $province, $start, $end, $statuses );
+                        $count = $orders ? count( $orders ) : 0;
+                        $prov_name = WBI_Metrics_Engine::get_province_name( $province ) ?: esc_html( $province );
+                        echo '<h3>📋 Pedidos en: ' . esc_html( $prov_name ) . ' (' . intval( $count ) . ')</h3>';
+                        $status_labels = array(
+                            'wc-completed'  => '✅ Completado',
+                            'wc-processing' => '🔄 En proceso',
+                            'wc-on-hold'    => '⏸ En espera',
+                            'wc-pending'    => '⏳ Pendiente',
+                            'wc-cancelled'  => '❌ Cancelado',
+                            'wc-failed'     => '🚫 Fallido',
+                            'wc-refunded'   => '↩ Reembolsado',
+                        );
+                        echo '<table class="widefat striped wbi-sortable"><thead><tr><th>#Pedido</th><th>Fecha</th><th>Cliente</th><th>Email</th><th>Total</th><th>Estado</th></tr></thead><tbody>';
+                        if ( $orders ) {
+                            foreach ( $orders as $o ) {
+                                $order_edit_url = esc_url( admin_url( 'post.php?post=' . intval( $o->order_id ) . '&action=edit' ) );
+                                $status_label = isset( $status_labels[ $o->post_status ] ) ? $status_labels[ $o->post_status ] : esc_html( $o->post_status );
+                                $customer_name = trim( $o->first_name . ' ' . $o->last_name );
+                                echo '<tr>';
+                                echo '<td><a href="' . $order_edit_url . '">#' . intval( $o->order_id ) . '</a></td>';
+                                echo '<td>' . esc_html( date( 'd/m/Y', strtotime( $o->post_date ) ) ) . '</td>';
+                                echo '<td>' . esc_html( $customer_name ) . '</td>';
+                                echo '<td>' . esc_html( $o->email ) . '</td>';
+                                echo '<td><strong>' . wc_price( $o->total ) . '</strong></td>';
+                                echo '<td>' . esc_html( $status_label ) . '</td>';
+                                echo '</tr>';
+                            }
+                        } else {
+                            echo '<tr><td colspan="6">Sin datos de pedidos para esta provincia.</td></tr>';
+                        }
+                        echo '</tbody></table>';
+                    } else {
+                        // Summary view: show chart + table with clickable order counts
+                        $data = $this->engine->get_sales_by_province($start, $end, $statuses);
+                        if ( $data ) {
+                            $prov_labels = wp_json_encode( array_map( function($r){
+                                return WBI_Metrics_Engine::get_province_name( $r->province ?: '' ) ?: 'Desconocida';
+                            }, $data ) );
+                            $prov_totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
+                            echo '<canvas id="wbiProvinceChart" style="max-height:320px; margin-bottom:20px;"></canvas>';
+                            echo '<script>
+                            (function(){
+                                var ctx = document.getElementById("wbiProvinceChart");
+                                if(ctx && typeof Chart !== "undefined") new Chart(ctx, {type:"bar", data:{labels:' . $prov_labels . ', datasets:[{label:"Facturación",data:' . $prov_totals . ',backgroundColor:"rgba(34,113,177,0.7)",borderColor:"#2271b1",borderWidth:1}]}, options:{indexAxis:"y", responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}}}});
+                            })();
+                            </script>';
+                        }
+                        echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Provincia</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
+                        if($data) foreach($data as $r) {
+                            $prov_name = WBI_Metrics_Engine::get_province_name( $r->province ?: '' ) ?: 'Desconocida';
+                            if ( $r->province ) {
+                                $prov_url = esc_url( add_query_arg(
+                                    array_merge(
+                                        array( 'page' => 'wbi-sales-report', 'tab' => 'province', 'province' => $r->province, 'start' => $start, 'end' => $end ),
+                                        array( 'statuses' => $statuses )
+                                    ),
+                                    admin_url( 'admin.php' )
+                                ) );
+                                echo '<tr><td>' . esc_html( $prov_name ) . '</td><td><a href="' . $prov_url . '"><strong>' . intval( $r->orders ) . '</strong></a></td><td><strong>' . wc_price( $r->total ) . '</strong></td></tr>';
+                            } else {
+                                echo '<tr><td>' . esc_html( $prov_name ) . '</td><td>' . intval( $r->orders ) . '</td><td><strong>' . wc_price( $r->total ) . '</strong></td></tr>';
+                            }
+                        } else echo "<tr><td colspan=3>Sin datos de provincia en este periodo.</td></tr>";
+                        echo '</tbody></table>';
                     }
-                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Provincia</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
-                    if($data) foreach($data as $r) {
-                        $prov_name = WBI_Metrics_Engine::get_province_name( $r->province ?: '' ) ?: 'Desconocida';
-                        echo "<tr><td>" . esc_html($prov_name) . "</td><td>" . intval($r->orders) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
-                    } else echo "<tr><td colspan=3>Sin datos de provincia en este periodo.</td></tr>";
-                    echo '</tbody></table>';
                 }
                 ?>
             </div>
