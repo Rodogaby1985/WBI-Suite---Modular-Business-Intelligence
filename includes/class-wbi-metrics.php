@@ -326,6 +326,38 @@ class WBI_Metrics_Engine {
         return $this->wpdb->get_results( $sql );
     }
 
+    public function get_orders_by_province( $province_code, $start, $end, $statuses = null ) {
+        $d = $this->get_date_query( $start, $end, 'p' );
+        $statuses_in = $this->build_statuses_in( $statuses );
+        $sql = $this->wpdb->prepare(
+            "SELECT p.ID as order_id,
+                    p.post_date,
+                    p.post_status,
+                    pm_total.meta_value as total,
+                    pm_first.meta_value as first_name,
+                    pm_last.meta_value as last_name,
+                    pm_email.meta_value as email
+             FROM {$this->wpdb->posts} p
+             JOIN {$this->wpdb->postmeta} pm_state
+                  ON p.ID = pm_state.post_id AND pm_state.meta_key = '_billing_state'
+             JOIN {$this->wpdb->postmeta} pm_total
+                  ON p.ID = pm_total.post_id AND pm_total.meta_key = '_order_total'
+             LEFT JOIN {$this->wpdb->postmeta} pm_first
+                  ON p.ID = pm_first.post_id AND pm_first.meta_key = '_billing_first_name'
+             LEFT JOIN {$this->wpdb->postmeta} pm_last
+                  ON p.ID = pm_last.post_id AND pm_last.meta_key = '_billing_last_name'
+             LEFT JOIN {$this->wpdb->postmeta} pm_email
+                  ON p.ID = pm_email.post_id AND pm_email.meta_key = '_billing_email'
+             WHERE p.post_type = 'shop_order'
+             AND p.post_status IN {$statuses_in}
+             AND pm_state.meta_value = %s
+             {$d}
+             ORDER BY p.post_date DESC",
+            $province_code
+        );
+        return $this->wpdb->get_results( $sql );
+    }
+
     public function get_low_stock_products( $threshold = 5 ) {
         $threshold = intval( $threshold );
         $sql = $this->wpdb->prepare(
