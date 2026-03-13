@@ -28,7 +28,7 @@ class WBI_Dashboard_View {
     public function enqueue_assets( $hook ) {
         if ( 'toplevel_page_wbi-dashboard-view' !== $hook ) return;
 
-        wp_enqueue_script( 'wbi-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '4.4.0', true );
+        wp_enqueue_script( 'wbi-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '4.4.0', false );
         
         wp_register_style( 'wbi-admin-css', false );
         wp_enqueue_style( 'wbi-admin-css' );
@@ -122,8 +122,11 @@ class WBI_Dashboard_View {
         }
 
         // --- 3. OBTENER DATOS ---
-        $revenue = $this->engine->get_revenue($start_date, $end_date) ?: 0;
-        $units   = $this->engine->get_units_sold($start_date, $end_date) ?: 0;
+        $default_statuses = array('wc-completed', 'wc-processing');
+        $statuses = isset($_GET['statuses']) ? array_map('sanitize_text_field', (array)$_GET['statuses']) : $default_statuses;
+
+        $revenue = $this->engine->get_revenue($start_date, $end_date, $statuses) ?: 0;
+        $units   = $this->engine->get_units_sold($start_date, $end_date, $statuses) ?: 0;
         
         $status_raw   = $this->engine->get_order_status_counts();
         $c_completed  = $this->get_safe_count($status_raw, 'wc-completed');
@@ -132,18 +135,18 @@ class WBI_Dashboard_View {
         $c_cancelled  = $this->get_safe_count($status_raw, 'wc-cancelled');
         $c_failed     = $this->get_safe_count($status_raw, 'wc-failed');
 
-        $least_sold = $this->engine->get_least_sold($start_date, $end_date);
-        $best_sold  = $this->engine->get_best_sellers($start_date, $end_date);
+        $least_sold = $this->engine->get_least_sold($start_date, $end_date, $statuses);
+        $best_sold  = $this->engine->get_best_sellers($start_date, $end_date, $statuses);
 
         // Period data for chart
-        $period_data = $this->engine->get_sales_by_period('day', $start_date, $end_date);
+        $period_data = $this->engine->get_sales_by_period('day', $start_date, $end_date, $statuses);
 
         // Comparison data
         $prev_revenue = 0;
         $prev_units   = 0;
         if ( $compare !== 'none' && $prev_start && $prev_end ) {
-            $prev_revenue = $this->engine->get_revenue($prev_start, $prev_end) ?: 0;
-            $prev_units   = $this->engine->get_units_sold($prev_start, $prev_end) ?: 0;
+            $prev_revenue = $this->engine->get_revenue($prev_start, $prev_end, $statuses) ?: 0;
+            $prev_units   = $this->engine->get_units_sold($prev_start, $prev_end, $statuses) ?: 0;
         }
 
         // Build chart data arrays
@@ -202,6 +205,14 @@ class WBI_Dashboard_View {
                     <span class="dashicons dashicons-arrow-right-alt"></span>
                     <input type="date" name="wbi_prev_end" value="<?php echo esc_attr($prev_end); ?>">
                 </div>
+
+                <label style="font-weight:600; margin-left:10px;">📦 Estados:</label>
+                <select name="statuses[]" multiple size="4" style="height:72px; min-width:140px;" title="Mantené Ctrl/Cmd para seleccionar múltiples">
+                    <option value="wc-completed"  <?php echo in_array('wc-completed',  $statuses, true) ? 'selected' : ''; ?>>✅ Completado</option>
+                    <option value="wc-processing" <?php echo in_array('wc-processing', $statuses, true) ? 'selected' : ''; ?>>🔄 En proceso</option>
+                    <option value="wc-on-hold"    <?php echo in_array('wc-on-hold',    $statuses, true) ? 'selected' : ''; ?>>⏸ En espera</option>
+                    <option value="wc-pending"    <?php echo in_array('wc-pending',    $statuses, true) ? 'selected' : ''; ?>>⏳ Pendiente</option>
+                </select>
 
                 <button type="submit" class="button button-primary">Aplicar Filtros</button>
             </form>
@@ -285,7 +296,7 @@ class WBI_Dashboard_View {
             <div class="wbi-grid-2">
                 <div class="wbi-card">
                     <h3 style="margin-top:0;">🔥 Productos Más Vendidos</h3>
-                    <table class="wbi-table">
+                    <table class="wbi-table wbi-sortable">
                         <thead><tr><th>Producto</th><th style="text-align:right;">Cant.</th></tr></thead>
                         <tbody>
                             <?php if(!empty($best_sold) && is_array($best_sold)): foreach(array_slice($best_sold, 0, 5) as $p): ?>
@@ -301,7 +312,7 @@ class WBI_Dashboard_View {
                 <div class="wbi-card red">
                     <h3 style="margin-top:0;">⚠️ Productos con Menos Movimiento</h3>
                     <p style="font-size:12px; color:#666; margin-bottom:10px;">Bottom 5 (de los que tuvieron ventas)</p>
-                    <table class="wbi-table">
+                    <table class="wbi-table wbi-sortable">
                         <thead><tr><th>Producto</th><th style="text-align:right;">Cant.</th></tr></thead>
                         <tbody>
                             <?php if(!empty($least_sold) && is_array($least_sold)): foreach(array_slice($least_sold, 0, 5) as $p): ?>
