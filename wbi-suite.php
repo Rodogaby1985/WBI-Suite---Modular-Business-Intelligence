@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WBI Suite - Modular Business Intelligence
  * Description: Suite modular para B2B, Estadísticas y Gestión de Stock.
- * Version: 3.1.0
+ * Version: 3.2.0
  * Author: Rodrigo Castañera
  */
 
@@ -147,16 +147,35 @@ class WBI_Suite_Loader {
     }
 
     public function license_admin_notice() {
-        if ( WBI_License_Manager::is_active() ) return;
+        if ( WBI_License_Manager::is_active() ) {
+            // Show warning when license is about to expire (7 days or less)
+            $plan_info = WBI_License_Manager::get_plan_info();
+            if ( $plan_info['days_remaining'] > 0 && $plan_info['days_remaining'] <= 7 ) {
+                $license_url = admin_url( 'admin.php?page=wbi-license' );
+                echo '<div class="notice notice-warning is-dismissible">';
+                echo '<p><strong>⚠️ WBI Suite:</strong> Tu licencia vence en <strong>' . intval( $plan_info['days_remaining'] ) . ' días</strong>. ';
+                echo '<a href="' . esc_url( $license_url ) . '">Renovar aquí</a>.</p>';
+                echo '</div>';
+            }
+            return;
+        }
 
         // Only show to admins
         if ( ! current_user_can( 'manage_options' ) ) return;
 
         $license_url = admin_url( 'admin.php?page=wbi-license' );
-        echo '<div class="notice notice-warning is-dismissible">';
-        echo '<p><strong>🔒 WBI Suite:</strong> El plugin requiere una licencia válida para funcionar. ';
-        echo '<a href="' . esc_url( $license_url ) . '">Activar licencia aquí</a>.</p>';
-        echo '</div>';
+
+        if ( WBI_License_Manager::is_expired() ) {
+            echo '<div class="notice notice-error is-dismissible">';
+            echo '<p><strong>⏰ WBI Suite:</strong> Tu licencia ha expirado. Los módulos están desactivados. ';
+            echo '<a href="' . esc_url( $license_url ) . '">Renovar licencia</a>.</p>';
+            echo '</div>';
+        } else {
+            echo '<div class="notice notice-warning is-dismissible">';
+            echo '<p><strong>🔒 WBI Suite:</strong> El plugin requiere una licencia válida para funcionar. ';
+            echo '<a href="' . esc_url( $license_url ) . '">Activar licencia aquí</a>.</p>';
+            echo '</div>';
+        }
     }
 
     public function maybe_redirect_to_license() {
@@ -172,7 +191,8 @@ class WBI_Suite_Loader {
     }
 
     public function render_license_page() {
-        $is_active = WBI_License_Manager::is_active();
+        $is_active  = WBI_License_Manager::is_active();
+        $is_expired = WBI_License_Manager::is_expired();
         ?>
         <div class="wrap">
             <h1>🔐 WBI Suite — Licencia</h1>
@@ -182,15 +202,27 @@ class WBI_Suite_Loader {
 
                 <?php if ( $is_active ) : ?>
                     <!-- LICENSE ACTIVE STATE -->
+                    <?php $plan_info = WBI_License_Manager::get_plan_info(); ?>
                     <div style="text-align:center; padding:20px 0;">
                         <div style="font-size:48px; margin-bottom:10px;">✅</div>
                         <h2 style="color:#00a32a; margin:0;">Licencia Activa</h2>
                         <p style="color:#50575e; font-size:14px;">
                             Clave: <code><?php echo esc_html( WBI_License_Manager::get_masked_key() ); ?></code>
                         </p>
+                        <p style="font-size:16px;">
+                            <?php echo esc_html( $plan_info['emoji'] ); ?> Plan: <strong><?php echo esc_html( $plan_info['name'] ); ?></strong>
+                        </p>
                         <p style="color:#50575e;">
                             Activada: <?php echo esc_html( get_option( 'wbi_license_activated_at', 'N/A' ) ); ?>
                         </p>
+                        <?php if ( $plan_info['days_remaining'] === -1 ) : ?>
+                            <p style="color:#00a32a; font-weight:bold;">♾️ Licencia de por vida — Nunca expira</p>
+                        <?php else : ?>
+                            <p style="color:<?php echo esc_attr( $plan_info['days_remaining'] <= 7 ? '#d63638' : '#50575e' ); ?>;">
+                                Vence: <strong><?php echo esc_html( $plan_info['expires_at'] ); ?></strong>
+                                (<?php echo intval( $plan_info['days_remaining'] ); ?> días restantes)
+                            </p>
+                        <?php endif; ?>
                     </div>
 
                     <hr>
@@ -205,6 +237,57 @@ class WBI_Suite_Loader {
                         <button type="submit" class="button"
                                 onclick="return confirm('¿Estás seguro? Se desactivará la licencia y los módulos dejarán de funcionar.');">
                             🔓 Desactivar Licencia
+                        </button>
+                    </form>
+
+                <?php elseif ( $is_expired ) : ?>
+                    <?php $plan_info = WBI_License_Manager::get_plan_info(); ?>
+                    <!-- LICENSE EXPIRED STATE -->
+                    <div style="text-align:center; padding:20px 0;">
+                        <div style="font-size:48px; margin-bottom:10px;">⏰</div>
+                        <h2 style="color:#dba617; margin:0;">Licencia Expirada</h2>
+                        <p style="color:#50575e; font-size:14px;">
+                            Tu licencia <strong><?php echo esc_html( $plan_info['name'] ); ?></strong> venció el
+                            <strong><?php echo esc_html( $plan_info['expires_at'] ); ?></strong>.
+                        </p>
+                        <p style="color:#50575e;">
+                            Contactá al desarrollador para renovar tu licencia.
+                        </p>
+                    </div>
+
+                    <hr>
+
+                    <form method="post">
+                        <?php wp_nonce_field( 'wbi_license_nonce', '_wbi_license_nonce' ); ?>
+                        <input type="hidden" name="wbi_license_action" value="activate">
+
+                        <table class="form-table">
+                            <tr>
+                                <th><label for="wbi_license_key">Nueva Clave de Licencia</label></th>
+                                <td>
+                                    <input type="text" id="wbi_license_key" name="wbi_license_key"
+                                           placeholder="WBI-XXXX-XXXX-XXXX-XXXX"
+                                           class="regular-text"
+                                           style="font-family:monospace; font-size:16px; letter-spacing:1px; text-transform:uppercase;"
+                                           maxlength="23"
+                                           required>
+                                    <p class="description">Ingresá tu nueva clave para renovar.</p>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <p class="submit">
+                            <button type="submit" class="button button-primary button-hero">
+                                🔑 Renovar Licencia
+                            </button>
+                        </p>
+                    </form>
+
+                    <form method="post" style="margin-top:10px;">
+                        <?php wp_nonce_field( 'wbi_license_nonce', '_wbi_license_nonce' ); ?>
+                        <input type="hidden" name="wbi_license_action" value="deactivate">
+                        <button type="submit" class="button button-link-delete">
+                            Eliminar licencia expirada
                         </button>
                     </form>
 
@@ -256,10 +339,36 @@ class WBI_Suite_Loader {
         <?php
         // Secret key generator for the plugin author
         if ( isset( $_GET['wbi_gen'] ) && $_GET['wbi_gen'] === 'castanera2026' && current_user_can( 'manage_options' ) ) {
-            $new_key = WBI_License_Manager::generate_key();
+            $gen_plan    = isset( $_GET['plan'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_GET['plan'] ) ) ) : 'LF';
+            $valid_plans = array( 'T3', 'M1', 'A1', 'LF' );
+            if ( ! in_array( $gen_plan, $valid_plans, true ) ) {
+                $gen_plan = 'LF';
+            }
+
+            $new_key   = WBI_License_Manager::generate_key( $gen_plan );
+            $plans     = WBI_License_Manager::get_plans();
+            $plan_info = $plans[ $gen_plan ];
+
             echo '<div style="background:#fef8e7; border:1px solid #d4a900; padding:15px; margin-top:20px; max-width:600px;">';
             echo '<h3>🔑 Generador de Claves (Herramienta del Desarrollador)</h3>';
-            echo '<p>Nueva clave generada:</p>';
+
+            echo '<p><strong>Seleccionar plan:</strong></p>';
+            echo '<div style="display:flex; gap:8px; margin-bottom:15px; flex-wrap:wrap;">';
+            $base_url = admin_url( 'admin.php?page=wbi-license&wbi_gen=castanera2026' );
+            foreach ( $plans as $p_code => $p_info ) {
+                $is_selected = ( $p_code === $gen_plan );
+                $style       = $is_selected ? 'background:#0073aa; color:#fff; border-color:#0073aa;' : '';
+                echo '<a href="' . esc_url( $base_url . '&plan=' . $p_code ) . '" class="button" style="' . esc_attr( $style ) . '">';
+                echo esc_html( $p_info['emoji'] . ' ' . $p_info['name'] );
+                if ( $p_info['days'] > 0 ) {
+                    echo ' (' . intval( $p_info['days'] ) . 'd)';
+                }
+                echo '</a>';
+            }
+            echo '</div>';
+
+            echo '<p>Plan seleccionado: <strong>' . esc_html( $plan_info['emoji'] . ' ' . $plan_info['name'] ) . '</strong></p>';
+            echo '<p>Clave generada:</p>';
             echo '<input type="text" value="' . esc_attr( $new_key ) . '" class="regular-text" style="font-family:monospace; font-size:18px;" readonly onclick="this.select();">';
             echo '<p class="description">Copiá esta clave y entrégala a tu cliente.</p>';
             echo '</div>';
