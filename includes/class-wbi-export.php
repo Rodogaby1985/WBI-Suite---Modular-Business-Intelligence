@@ -40,6 +40,7 @@ class WBI_Export_Module {
         $start    = isset($_GET['start']) ? sanitize_text_field($_GET['start']) : date('Y-m-01');
         $end      = isset($_GET['end']) ? sanitize_text_field($_GET['end']) : date('Y-m-d');
         $statuses = isset($_GET['statuses']) ? array_map('sanitize_text_field', (array)$_GET['statuses']) : null;
+        $city     = isset($_GET['city']) ? sanitize_text_field($_GET['city']) : '';
 
         $output = $this->prepare_csv( 'wbi_reporte_' . $type );
 
@@ -89,6 +90,12 @@ class WBI_Export_Module {
                 fputcsv($output, ['Cliente', 'Email', 'Última Compra (Reciente)']);
                 $data = $this->engine->get_active_customers_list();
                 foreach($data as $r) fputcsv($output, [$r->display_name, $r->user_email, $r->last_buy]);
+                break;
+
+            case 'clients_zone_detail':
+                fputcsv($output, ['Nombre', 'Email', 'Fecha de Registro', 'Ciudad']);
+                $data = $this->engine->get_customers_by_city( $city );
+                foreach($data as $r) fputcsv($output, [$r->display_name, $r->user_email, $r->user_registered, $r->city]);
                 break;
              
              // --- VENTAS ---
