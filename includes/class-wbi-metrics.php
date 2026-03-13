@@ -326,6 +326,21 @@ class WBI_Metrics_Engine {
         return $this->wpdb->get_results( $sql );
     }
 
+    public function get_customers_by_city( $city ) {
+        $sql = $this->wpdb->prepare(
+            "SELECT u.ID, u.display_name, u.user_email, u.user_registered,
+                    um.meta_value as city
+             FROM {$this->wpdb->users} u
+             JOIN {$this->wpdb->usermeta} um
+                  ON u.ID = um.user_id AND um.meta_key = 'billing_city'
+             WHERE um.meta_value = %s
+             AND u.user_registered >= DATE_SUB(NOW(), INTERVAL 60 DAY)
+             ORDER BY u.user_registered DESC",
+            $city
+        );
+        return $this->wpdb->get_results( $sql );
+    }
+
     public function get_low_stock_products( $threshold = 5 ) {
         $threshold = intval( $threshold );
         $sql = $this->wpdb->prepare(
