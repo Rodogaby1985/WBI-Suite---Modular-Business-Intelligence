@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WBI Suite - Modular Business Intelligence
  * Description: Suite modular para B2B, Estadísticas y Gestión de Stock.
- * Version: 3.3.0
+ * Version: 4.0.0
  * Author: Rodrigo Castañera
  */
 
@@ -95,6 +95,22 @@ class WBI_Suite_Loader {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-reports.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-reports.php';
                 new WBI_Email_Reports();
+            }
+        }
+
+        // 4. Módulo de Códigos de Barra
+        if ( ! empty( $this->options['wbi_enable_barcode'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-barcode.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-barcode.php';
+                new WBI_Barcode_Module();
+            }
+        }
+
+        // 5. Módulo de Picking & Armado de Pedidos
+        if ( ! empty( $this->options['wbi_enable_picking'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-picking.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-picking.php';
+                new WBI_Picking_Module();
             }
         }
     }
@@ -383,6 +399,8 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_b2b', 'Modo Mayorista B2B', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_b2b'] );
         add_settings_field( 'wbi_enable_data', 'Modelo de Datos Extra (Origen)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_data'] );
         add_settings_field( 'wbi_enable_dashboard', 'Suite de BI (Dashboard + Reportes + Stock)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_dashboard'] );
+        add_settings_field( 'wbi_enable_barcode', 'Módulo de Códigos de Barra 📊', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_barcode'] );
+        add_settings_field( 'wbi_enable_picking', 'Módulo de Picking & Armado 📦', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_picking'] );
     }
 
     public function checkbox_field( $args ) {
