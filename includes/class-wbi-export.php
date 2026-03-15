@@ -144,6 +144,43 @@ class WBI_Export_Module {
                     }
                 }
                 break;
+
+            // --- COSTOS Y MÁRGENES ---
+            case 'costs_margins':
+                fputcsv($output, ['Producto', 'SKU', 'Precio Venta', 'Costo', 'Margen %', 'Estado']);
+                $alert_threshold = floatval( get_option( 'wbi_margin_alert_threshold', 20 ) );
+                $data = $this->engine->get_products_with_costs( 10000, 0, 0, -999, 999 );
+                foreach ( $data as $row ) {
+                    $price  = floatval( $row->price );
+                    $cost   = floatval( $row->cost );
+                    $margin = ( $cost > 0 && $price > 0 ) ? round( ( ( $price - $cost ) / $price ) * 100, 2 ) : 0;
+                    if ( $margin < 0 ) {
+                        $estado = 'Negativo';
+                    } elseif ( $margin < $alert_threshold ) {
+                        $estado = 'Bajo';
+                    } else {
+                        $estado = 'OK';
+                    }
+                    fputcsv($output, [$row->post_title, $row->sku, $row->price, $row->cost, $margin, $estado]);
+                }
+                break;
+
+            // --- SCORING DE CLIENTES ---
+            case 'scoring':
+                fputcsv($output, ['Nombre', 'Email', 'Score', 'Clase', 'Fecha Score']);
+                if ( class_exists( 'WBI_Scoring_Module' ) ) {
+                    $scored_users = WBI_Scoring_Module::get_all_scored_users_for_export();
+                    foreach ( $scored_users as $u ) {
+                        fputcsv($output, [
+                            $u->display_name,
+                            $u->user_email,
+                            $u->score,
+                            $u->class,
+                            $u->score_date ? date( 'd/m/Y', strtotime( $u->score_date ) ) : '',
+                        ]);
+                    }
+                }
+                break;
         }
 
         fclose( $output );

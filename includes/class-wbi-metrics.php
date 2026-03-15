@@ -462,4 +462,128 @@ class WBI_Metrics_Engine {
         );
         return $this->wpdb->get_results( $sql );
     }
+
+    // =========================================================================
+    // COSTS & MARGINS METHODS
+    // =========================================================================
+
+    /**
+     * Returns the average margin (%) across all published products that have
+     * both a price and a cost price set. Result is cached for 10 minutes.
+     *
+     * @return float
+     */
+    public function get_avg_margin() {
+        return $this->cached_query( 'wbi_avg_margin', function() {
+            $rows = $this->wpdb->get_results(
+                "SELECT pm_price.meta_value AS price,
+                        pm_cost.meta_value  AS cost
+                 FROM {$this->wpdb->posts} p
+                 JOIN {$this->wpdb->postmeta} pm_price ON p.ID = pm_price.post_id AND pm_price.meta_key = '_price'
+                 JOIN {$this->wpdb->postmeta} pm_cost  ON p.ID = pm_cost.post_id  AND pm_cost.meta_key  = '_wbi_cost_price'
+                 WHERE p.post_type   IN ('product','product_variation')
+                   AND p.post_status = 'publish'
+                   AND pm_price.meta_value > 0
+                   AND pm_cost.meta_value  > 0"
+            );
+            if ( empty( $rows ) ) return 0;
+            $total = 0;
+            $count = 0;
+            foreach ( $rows as $row ) {
+                $price = floatval( $row->price );
+                $cost  = floatval( $row->cost );
+                if ( $price > 0 && $cost > 0 ) {
+                    $total += ( ( $price - $cost ) / $price ) * 100;
+                    $count++;
+                }
+            }
+            return $count > 0 ? round( $total / $count, 2 ) : 0;
+        }, 10 * MINUTE_IN_SECONDS );
+    }
+
+    /**
+     * Returns a paginated list of products with their cost and price data,
+     * optionally filtered by category and margin range.
+     *
+     * @param int   $per_page
+     * @param int   $offset
+     * @param int   $category_id  0 = all categories
+     * @param float $min_margin   Minimum margin % (-999 = no lower bound)
+     * @param float $max_margin   Maximum margin % (999 = no upper bound)
+     * @return array
+     */
+    public function get_products_with_costs( $per_page = 20, $offset = 0, $category_id = 0, $min_margin = -999, $max_margin = 999 ) {
+        $per_page = max( 1, intval( $per_page ) );
+        $offset   = max( 0, intval( $offset ) );
+
+        $cat_join_sql  = '';
+        $cat_where_sql = '';
+        if ( $category_id > 0 ) {
+            $cat_join_sql  = " JOIN {$this->wpdb->term_relationships} tr ON p.ID = tr.object_id
+                              JOIN {$this->wpdb->term_taxonomy} tt ON tr.term_taxonomy_id = tt.term_taxonomy_id AND tt.taxonomy = 'product_cat'";
+            $cat_where_sql = ' AND tt.term_id = ' . intval( $category_id );
+        }
+
+        $min_m = floatval( $min_margin );
+        $max_m = floatval( $max_margin );
+
+        $query = "SELECT p.ID, p.post_title,
+                         pm_price.meta_value AS price,
+                         pm_cost.meta_value  AS cost,
+                         pm_sku.meta_value   AS sku,
+                         ROUND( ((CAST(pm_price.meta_value AS DECIMAL(12,4)) - CAST(pm_cost.meta_value AS DECIMAL(12,4))) / CAST(pm_price.meta_value AS DECIMAL(12,4))) * 100, 2 ) AS margin
+                  FROM {$this->wpdb->posts} p
+                  JOIN {$this->wpdb->postmeta} pm_price ON p.ID = pm_price.post_id AND pm_price.meta_key = '_price'
+                  JOIN {$this->wpdb->postmeta} pm_cost  ON p.ID = pm_cost.post_id  AND pm_cost.meta_key  = '_wbi_cost_price'
+                  LEFT JOIN {$this->wpdb->postmeta} pm_sku ON p.ID = pm_sku.post_id AND pm_sku.meta_key = '_sku'
+                  {$cat_join_sql}
+                  WHERE p.post_type   = 'product'
+                    AND p.post_status = 'publish'
+                    AND CAST(pm_price.meta_value AS DECIMAL(12,4)) > 0
+                    AND CAST(pm_cost.meta_value  AS DECIMAL(12,4)) > 0
+                    {$cat_where_sql}
+                  HAVING margin >= {$min_m} AND margin <= {$max_m}
+                  ORDER BY p.post_title ASC
+                  LIMIT " . intval( $per_page ) . " OFFSET " . intval( $offset );
+
+        return $this->wpdb->get_results( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+    }
+
+    /**
+     * Returns the total count of products with cost data (for pagination).
+     *
+     * @param int   $category_id
+     * @param float $min_margin
+     * @param float $max_margin
+     * @return int
+     */
+    public function get_products_with_costs_count( $category_id = 0, $min_margin = -999, $max_margin = 999 ) {
+        $cat_join_sql  = '';
+        $cat_where_sql = '';
+        if ( $category_id > 0 ) {
+            $cat_join_sql  = " JOIN {$this->wpdb->term_relationships} tr ON p.ID = tr.object_id
+                              JOIN {$this->wpdb->term_taxonomy} tt ON tr.term_taxonomy_id = tt.term_taxonomy_id AND tt.taxonomy = 'product_cat'";
+            $cat_where_sql = ' AND tt.term_id = ' . intval( $category_id );
+        }
+
+        $min_m = floatval( $min_margin );
+        $max_m = floatval( $max_margin );
+
+        $query = "SELECT COUNT(*) FROM (
+                    SELECT p.ID,
+                           ROUND( ((CAST(pm_price.meta_value AS DECIMAL(12,4)) - CAST(pm_cost.meta_value AS DECIMAL(12,4))) / CAST(pm_price.meta_value AS DECIMAL(12,4))) * 100, 2 ) AS margin
+                    FROM {$this->wpdb->posts} p
+                    JOIN {$this->wpdb->postmeta} pm_price ON p.ID = pm_price.post_id AND pm_price.meta_key = '_price'
+                    JOIN {$this->wpdb->postmeta} pm_cost  ON p.ID = pm_cost.post_id  AND pm_cost.meta_key  = '_wbi_cost_price'
+                    {$cat_join_sql}
+                    WHERE p.post_type   = 'product'
+                      AND p.post_status = 'publish'
+                      AND CAST(pm_price.meta_value AS DECIMAL(12,4)) > 0
+                      AND CAST(pm_cost.meta_value  AS DECIMAL(12,4)) > 0
+                      {$cat_where_sql}
+                    HAVING margin >= {$min_m} AND margin <= {$max_m}
+                  ) AS sub";
+
+        return (int) $this->wpdb->get_var( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+    }
 }
