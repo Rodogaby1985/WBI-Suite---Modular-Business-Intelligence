@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WBI Suite - Modular Business Intelligence
  * Description: Suite modular para B2B, Estadísticas y Gestión de Stock.
- * Version: 4.0.0
+ * Version: 5.0.0
  * Author: Rodrigo Castañera
  */
 
@@ -95,6 +95,38 @@ class WBI_Suite_Loader {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-reports.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-reports.php';
                 new WBI_Email_Reports();
+            }
+
+            // I. Módulo de Costos y Márgenes
+            if ( ! empty( $this->options['wbi_enable_costs'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-costs.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-costs.php';
+                    new WBI_Costs_Module();
+                }
+            }
+
+            // J. Módulo de Proveedores
+            if ( ! empty( $this->options['wbi_enable_suppliers'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-suppliers.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-suppliers.php';
+                    new WBI_Suppliers_Module();
+                }
+            }
+
+            // K. Módulo de Scoring de Clientes
+            if ( ! empty( $this->options['wbi_enable_scoring'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-scoring.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-scoring.php';
+                    new WBI_Scoring_Module();
+                }
+            }
+
+            // L. Módulo de Remitos
+            if ( ! empty( $this->options['wbi_enable_remitos'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-remitos.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-remitos.php';
+                    new WBI_Remitos_Module();
+                }
             }
         }
 
@@ -401,6 +433,10 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_dashboard', 'Suite de BI (Dashboard + Reportes + Stock)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_dashboard'] );
         add_settings_field( 'wbi_enable_barcode', 'Módulo de Códigos de Barra 📊', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_barcode'] );
         add_settings_field( 'wbi_enable_picking', 'Módulo de Picking & Armado 📦', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_picking'] );
+        add_settings_field( 'wbi_enable_costs', 'Módulo de Costos y Márgenes 💰', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_costs'] );
+        add_settings_field( 'wbi_enable_suppliers', 'Módulo de Proveedores 👥', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_suppliers'] );
+        add_settings_field( 'wbi_enable_scoring', 'Módulo de Scoring de Clientes ⭐', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_scoring'] );
+        add_settings_field( 'wbi_enable_remitos', 'Módulo de Remitos 📄', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_remitos'] );
     }
 
     public function checkbox_field( $args ) {
@@ -430,6 +466,13 @@ class WBI_Suite_Loader {
 
 // Iniciar Plugin
 new WBI_Suite_Loader();
+
+// Deactivation hook: clear scoring cron event
+register_deactivation_hook( __FILE__, function() {
+    if ( class_exists( 'WBI_Scoring_Module' ) ) {
+        WBI_Scoring_Module::deactivate();
+    }
+} );
 
 // Inyectar CSS/JS de ordenamiento de tablas en todas las páginas WBI
 add_action( 'admin_footer', function() {
