@@ -5,7 +5,7 @@ class WBI_Scoring_Module {
 
     public function __construct() {
         // Admin submenu
-        add_action( 'admin_menu', array( $this, 'add_submenu' ) );
+        add_action( 'admin_menu', array( $this, 'add_submenu' ), 100 );
 
         // WP Cron daily recalculation — register the action handler
         add_action( 'wbi_scoring_daily', array( $this, 'compute_all_scores' ) );

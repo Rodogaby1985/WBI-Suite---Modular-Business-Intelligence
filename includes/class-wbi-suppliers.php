@@ -16,7 +16,7 @@ class WBI_Suppliers_Module {
         add_action( 'woocommerce_process_product_meta', array( $this, 'save_supplier_field_on_product' ) );
 
         // Admin submenu
-        add_action( 'admin_menu', array( $this, 'add_submenus' ) );
+        add_action( 'admin_menu', array( $this, 'add_submenus' ), 100 );
 
         // Invalidate suppliers transient when a supplier is saved
         add_action( 'save_post_wbi_supplier', array( $this, 'invalidate_suppliers_cache' ) );
