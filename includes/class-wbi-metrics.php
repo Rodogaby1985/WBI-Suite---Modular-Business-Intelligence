@@ -601,7 +601,7 @@ class WBI_Metrics_Engine {
      * @return array  Each row: province, orders, total, iva, percepciones, iibb
      */
     public function get_tax_summary( $start, $end, $statuses = null ) {
-        $key = 'wbi_tax_summary_' . md5( $start . $end . serialize( $statuses ) );
+        $key = 'wbi_tax_summary_' . md5( $start . $end . wp_json_encode( $statuses ) );
         return $this->cached_query( $key, function() use ( $start, $end, $statuses ) {
             $d           = $this->get_date_query( $start, $end, 'p' );
             $statuses_in = $this->build_statuses_in( $statuses );

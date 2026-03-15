@@ -61,6 +61,8 @@ class WBI_Pricelists_Module {
             if ( ! empty( $list['valid_to'] )   && $today > $list['valid_to'] )   continue;
             $active[] = $list;
         }
+        // Cached for 10 minutes. Note: if a price list expires mid-day, prices
+        // may remain discounted for up to 10 minutes after expiry.
         set_transient( 'wbi_active_pricelists', $active, 10 * MINUTE_IN_SECONDS );
         return $active;
     }

@@ -112,7 +112,7 @@ class WBI_Cashflow_Module {
         $all_expenses  = $this->get_expenses();
 
         $months = array();
-        // Build 6 past months + current + 3 future = 9 total, current included in past 6
+        // Build last 6 months (including current) + 3 future months = 9 total.
         for ( $i = -5; $i <= 3; $i++ ) {
             $ts    = strtotime( date( 'Y-m-01' ) . " +{$i} months" );
             $label = date( 'Y-m', $ts );
@@ -164,7 +164,7 @@ class WBI_Cashflow_Module {
                     if ( $freq === 'monthly' ) {
                         $m['expenses'] += (float) $exp['amount'];
                     } elseif ( $freq === 'weekly' ) {
-                        // ~4.33 weeks per month
+                        // 52 weeks / 12 months ≈ 4.33 average weeks per month
                         $m['expenses'] += (float) $exp['amount'] * 4.33;
                     }
                 }

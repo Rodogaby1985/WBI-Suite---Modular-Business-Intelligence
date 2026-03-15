@@ -45,7 +45,7 @@ class WBI_Taxes_Module {
         if ( isset( $_POST['tax_config'] ) && is_array( $_POST['tax_config'] ) ) {
             foreach ( wp_unslash( $_POST['tax_config'] ) as $code => $rates ) {
                 $code = sanitize_text_field( $code );
-                if ( strlen( $code ) > 2 || ! ctype_alpha( $code ) ) continue;
+                if ( strlen( $code ) !== 1 || ! ctype_alpha( $code ) ) continue;
                 $config[ strtoupper( $code ) ] = array(
                     'iva'          => max( 0, floatval( isset( $rates['iva'] )          ? $rates['iva']          : 21 ) ),
                     'percepciones' => max( 0, floatval( isset( $rates['percepciones'] ) ? $rates['percepciones'] : 0 ) ),
