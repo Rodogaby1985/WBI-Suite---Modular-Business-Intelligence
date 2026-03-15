@@ -181,6 +181,24 @@ class WBI_Export_Module {
                     }
                 }
                 break;
+
+            // --- IMPUESTOS ---
+            case 'taxes_summary':
+                fputcsv($output, ['Reporte', 'Resumen de Impuestos por Provincia', $start . ' al ' . $end]);
+                fputcsv($output, ['Código', 'Provincia', 'Pedidos', 'Total Facturado', 'IVA Estimado', 'Percepciones', 'IIBB']);
+                $data = $this->engine->get_tax_summary($start, $end, $statuses);
+                foreach ( $data as $r ) {
+                    fputcsv($output, [
+                        $r->province,
+                        $r->province_name,
+                        $r->orders,
+                        number_format( $r->total, 2, '.', '' ),
+                        number_format( $r->iva, 2, '.', '' ),
+                        number_format( $r->percepciones, 2, '.', '' ),
+                        number_format( $r->iibb, 2, '.', '' ),
+                    ]);
+                }
+                break;
         }
 
         fclose( $output );

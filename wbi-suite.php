@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WBI Suite - Modular Business Intelligence
  * Description: Suite modular para B2B, Estadísticas y Gestión de Stock.
- * Version: 5.0.0
+ * Version: 6.0.0
  * Author: Rodrigo Castañera
  */
 
@@ -128,6 +128,22 @@ class WBI_Suite_Loader {
                     new WBI_Remitos_Module();
                 }
             }
+
+            // M. Módulo de Impuestos Avanzado
+            if ( ! empty( $this->options['wbi_enable_taxes'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-taxes.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-taxes.php';
+                    new WBI_Taxes_Module();
+                }
+            }
+
+            // N. Módulo de Flujo de Caja
+            if ( ! empty( $this->options['wbi_enable_cashflow'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-cashflow.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-cashflow.php';
+                    new WBI_Cashflow_Module();
+                }
+            }
         }
 
         // 4. Módulo de Códigos de Barra
@@ -143,6 +159,14 @@ class WBI_Suite_Loader {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-picking.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-picking.php';
                 new WBI_Picking_Module();
+            }
+        }
+
+        // 6. Módulo de Listas de Precios
+        if ( ! empty( $this->options['wbi_enable_pricelists'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pricelists.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pricelists.php';
+                new WBI_Pricelists_Module();
             }
         }
     }
@@ -437,6 +461,9 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_suppliers', 'Módulo de Proveedores 👥', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_suppliers'] );
         add_settings_field( 'wbi_enable_scoring', 'Módulo de Scoring de Clientes ⭐', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_scoring'] );
         add_settings_field( 'wbi_enable_remitos', 'Módulo de Remitos 📄', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_remitos'] );
+        add_settings_field( 'wbi_enable_pricelists', 'Módulo de Listas de Precios 💲', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_pricelists'] );
+        add_settings_field( 'wbi_enable_taxes', 'Módulo de Gestión de Impuestos 🏛️', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_taxes'] );
+        add_settings_field( 'wbi_enable_cashflow', 'Módulo de Flujo de Caja 💰', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_cashflow'] );
     }
 
     public function checkbox_field( $args ) {
