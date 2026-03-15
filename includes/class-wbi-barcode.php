@@ -372,29 +372,39 @@ class WBI_Barcode_Module {
     // ---- Tab: Productos sin Código ------------------------------------------
 
     private function render_tab_missing( $nonce ) {
-        $args = array(
+        $per_page = 20;
+        $paged    = max( 1, intval( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
+
+        $query = new WP_Query( array(
             'post_type'      => 'product',
             'post_status'    => 'publish',
-            'posts_per_page' => -1,
+            'posts_per_page' => $per_page,
+            'paged'          => $paged,
             'fields'         => 'ids',
             'meta_query'     => array(
                 'relation' => 'OR',
                 array( 'key' => '_wbi_barcode', 'compare' => 'NOT EXISTS' ),
                 array( 'key' => '_wbi_barcode', 'value' => '', 'compare' => '=' ),
             ),
-        );
-        $product_ids = get_posts( $args );
-        $count       = count( $product_ids );
+        ) );
+        $product_ids = $query->posts;
+        $total       = (int) $query->found_posts;
         ?>
         <h2>⚠️ Productos sin Código de Barra
             <span style="background:#d63638;color:#fff;border-radius:12px;padding:2px 10px;font-size:14px;margin-left:8px;">
-                <?php echo intval( $count ); ?>
+                <?php echo intval( $total ); ?>
             </span>
         </h2>
 
-        <?php if ( empty( $product_ids ) ) : ?>
+        <?php if ( 0 === $total ) : ?>
             <p style="color:#00a32a;">✅ ¡Todos los productos tienen código de barra asignado!</p>
         <?php else : ?>
+            <?php
+            $offset = ( $paged - 1 ) * $per_page;
+            $from   = $offset + 1;
+            $to     = min( $offset + $per_page, $total );
+            echo '<p style="color:#50575e;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total ) . ' productos.</p>';
+            ?>
             <table class="widefat striped wbi-sortable">
                 <thead>
                     <tr>
@@ -434,6 +444,23 @@ class WBI_Barcode_Module {
                     <?php endforeach; ?>
                 </tbody>
             </table>
+
+            <?php
+            // Pagination links
+            if ( $total > $per_page ) {
+                $pagination = paginate_links( array(
+                    'base'      => add_query_arg( 'paged', '%#%' ),
+                    'format'    => '',
+                    'current'   => $paged,
+                    'total'     => ceil( $total / $per_page ),
+                    'prev_text' => '&laquo;',
+                    'next_text' => '&raquo;',
+                ) );
+                if ( $pagination ) {
+                    echo '<div class="tablenav"><div class="tablenav-pages" style="margin-top:10px;">' . $pagination . '</div></div>';
+                }
+            }
+            ?>
         <?php endif; ?>
 
         <script>
@@ -492,10 +519,14 @@ class WBI_Barcode_Module {
     // ---- Tab: Todos los Códigos ---------------------------------------------
 
     private function render_tab_all() {
-        $args = array(
+        $per_page = 20;
+        $paged    = max( 1, intval( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
+
+        $query = new WP_Query( array(
             'post_type'      => 'product',
             'post_status'    => 'publish',
-            'posts_per_page' => -1,
+            'posts_per_page' => $per_page,
+            'paged'          => $paged,
             'fields'         => 'ids',
             'meta_query'     => array(
                 array(
@@ -504,18 +535,25 @@ class WBI_Barcode_Module {
                     'compare' => '!=',
                 ),
             ),
-        );
-        $product_ids = get_posts( $args );
+        ) );
+        $product_ids = $query->posts;
+        $total       = (int) $query->found_posts;
         ?>
         <h2>📋 Todos los Códigos de Barra
             <span style="background:#2271b1;color:#fff;border-radius:12px;padding:2px 10px;font-size:14px;margin-left:8px;">
-                <?php echo intval( count( $product_ids ) ); ?>
+                <?php echo intval( $total ); ?>
             </span>
         </h2>
 
-        <?php if ( empty( $product_ids ) ) : ?>
+        <?php if ( 0 === $total ) : ?>
             <p>Aún no hay productos con código de barra asignado.</p>
         <?php else : ?>
+            <?php
+            $offset = ( $paged - 1 ) * $per_page;
+            $from   = $offset + 1;
+            $to     = min( $offset + $per_page, $total );
+            echo '<p style="color:#50575e;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total ) . ' productos.</p>';
+            ?>
             <table class="widefat striped wbi-sortable">
                 <thead>
                     <tr>
@@ -546,6 +584,23 @@ class WBI_Barcode_Module {
                     <?php endforeach; ?>
                 </tbody>
             </table>
+
+            <?php
+            // Pagination links
+            if ( $total > $per_page ) {
+                $pagination = paginate_links( array(
+                    'base'      => add_query_arg( 'paged', '%#%' ),
+                    'format'    => '',
+                    'current'   => $paged,
+                    'total'     => ceil( $total / $per_page ),
+                    'prev_text' => '&laquo;',
+                    'next_text' => '&raquo;',
+                ) );
+                if ( $pagination ) {
+                    echo '<div class="tablenav"><div class="tablenav-pages" style="margin-top:10px;">' . $pagination . '</div></div>';
+                }
+            }
+            ?>
         <?php endif; ?>
         <?php
     }
