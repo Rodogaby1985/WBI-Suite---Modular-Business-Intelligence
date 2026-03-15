@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WBI Suite - Modular Business Intelligence
  * Description: Suite modular para B2B, Estadísticas y Gestión de Stock.
- * Version: 6.0.0
+ * Version: 7.0.0
  * Author: Rodrigo Castañera
  */
 
@@ -144,6 +144,30 @@ class WBI_Suite_Loader {
                     new WBI_Cashflow_Module();
                 }
             }
+
+            // O. Módulo de Facturación AFIP
+            if ( ! empty( $this->options['wbi_enable_invoice'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-invoice.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-invoice.php';
+                    new WBI_Invoice_Module();
+                }
+            }
+
+            // P. Centro de Notificaciones
+            if ( ! empty( $this->options['wbi_enable_notifications'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-notifications.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-notifications.php';
+                    new WBI_Notifications_Module();
+                }
+            }
+
+            // Q. API REST
+            if ( ! empty( $this->options['wbi_enable_api'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-api.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-api.php';
+                    new WBI_API_Module();
+                }
+            }
         }
 
         // 4. Módulo de Códigos de Barra
@@ -167,6 +191,14 @@ class WBI_Suite_Loader {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pricelists.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pricelists.php';
                 new WBI_Pricelists_Module();
+            }
+        }
+
+        // 7. Módulo de WhatsApp
+        if ( ! empty( $this->options['wbi_enable_whatsapp'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-whatsapp.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-whatsapp.php';
+                new WBI_Whatsapp_Module();
             }
         }
     }
@@ -464,6 +496,10 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_pricelists', 'Módulo de Listas de Precios 💲', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_pricelists'] );
         add_settings_field( 'wbi_enable_taxes', 'Módulo de Gestión de Impuestos 🏛️', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_taxes'] );
         add_settings_field( 'wbi_enable_cashflow', 'Módulo de Flujo de Caja 💰', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_cashflow'] );
+        add_settings_field( 'wbi_enable_whatsapp', 'Módulo de Notificaciones WhatsApp 💬', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_whatsapp'] );
+        add_settings_field( 'wbi_enable_invoice', 'Módulo de Facturación AFIP 📑', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_invoice'] );
+        add_settings_field( 'wbi_enable_notifications', 'Centro de Notificaciones 🔔', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_notifications'] );
+        add_settings_field( 'wbi_enable_api', 'API REST 📱', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_api'] );
     }
 
     public function checkbox_field( $args ) {
@@ -473,19 +509,151 @@ class WBI_Suite_Loader {
     }
 
     public function render_settings_page() {
+        $opts          = $this->options ?: array();
+        $total_modules = 16;
+        $active_count  = 0;
+        $toggle_keys   = array(
+            'wbi_enable_b2b','wbi_enable_data','wbi_enable_dashboard','wbi_enable_barcode',
+            'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_scoring',
+            'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
+            'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
+        );
+        foreach ( $toggle_keys as $k ) {
+            if ( ! empty( $opts[ $k ] ) ) $active_count++;
+        }
+
+        $license_active = class_exists( 'WBI_License_Manager' ) && WBI_License_Manager::is_active();
+        $version        = '7.0.0';
+
+        // Module definitions: key, icon, name, description, page_slug, group
+        $modules = array(
+            array( 'wbi_enable_b2b',           '🏢', 'Modo Mayorista B2B',       'Roles mayoristas, precios ocultos y aprobación de clientes',              null,             'comercial'    ),
+            array( 'wbi_enable_pricelists',     '💲', 'Listas de Precios',        'Listas de precios por cliente, rol o grupo',                              'wbi-pricelists', 'comercial'    ),
+            array( 'wbi_enable_costs',          '💰', 'Costos y Márgenes',        'Costo de adquisición y cálculo de márgenes por producto',                 'wbi-costs',      'comercial'    ),
+            array( 'wbi_enable_dashboard',      '📊', 'Dashboard BI Suite',       'Dashboard ejecutivo, reportes y alertas de stock',                        'wbi-dashboard-view', 'inteligencia' ),
+            array( 'wbi_enable_scoring',        '⭐', 'Scoring de Clientes',      'Scoring RFM de clientes con recálculo automático diario',                 'wbi-scoring',    'inteligencia' ),
+            array( 'wbi_enable_barcode',        '📊', 'Códigos de Barra',         'Gestión de códigos de barra EAN/UPC para productos',                      'wbi-barcode',    'operaciones'  ),
+            array( 'wbi_enable_picking',        '📦', 'Picking & Armado',         'Armado de pedidos con escaneo de códigos de barra',                       'wbi-picking',    'operaciones'  ),
+            array( 'wbi_enable_remitos',        '📄', 'Remitos',                  'Generación de remitos PDF vinculados a pedidos',                          'wbi-remitos',    'operaciones'  ),
+            array( 'wbi_enable_suppliers',      '👥', 'Proveedores',              'Gestión de proveedores y vinculación con productos',                      'wbi-suppliers',  'operaciones'  ),
+            array( 'wbi_enable_data',           '📁', 'Modelo de Datos Extra',    'Campos extra: origen de venta y taxonomías personalizadas',               null,             'datos'        ),
+            array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-invoices',   'finanzas'     ),
+            array( 'wbi_enable_taxes',          '🏛️','Gestión de Impuestos',      'Cálculo de IVA, percepciones e impuestos internos',                       'wbi-taxes',      'finanzas'     ),
+            array( 'wbi_enable_cashflow',       '💰', 'Flujo de Caja',            'Proyección de flujo de caja y análisis financiero',                       'wbi-cashflow',   'finanzas'     ),
+            array( 'wbi_enable_whatsapp',       '💬', 'WhatsApp',                 'Notificaciones automáticas por WhatsApp al cliente',                      'wbi-whatsapp',   'integraciones'),
+            array( 'wbi_enable_api',            '📱', 'API REST',                 'Endpoints REST para integración con apps externas',                       'wbi-api',        'integraciones'),
+            array( 'wbi_enable_notifications',  '🔔', 'Notificaciones',           'Centro de alertas unificado con badge en admin',                          'wbi-notifications','integraciones'),
+        );
+
+        $groups = array(
+            'comercial'    => array( 'label' => '🏢 Comercial',                    'modules' => array() ),
+            'inteligencia' => array( 'label' => '📊 Inteligencia de Negocio',       'modules' => array() ),
+            'operaciones'  => array( 'label' => '📦 Operaciones',                   'modules' => array() ),
+            'finanzas'     => array( 'label' => '💰 Finanzas',                      'modules' => array() ),
+            'integraciones'=> array( 'label' => '🔗 Integraciones',                 'modules' => array() ),
+            'datos'        => array( 'label' => '📁 Datos',                         'modules' => array() ),
+        );
+        foreach ( $modules as $m ) {
+            $groups[ $m[5] ]['modules'][] = $m;
+        }
         ?>
         <div class="wrap">
-            <h1>Configuración WBI Suite</h1>
-            <div style="background:#fff; padding:20px; border:1px solid #ccd0d4; max-width:800px;">
-                <p>Selecciona qué módulos deseas activar. Desmarcar un módulo desactivará su código por completo para mejorar el rendimiento.</p>
-                <form method="post" action="options.php">
-                    <?php
-                    settings_fields( 'wbi_group' );
-                    do_settings_sections( 'wbi-settings' );
-                    submit_button();
-                    ?>
-                </form>
+            <style>
+            .wbi-config-header { display:flex; align-items:center; gap:15px; margin-bottom:24px; padding:20px; background:#fff; border:1px solid #c3c4c7; border-radius:6px; }
+            .wbi-config-header h1 { margin:0; font-size:24px; }
+            .wbi-version-badge { background:#0073aa; color:#fff; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:bold; }
+            .wbi-license-badge { padding:3px 10px; border-radius:12px; font-size:12px; font-weight:bold; }
+            .wbi-license-badge.active { background:#00a32a; color:#fff; }
+            .wbi-license-badge.inactive { background:#d63638; color:#fff; }
+            .wbi-stats { margin-left:auto; font-size:13px; color:#50575e; }
+
+            .wbi-group-title { font-size:16px; font-weight:bold; margin:24px 0 10px; color:#1d2327; border-bottom:2px solid #e0e0e0; padding-bottom:6px; }
+            .wbi-card-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; margin-bottom:8px; }
+            @media (max-width:1100px) { .wbi-card-grid { grid-template-columns:repeat(2, 1fr); } }
+            @media (max-width:700px)  { .wbi-card-grid { grid-template-columns:1fr; } }
+
+            .wbi-module-card { background:#fff; border:2px solid #e0e0e0; border-radius:8px; padding:16px; transition:box-shadow .2s, border-color .2s, transform .15s; display:flex; flex-direction:column; gap:10px; }
+            .wbi-module-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.1); transform:translateY(-2px); }
+            .wbi-module-card.active { border-color:#00a32a; }
+            .wbi-module-card .card-icon { font-size:28px; line-height:1; }
+            .wbi-module-card .card-name { font-size:15px; font-weight:700; color:#1d2327; margin:0; }
+            .wbi-module-card .card-desc { font-size:12px; color:#50575e; margin:0; }
+            .wbi-module-card .card-footer { display:flex; align-items:center; justify-content:space-between; margin-top:4px; }
+            .wbi-module-card .card-link { font-size:12px; color:#0073aa; text-decoration:none; }
+            .wbi-module-card .card-link:hover { text-decoration:underline; }
+
+            /* Toggle switch */
+            .wbi-toggle { position:relative; display:inline-block; width:44px; height:22px; }
+            .wbi-toggle input { opacity:0; width:0; height:0; }
+            .wbi-toggle-slider { position:absolute; cursor:pointer; inset:0; background:#ccc; border-radius:22px; transition:.3s; }
+            .wbi-toggle-slider:before { content:''; position:absolute; width:16px; height:16px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.3s; }
+            .wbi-toggle input:checked + .wbi-toggle-slider { background:#00a32a; }
+            .wbi-toggle input:checked + .wbi-toggle-slider:before { transform:translateX(22px); }
+            </style>
+
+            <!-- Header -->
+            <div class="wbi-config-header">
+                <span style="font-size:36px;">🧠</span>
+                <div>
+                    <h1>WBI Suite — Configuración</h1>
+                    <p style="margin:4px 0 0; color:#50575e; font-size:13px;">Suite Modular de Business Intelligence para WooCommerce</p>
+                </div>
+                <span class="wbi-version-badge">v<?php echo esc_html( $version ); ?></span>
+                <span class="wbi-license-badge <?php echo $license_active ? 'active' : 'inactive'; ?>">
+                    <?php echo $license_active ? '✅ Licencia activa' : '🔒 Sin licencia'; ?>
+                </span>
+                <div class="wbi-stats">
+                    <strong><?php echo intval( $active_count ); ?></strong> de <?php echo intval( $total_modules ); ?> módulos activos
+                </div>
             </div>
+
+            <form method="post" action="options.php">
+                <?php settings_fields( 'wbi_group' ); ?>
+
+                <?php foreach ( $groups as $group_key => $group ) : ?>
+                    <?php if ( empty( $group['modules'] ) ) continue; ?>
+                    <div class="wbi-group-title"><?php echo esc_html( $group['label'] ); ?></div>
+                    <div class="wbi-card-grid">
+                    <?php foreach ( $group['modules'] as $m ) :
+                        $key        = $m[0];
+                        $icon       = $m[1];
+                        $name       = $m[2];
+                        $desc       = $m[3];
+                        $page_slug  = $m[4];
+                        $is_active  = ! empty( $opts[ $key ] );
+                        $card_class = $is_active ? 'wbi-module-card active' : 'wbi-module-card';
+                    ?>
+                    <div class="<?php echo esc_attr( $card_class ); ?>">
+                        <div style="display:flex; align-items:flex-start; gap:10px;">
+                            <span class="card-icon"><?php echo esc_html( $icon ); ?></span>
+                            <div style="flex:1;">
+                                <p class="card-name"><?php echo esc_html( $name ); ?></p>
+                                <p class="card-desc"><?php echo esc_html( $desc ); ?></p>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <label class="wbi-toggle">
+                                <input type="checkbox"
+                                       name="wbi_modules_settings[<?php echo esc_attr( $key ); ?>]"
+                                       value="1"
+                                       <?php checked( $is_active, true ); ?>>
+                                <span class="wbi-toggle-slider"></span>
+                            </label>
+                            <?php if ( $page_slug ) : ?>
+                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=' . $page_slug ) ); ?>" class="card-link">
+                                    Ir al módulo →
+                                </a>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                    </div>
+                <?php endforeach; ?>
+
+                <p style="margin-top:24px;">
+                    <?php submit_button( 'Guardar configuración', 'primary', 'submit', false ); ?>
+                </p>
+            </form>
         </div>
         <?php
     }
