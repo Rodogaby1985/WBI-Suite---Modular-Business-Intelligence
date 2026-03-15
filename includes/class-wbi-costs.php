@@ -13,7 +13,7 @@ class WBI_Costs_Module {
         add_action( 'woocommerce_save_product_variation',             array( $this, 'save_cost_field_variation' ), 10, 2 );
 
         // Admin submenu
-        add_action( 'admin_menu', array( $this, 'add_submenu' ) );
+        add_action( 'admin_menu', array( $this, 'add_submenu' ), 100 );
 
         // Dashboard KPI integration
         add_action( 'wbi_dashboard_after_kpis', array( $this, 'dashboard_avg_margin_card' ) );

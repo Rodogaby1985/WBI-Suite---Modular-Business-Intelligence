@@ -13,7 +13,7 @@ class WBI_Remitos_Module {
         add_action( 'admin_post_wbi_generate_remito', array( $this, 'generate_remito' ) );
 
         // Admin submenu
-        add_action( 'admin_menu', array( $this, 'add_submenu' ) );
+        add_action( 'admin_menu', array( $this, 'add_submenu' ), 100 );
     }
 
     // -------------------------------------------------------------------------
