@@ -8,10 +8,16 @@ class WBI_Report_Clients {
     public function __construct() {
         $this->engine = WBI_Metrics_Engine::instance();
         add_action( 'admin_menu', array( $this, 'register' ), 100 );
+        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
     }
 
     public function register() {
         add_submenu_page( 'wbi-dashboard-view', 'Detalle Clientes', 'Análisis Clientes', 'manage_options', 'wbi-clients-report', array( $this, 'render' ) );
+    }
+
+    public function enqueue_assets( $hook ) {
+        if ( strpos( $hook, 'wbi-clients-report' ) === false ) return;
+        wp_enqueue_script( 'wbi-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '4.4.0', false );
     }
 
     public function render() {
@@ -81,6 +87,20 @@ class WBI_Report_Clients {
                 if($tab=='ranking'){
                     $top = $this->engine->get_clients_ranking('revenue', $start, $end, $statuses);
                     echo "<h3>🏆 Top Clientes ({$start} al {$end})</h3>";
+
+                    if ( $top ) {
+                        $chart_top = array_slice( $top, 0, 10 );
+                        $c_labels  = wp_json_encode( array_map( function( $c ) { return $c->display_name; }, $chart_top ) );
+                        $c_data    = wp_json_encode( array_map( function( $c ) { return (float) $c->total_val; }, $chart_top ) );
+                        echo '<canvas id="wbiClientsChart" style="max-height:300px; margin-bottom:20px;"></canvas>';
+                        echo '<script>
+                        (function(){
+                            var ctx = document.getElementById("wbiClientsChart");
+                            if(ctx && typeof Chart !== "undefined") new Chart(ctx, {type:"doughnut", data:{labels:' . $c_labels . ', datasets:[{data:' . $c_data . ', backgroundColor:["#2271b1","#00a32a","#dba617","#d63638","#8c3130","#72aee6","#68de7c","#ffb900","#50575e","#a16696"], borderWidth:2, borderColor:"#fff"}]}, options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"right"}}}});
+                        })();
+                        </script>';
+                    }
+
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Total Gastado</th><th>Cant. Pedidos</th></tr></thead><tbody>';
                     if($top) foreach($top as $c) echo "<tr><td><strong>" . esc_html($c->display_name) . "</strong></td><td>" . esc_html($c->user_email) . "</td><td>".wc_price($c->total_val)."</td><td>" . intval($c->count_val) . "</td></tr>";
                     else echo "<tr><td colspan=4>No hay datos.</td></tr>";

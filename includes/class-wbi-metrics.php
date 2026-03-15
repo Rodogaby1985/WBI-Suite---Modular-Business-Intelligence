@@ -586,4 +586,65 @@ class WBI_Metrics_Engine {
 
         return (int) $this->wpdb->get_var( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
     }
+
+    // =========================================================================
+    // TAX SUMMARY METHOD
+    // =========================================================================
+
+    /**
+     * Returns per-province tax breakdown for a given date range and order statuses.
+     * Uses the _billing_state meta to group orders by Argentine province.
+     *
+     * @param string     $start    Start date (Y-m-d).
+     * @param string     $end      End date (Y-m-d).
+     * @param array|null $statuses Order statuses to include.
+     * @return array  Each row: province, orders, total, iva, percepciones, iibb
+     */
+    public function get_tax_summary( $start, $end, $statuses = null ) {
+        $key = 'wbi_tax_summary_' . md5( $start . $end . serialize( $statuses ) );
+        return $this->cached_query( $key, function() use ( $start, $end, $statuses ) {
+            $d           = $this->get_date_query( $start, $end, 'p' );
+            $statuses_in = $this->build_statuses_in( $statuses );
+
+            $sql = "SELECT pm_state.meta_value AS province,
+                           COUNT(p.ID) AS orders,
+                           SUM(CAST(pm_total.meta_value AS DECIMAL(12,2))) AS total
+                    FROM {$this->wpdb->posts} p
+                    JOIN {$this->wpdb->postmeta} pm_state
+                         ON p.ID = pm_state.post_id AND pm_state.meta_key = '_billing_state'
+                    JOIN {$this->wpdb->postmeta} pm_total
+                         ON p.ID = pm_total.post_id AND pm_total.meta_key = '_order_total'
+                    WHERE p.post_type = 'shop_order'
+                    AND p.post_status IN {$statuses_in}
+                    {$d}
+                    GROUP BY pm_state.meta_value
+                    ORDER BY total DESC";
+
+            $rows       = $this->wpdb->get_results( $sql );
+            $tax_config = get_option( 'wbi_tax_config', array() );
+            $result     = array();
+
+            foreach ( $rows as $row ) {
+                $code        = strtoupper( trim( $row->province ) );
+                $config      = isset( $tax_config[ $code ] ) ? $tax_config[ $code ] : array();
+                $iva_rate    = isset( $config['iva'] )            ? floatval( $config['iva'] )            : 21.0;
+                $perc_rate   = isset( $config['percepciones'] )   ? floatval( $config['percepciones'] )   : 0.0;
+                $iibb_rate   = isset( $config['iibb'] )           ? floatval( $config['iibb'] )           : 0.0;
+                $total       = floatval( $row->total );
+                $base        = $total / ( 1 + $iva_rate / 100 );
+                $iva_amount  = $total - $base;
+                $result[]    = (object) array(
+                    'province'      => $code,
+                    'province_name' => self::get_province_name( $code ),
+                    'orders'        => intval( $row->orders ),
+                    'total'         => $total,
+                    'iva'           => round( $iva_amount, 2 ),
+                    'percepciones'  => round( $total * $perc_rate / 100, 2 ),
+                    'iibb'          => round( $total * $iibb_rate / 100, 2 ),
+                );
+            }
+
+            return $result;
+        } );
+    }
 }
