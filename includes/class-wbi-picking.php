@@ -113,26 +113,42 @@ class WBI_Picking_Module {
     private function render_tab_pending() {
         global $wpdb;
 
-        // Orders that are processing and have no picking status (or empty)
-        $order_ids = $wpdb->get_col(
-            "SELECT DISTINCT p.ID
-             FROM {$wpdb->posts} p
-             WHERE p.post_type = 'shop_order'
+        $per_page = 20;
+        $paged    = max( 1, intval( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
+        $offset   = ( $paged - 1 ) * $per_page;
+
+        // Build shared WHERE condition
+        $where = "p.post_type = 'shop_order'
                AND p.post_status = 'wc-processing'
                AND p.ID NOT IN (
                    SELECT post_id FROM {$wpdb->postmeta}
                    WHERE meta_key = '_wbi_picking_status'
                      AND meta_value != ''
-               )
-             ORDER BY p.post_date ASC"
+               )";
+
+        // Total count (for badge and pagination)
+        $total = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p WHERE {$where}" );
+
+        // Paginated IDs
+        $order_ids = $wpdb->get_col(
+            "SELECT DISTINCT p.ID
+             FROM {$wpdb->posts} p
+             WHERE {$where}
+             ORDER BY p.post_date ASC
+             LIMIT {$per_page} OFFSET {$offset}"
         );
 
-        echo '<h2>⏳ Pedidos Pendientes de Armado <span style="background:#d63638;color:#fff;border-radius:12px;padding:2px 10px;font-size:14px;margin-left:8px;">' . intval( count( $order_ids ) ) . '</span></h2>';
+        echo '<h2>⏳ Pedidos Pendientes de Armado <span style="background:#d63638;color:#fff;border-radius:12px;padding:2px 10px;font-size:14px;margin-left:8px;">' . intval( $total ) . '</span></h2>';
 
-        if ( empty( $order_ids ) ) {
+        if ( 0 === $total ) {
             echo '<p style="color:#00a32a;">✅ No hay pedidos pendientes de armado.</p>';
             return;
         }
+
+        // Showing X–Y of Z
+        $from = $offset + 1;
+        $to   = min( $offset + $per_page, $total );
+        echo '<p style="color:#50575e;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total ) . ' pedidos.</p>';
 
         echo '<table class="widefat striped wbi-sortable"><thead><tr>
             <th>#Pedido</th><th>Fecha</th><th>Cliente</th><th>Items</th><th>Total</th><th>Acción</th>
@@ -153,27 +169,55 @@ class WBI_Picking_Module {
         }
 
         echo '</tbody></table>';
+
+        // Pagination links
+        if ( $total > $per_page ) {
+            $pagination = paginate_links( array(
+                'base'      => add_query_arg( 'paged', '%#%' ),
+                'format'    => '',
+                'current'   => $paged,
+                'total'     => ceil( $total / $per_page ),
+                'prev_text' => '&laquo;',
+                'next_text' => '&raquo;',
+            ) );
+            if ( $pagination ) {
+                echo '<div class="tablenav"><div class="tablenav-pages" style="margin-top:10px;">' . $pagination . '</div></div>';
+            }
+        }
     }
 
     // ---- Tab: En Proceso ----------------------------------------------------
 
     private function render_tab_in_progress() {
-        $orders = get_posts( array(
+        $per_page = 20;
+        $paged    = max( 1, intval( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
+
+        $query = new WP_Query( array(
             'post_type'      => 'shop_order',
             'post_status'    => array( 'wc-processing', 'wc-on-hold' ),
-            'posts_per_page' => -1,
+            'posts_per_page' => $per_page,
+            'paged'          => $paged,
             'fields'         => 'ids',
             'meta_query'     => array(
                 array( 'key' => '_wbi_picking_status', 'value' => 'picking', 'compare' => '=' ),
             ),
         ) );
 
+        $orders = $query->posts;
+        $total  = (int) $query->found_posts;
+
         echo '<h2>🔄 Pedidos en Proceso</h2>';
 
-        if ( empty( $orders ) ) {
+        if ( 0 === $total ) {
             echo '<p>No hay pedidos en proceso de armado.</p>';
             return;
         }
+
+        // Showing X–Y of Z
+        $offset = ( $paged - 1 ) * $per_page;
+        $from   = $offset + 1;
+        $to     = min( $offset + $per_page, $total );
+        echo '<p style="color:#50575e;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total ) . ' pedidos.</p>';
 
         echo '<table class="widefat striped wbi-sortable"><thead><tr>
             <th>#Pedido</th><th>Fecha</th><th>Cliente</th><th>Progreso</th><th>Operador</th><th>Acción</th>
@@ -206,6 +250,21 @@ class WBI_Picking_Module {
         }
 
         echo '</tbody></table>';
+
+        // Pagination links
+        if ( $total > $per_page ) {
+            $pagination = paginate_links( array(
+                'base'      => add_query_arg( 'paged', '%#%' ),
+                'format'    => '',
+                'current'   => $paged,
+                'total'     => ceil( $total / $per_page ),
+                'prev_text' => '&laquo;',
+                'next_text' => '&raquo;',
+            ) );
+            if ( $pagination ) {
+                echo '<div class="tablenav"><div class="tablenav-pages" style="margin-top:10px;">' . $pagination . '</div></div>';
+            }
+        }
     }
 
     // ---- Tab: Completados ---------------------------------------------------
@@ -213,6 +272,9 @@ class WBI_Picking_Module {
     private function render_tab_completed() {
         $date_from = isset( $_GET['date_from'] ) ? sanitize_text_field( wp_unslash( $_GET['date_from'] ) ) : '';
         $date_to   = isset( $_GET['date_to'] )   ? sanitize_text_field( wp_unslash( $_GET['date_to'] ) )   : '';
+
+        $per_page = 20;
+        $paged    = max( 1, intval( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
 
         $meta_query = array(
             array(
@@ -222,10 +284,11 @@ class WBI_Picking_Module {
             ),
         );
 
-        $orders = get_posts( array(
+        $query = new WP_Query( array(
             'post_type'      => 'shop_order',
             'post_status'    => 'any',
-            'posts_per_page' => -1,
+            'posts_per_page' => $per_page,
+            'paged'          => $paged,
             'fields'         => 'ids',
             'meta_query'     => $meta_query,
             'date_query'     => array_filter( array(
@@ -233,6 +296,9 @@ class WBI_Picking_Module {
                 $date_to   ? array( 'before' => $date_to,  'inclusive' => true ) : null,
             ) ),
         ) );
+
+        $orders = $query->posts;
+        $total  = (int) $query->found_posts;
 
         echo '<h2>✅ Pedidos Completados</h2>';
 
@@ -245,10 +311,16 @@ class WBI_Picking_Module {
             <button type="submit" class="button">Filtrar</button>
         </form>';
 
-        if ( empty( $orders ) ) {
+        if ( 0 === $total ) {
             echo '<p>No hay pedidos completados' . ( $date_from || $date_to ? ' en el rango seleccionado' : '' ) . '.</p>';
             return;
         }
+
+        // Showing X–Y of Z
+        $offset = ( $paged - 1 ) * $per_page;
+        $from   = $offset + 1;
+        $to     = min( $offset + $per_page, $total );
+        echo '<p style="color:#50575e;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total ) . ' pedidos.</p>';
 
         echo '<table class="widefat striped wbi-sortable"><thead><tr>
             <th>#Pedido</th><th>Fecha</th><th>Cliente</th><th>Items</th>
@@ -289,6 +361,21 @@ class WBI_Picking_Module {
         }
 
         echo '</tbody></table>';
+
+        // Pagination links
+        if ( $total > $per_page ) {
+            $pagination = paginate_links( array(
+                'base'      => add_query_arg( 'paged', '%#%' ),
+                'format'    => '',
+                'current'   => $paged,
+                'total'     => ceil( $total / $per_page ),
+                'prev_text' => '&laquo;',
+                'next_text' => '&raquo;',
+            ) );
+            if ( $pagination ) {
+                echo '<div class="tablenav"><div class="tablenav-pages" style="margin-top:10px;">' . $pagination . '</div></div>';
+            }
+        }
     }
 
     // =========================================================================

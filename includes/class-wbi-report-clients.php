@@ -6,7 +6,7 @@ class WBI_Report_Clients {
     private $engine;
 
     public function __construct() {
-        $this->engine = new WBI_Metrics_Engine();
+        $this->engine = WBI_Metrics_Engine::instance();
         add_action( 'admin_menu', array( $this, 'register' ), 100 );
     }
 

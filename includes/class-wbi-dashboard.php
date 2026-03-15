@@ -6,7 +6,7 @@ class WBI_Dashboard_View {
     private $engine;
 
     public function __construct() {
-        $this->engine = new WBI_Metrics_Engine();
+        $this->engine = WBI_Metrics_Engine::instance();
         // Prioridad 99 para ser el menú padre
         add_action( 'admin_menu', array( $this, 'register_page' ), 99 );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
