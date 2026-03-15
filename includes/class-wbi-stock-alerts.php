@@ -6,7 +6,7 @@ class WBI_Stock_Alerts {
     private $engine;
 
     public function __construct() {
-        $this->engine = new WBI_Metrics_Engine();
+        $this->engine = WBI_Metrics_Engine::instance();
         add_action( 'admin_menu', array( $this, 'register_page' ), 100 );
         add_action( 'admin_notices', array( $this, 'show_stock_notice' ) );
         add_action( 'admin_init', array( $this, 'register_settings' ) );
@@ -45,14 +45,20 @@ class WBI_Stock_Alerts {
 
         if ( ! $is_wbi && ! $is_woocommerce ) return;
 
-        $threshold = $this->get_threshold();
-        $products  = $this->engine->get_low_stock_products( $threshold );
+        $threshold   = $this->get_threshold();
+        $cache_key   = 'wbi_stock_notice_' . intval( $threshold );
+        $count       = get_transient( $cache_key );
 
-        if ( ! empty( $products ) ) {
-            $count = count( $products );
-            $url   = admin_url( 'admin.php?page=wbi-stock-alerts' );
+        if ( false === $count ) {
+            $products = $this->engine->get_low_stock_products( $threshold );
+            $count    = is_array( $products ) ? count( $products ) : 0;
+            set_transient( $cache_key, $count, 600 ); // 10 minutes
+        }
+
+        if ( $count > 0 ) {
+            $url = admin_url( 'admin.php?page=wbi-stock-alerts' );
             echo '<div class="notice notice-warning is-dismissible"><p>';
-            echo '⚠️ <strong>' . $count . ' producto(s)</strong> con stock bajo (≤' . $threshold . ' unidades). ';
+            echo '⚠️ <strong>' . intval( $count ) . ' producto(s)</strong> con stock bajo (≤' . intval( $threshold ) . ' unidades). ';
             echo '<a href="' . esc_url( $url ) . '">Ver alertas de stock</a>';
             echo '</p></div>';
         }

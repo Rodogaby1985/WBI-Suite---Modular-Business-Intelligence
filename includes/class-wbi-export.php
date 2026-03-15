@@ -6,8 +6,7 @@ class WBI_Export_Module {
     private $engine;
 
     public function __construct() {
-        require_once plugin_dir_path( __FILE__ ) . 'class-wbi-metrics.php';
-        $this->engine = new WBI_Metrics_Engine();
+        $this->engine = WBI_Metrics_Engine::instance();
 
         // Acciones existentes
         add_action( 'admin_post_wbi_export_customers', array( $this, 'process_customer_export' ) );
