@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WBI Suite - Modular Business Intelligence
  * Description: Suite modular para B2B, Estadísticas y Gestión de Stock.
- * Version: 7.0.0
+ * Version: 7.0.1
  * Author: Rodrigo Castañera
  */
 
