@@ -712,7 +712,7 @@ class WBI_Barcode_Module {
         $products = get_posts( array( 'post_type' => 'product', 'posts_per_page' => -1, 'post_status' => 'publish', 'fields' => 'ids' ) );
 
         header( 'Content-Type: text/csv; charset=utf-8' );
-        header( 'Content-Disposition: attachment; filename="wbi-barcodes-export-' . date( 'Y-m-d' ) . '.csv"' );
+        header( 'Content-Disposition: attachment; filename="wbi-barcodes-export-' . gmdate( 'Y-m-d' ) . '.csv"' );
         $out = fopen( 'php://output', 'w' );
         fputcsv( $out, array( 'product_id', 'sku', 'name', 'barcode' ) );
         foreach ( $products as $pid ) {

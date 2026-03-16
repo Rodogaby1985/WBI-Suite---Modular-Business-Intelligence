@@ -350,7 +350,7 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
         );
 
         header( 'Content-Type: text/csv; charset=utf-8' );
-        header( 'Content-Disposition: attachment; filename="wbi-remitos-export-' . date( 'Y-m-d' ) . '.csv"' );
+        header( 'Content-Disposition: attachment; filename="wbi-remitos-export-' . gmdate( 'Y-m-d' ) . '.csv"' );
         $out = fopen( 'php://output', 'w' );
         fputcsv( $out, array( 'remito_number', 'order_id', 'date', 'customer', 'total' ) );
         foreach ( $rows as $row ) {

@@ -273,7 +273,7 @@ class WBI_Suppliers_Module {
         ) );
 
         header( 'Content-Type: text/csv; charset=utf-8' );
-        header( 'Content-Disposition: attachment; filename="wbi-suppliers-export-' . date( 'Y-m-d' ) . '.csv"' );
+        header( 'Content-Disposition: attachment; filename="wbi-suppliers-export-' . gmdate( 'Y-m-d' ) . '.csv"' );
         $out = fopen( 'php://output', 'w' );
         fputcsv( $out, array( 'name', 'cuit', 'contact', 'email', 'phone', 'payment_terms', 'lead_time' ) );
         foreach ( $suppliers as $s ) {

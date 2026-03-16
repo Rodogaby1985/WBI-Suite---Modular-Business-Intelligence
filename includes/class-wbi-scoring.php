@@ -520,7 +520,7 @@ class WBI_Scoring_Module {
         );
 
         header( 'Content-Type: text/csv; charset=utf-8' );
-        header( 'Content-Disposition: attachment; filename="wbi-scoring-export-' . date( 'Y-m-d' ) . '.csv"' );
+        header( 'Content-Disposition: attachment; filename="wbi-scoring-export-' . gmdate( 'Y-m-d' ) . '.csv"' );
         $out = fopen( 'php://output', 'w' );
         fputcsv( $out, array( 'customer_name', 'email', 'rfm_score', 'recency', 'frequency', 'monetary', 'segment', 'class' ) );
         foreach ( $users as $u ) {

@@ -131,7 +131,7 @@ class WBI_Stock_Alerts {
         $products  = $this->engine->get_low_stock_products( $threshold );
 
         header( 'Content-Type: text/csv; charset=utf-8' );
-        header( 'Content-Disposition: attachment; filename="wbi-stock-alerts-' . date( 'Y-m-d' ) . '.csv"' );
+        header( 'Content-Disposition: attachment; filename="wbi-stock-alerts-' . gmdate( 'Y-m-d' ) . '.csv"' );
         $out = fopen( 'php://output', 'w' );
         fputcsv( $out, array( 'product_id', 'name', 'sku', 'stock', 'threshold' ) );
         foreach ( $products as $p ) {

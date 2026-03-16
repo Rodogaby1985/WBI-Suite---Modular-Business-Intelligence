@@ -306,7 +306,7 @@ class WBI_Email_Reports {
 
         $to      = get_option( 'admin_email' );
         $subject = '[WBI Suite] Email de Prueba';
-        $body    = $this->build_email_body( date( 'Y-m-d', strtotime( '-7 days' ) ), date( 'Y-m-d', strtotime( '-1 day' ) ), 'Prueba' );
+        $body    = $this->build_email_body( gmdate( 'Y-m-d', strtotime( '-7 days' ) ), gmdate( 'Y-m-d', strtotime( '-1 day' ) ), 'Prueba' );
         $headers = array( 'Content-Type: text/html; charset=UTF-8' );
         $sent    = wp_mail( $to, $subject, $body, $headers );
 

@@ -1153,15 +1153,21 @@ class WBI_Picking_Module {
     }
 
     // =========================================================================
+    // Helper: check if current user can perform picking actions
+    // =========================================================================
+
+    private function current_user_can_pick() {
+        $user = wp_get_current_user();
+        return current_user_can( 'manage_woocommerce' ) || in_array( 'wbi_armador', (array) $user->roles, true );
+    }
+
+    // =========================================================================
     // AJAX: Mark item as picked/missing/replaced
     // =========================================================================
 
     public function ajax_mark_item() {
         check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
-        // Allow armadors and shop managers/admins
-        $user    = wp_get_current_user();
-        $allowed = current_user_can( 'manage_woocommerce' ) || in_array( 'wbi_armador', (array) $user->roles, true );
-        if ( ! $allowed ) wp_send_json_error( 'Sin permisos' );
+        if ( ! $this->current_user_can_pick() ) wp_send_json_error( 'Sin permisos' );
 
         $order_id    = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
         $item_id     = isset( $_POST['item_id'] )  ? intval( $_POST['item_id'] )  : 0;
@@ -1188,10 +1194,7 @@ class WBI_Picking_Module {
 
     public function ajax_save_order_notes() {
         check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
-        // Allow armadors and shop managers/admins
-        $user    = wp_get_current_user();
-        $allowed = current_user_can( 'manage_woocommerce' ) || in_array( 'wbi_armador', (array) $user->roles, true );
-        if ( ! $allowed ) wp_send_json_error( 'Sin permisos' );
+        if ( ! $this->current_user_can_pick() ) wp_send_json_error( 'Sin permisos' );
 
         $order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
         $notes    = isset( $_POST['notes'] )    ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '';
