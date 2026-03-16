@@ -124,13 +124,7 @@ class WBI_Suite_Loader {
                 }
             }
 
-            // L. Módulo de Remitos
-            if ( ! empty( $this->options['wbi_enable_remitos'] ) ) {
-                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-remitos.php' ) ) {
-                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-remitos.php';
-                    new WBI_Remitos_Module();
-                }
-            }
+            // L. (merged into O+L — see Módulo Unificado de Documentos below)
 
             // M. Módulo de Impuestos Avanzado
             if ( ! empty( $this->options['wbi_enable_taxes'] ) ) {
@@ -148,11 +142,11 @@ class WBI_Suite_Loader {
                 }
             }
 
-            // O. Módulo de Facturación AFIP
-            if ( ! empty( $this->options['wbi_enable_invoice'] ) ) {
-                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-invoice.php' ) ) {
-                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-invoice.php';
-                    new WBI_Invoice_Module();
+            // O+L. Módulo Unificado de Documentos (Facturación + Remitos)
+            if ( ! empty( $this->options['wbi_enable_invoice'] ) || ! empty( $this->options['wbi_enable_remitos'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-documents.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-documents.php';
+                    new WBI_Documents_Module();
                 }
             }
 
@@ -604,10 +598,10 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_scoring',        '⭐', 'Scoring de Clientes',      'Scoring RFM de clientes con recálculo automático diario',                 'wbi-scoring',    'inteligencia' ),
             array( 'wbi_enable_barcode',        '📊', 'Códigos de Barra',         'Gestión de códigos de barra EAN/UPC para productos',                      'wbi-barcode',    'operaciones'  ),
             array( 'wbi_enable_picking',        '📦', 'Picking & Armado',         'Armado de pedidos con escaneo de códigos de barra',                       'wbi-picking',    'operaciones'  ),
-            array( 'wbi_enable_remitos',        '📄', 'Remitos',                  'Generación de remitos PDF vinculados a pedidos',                          'wbi-remitos',    'operaciones'  ),
+            array( 'wbi_enable_remitos',        '📄', 'Remitos',                  'Generación de remitos PDF vinculados a pedidos',                          'wbi-documents',  'operaciones'  ),
             array( 'wbi_enable_suppliers',      '👥', 'Proveedores',              'Gestión de proveedores y vinculación con productos',                      'wbi-suppliers',  'operaciones'  ),
             array( 'wbi_enable_data',           '📁', 'Modelo de Datos Extra',    'Campos extra: origen de venta y taxonomías personalizadas',               null,             'datos'        ),
-            array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-invoices',   'finanzas'     ),
+            array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',  'finanzas'     ),
             array( 'wbi_enable_taxes',          '🏛️','Gestión de Impuestos',      'Cálculo de IVA, percepciones e impuestos internos',                       'wbi-taxes',      'finanzas'     ),
             array( 'wbi_enable_cashflow',       '💰', 'Flujo de Caja',            'Proyección de flujo de caja y análisis financiero',                       'wbi-cashflow',   'finanzas'     ),
             array( 'wbi_enable_whatsapp',       '💬', 'WhatsApp',                 'Notificaciones automáticas por WhatsApp al cliente',                      'wbi-whatsapp',   'integraciones'),
