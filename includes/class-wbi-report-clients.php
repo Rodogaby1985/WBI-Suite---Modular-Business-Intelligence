@@ -12,7 +12,7 @@ class WBI_Report_Clients {
     }
 
     public function register() {
-        add_submenu_page( 'wbi-dashboard-view', 'Detalle Clientes', 'Análisis Clientes', 'manage_options', 'wbi-clients-report', array( $this, 'render' ) );
+        add_submenu_page( 'wbi-dashboard-view', 'Detalle Clientes', '<span class="dashicons dashicons-groups" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Análisis Clientes', 'manage_options', 'wbi-clients-report', array( $this, 'render' ) );
     }
 
     public function enqueue_assets( $hook ) {

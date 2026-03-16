@@ -20,10 +20,12 @@ class WBI_Picking_Module {
         add_action( 'manage_shop_order_posts_custom_column', array( $this, 'render_picking_column' ), 10, 2 );
 
         // AJAX handlers
-        add_action( 'wp_ajax_wbi_picking_start',    array( $this, 'ajax_start_picking' ) );
-        add_action( 'wp_ajax_wbi_picking_scan',     array( $this, 'ajax_scan_item' ) );
-        add_action( 'wp_ajax_wbi_picking_complete', array( $this, 'ajax_complete_picking' ) );
-        add_action( 'wp_ajax_wbi_picking_reset',    array( $this, 'ajax_reset_picking' ) );
+        add_action( 'wp_ajax_wbi_picking_start',      array( $this, 'ajax_start_picking' ) );
+        add_action( 'wp_ajax_wbi_picking_scan',       array( $this, 'ajax_scan_item' ) );
+        add_action( 'wp_ajax_wbi_picking_complete',   array( $this, 'ajax_complete_picking' ) );
+        add_action( 'wp_ajax_wbi_picking_reset',      array( $this, 'ajax_reset_picking' ) );
+        add_action( 'wp_ajax_wbi_picking_mark_item',  array( $this, 'ajax_mark_item' ) );
+        add_action( 'wp_ajax_wbi_picking_order_notes', array( $this, 'ajax_save_order_notes' ) );
 
         // Enqueue scripts on relevant pages
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
@@ -37,10 +39,21 @@ class WBI_Picking_Module {
         add_submenu_page(
             'wbi-dashboard-view',
             'Picking & Armado',
-            '📦 Picking & Armado',
+            '<span class="dashicons dashicons-clipboard" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Picking & Armado',
             'manage_woocommerce',
             'wbi-picking',
             array( $this, 'render_picking_list' )
+        );
+
+        // Armador panel — accessible to users with 'read' capability
+        add_menu_page(
+            'Panel Armado',
+            'Panel Armado',
+            'read',
+            'wbi-picking-panel',
+            array( $this, 'render_armador_panel' ),
+            'dashicons-clipboard',
+            5
         );
     }
 
@@ -72,7 +85,7 @@ class WBI_Picking_Module {
         }
         ?>
         <div class="wrap">
-            <h1>📦 Picking & Armado de Pedidos</h1>
+            <h1>Picking & Armado de Pedidos</h1>
 
             <?php if ( isset( $_GET['completed'] ) ) : ?>
                 <div class="notice notice-success is-dismissible"><p>✅ Armado completado exitosamente.</p></div>
@@ -462,7 +475,7 @@ class WBI_Picking_Module {
 
             <!-- Items table -->
             <div style="background:#fff;border:1px solid #ccd0d4;padding:15px 20px;margin-bottom:16px;">
-                <h3 style="margin-top:0;">📋 Items del Pedido</h3>
+                <h3 style="margin-top:0;">Items del Pedido</h3>
                 <table class="widefat striped" id="wbi-items-table">
                     <thead>
                         <tr>
@@ -471,21 +484,37 @@ class WBI_Picking_Module {
                             <th>Cant. Requerida</th>
                             <th>Cant. Escaneada</th>
                             <th>Estado</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ( $picking_data as $idx => $item ) :
-                            $scanned   = intval( $item['qty_scanned'] );
-                            $required  = intval( $item['qty_required'] );
-                            $item_status = $scanned === 0 ? 'pending' : ( $scanned >= $required ? 'complete' : 'partial' );
-                            $status_icon = array(
-                                'pending'  => '❌ Pendiente',
-                                'partial'  => '🔄 Parcial',
-                                'complete' => '✅ Completo',
+                            $scanned      = intval( $item['qty_scanned'] );
+                            $required     = intval( $item['qty_required'] );
+                            $item_id      = intval( $item['item_id'] );
+                            $manual_status = get_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_status', true );
+                            $manual_notes  = get_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_notes', true );
+                            if ( $manual_status === 'picked' ) {
+                                $item_status = 'complete';
+                            } elseif ( $manual_status === 'missing' || $manual_status === 'replaced' ) {
+                                $item_status = 'resolved';
+                            } elseif ( $scanned === 0 ) {
+                                $item_status = 'pending';
+                            } elseif ( $scanned >= $required ) {
+                                $item_status = 'complete';
+                            } else {
+                                $item_status = 'partial';
+                            }
+                            $status_labels = array(
+                                'pending'  => 'Pendiente',
+                                'partial'  => 'Parcial',
+                                'complete' => 'Completo',
+                                'resolved' => 'Resuelto',
                             );
                         ?>
                         <tr id="wbi-item-row-<?php echo intval( $idx ); ?>"
                             data-barcode="<?php echo esc_attr( $item['barcode'] ); ?>"
+                            data-item-id="<?php echo $item_id; ?>"
                             style="transition:background 0.3s;">
                             <td><?php echo esc_html( $item['name'] ); ?></td>
                             <td>
@@ -497,22 +526,78 @@ class WBI_Picking_Module {
                             </td>
                             <td><?php echo intval( $required ); ?></td>
                             <td id="wbi-scanned-<?php echo intval( $idx ); ?>"><?php echo intval( $scanned ); ?></td>
-                            <td id="wbi-status-<?php echo intval( $idx ); ?>"><?php echo esc_html( $status_icon[ $item_status ] ); ?></td>
+                            <td id="wbi-status-<?php echo intval( $idx ); ?>"><?php echo esc_html( $status_labels[ $item_status ] ); ?></td>
+                            <td>
+                                <?php $is_resolved = in_array( $manual_status, array( 'picked', 'missing', 'replaced' ), true ); ?>
+                                <div style="display:flex;flex-direction:column;gap:6px;">
+                                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                        <button class="button button-small wbi-mark-picked"
+                                                data-idx="<?php echo intval( $idx ); ?>"
+                                                data-item-id="<?php echo $item_id; ?>"
+                                                <?php echo $is_resolved ? 'disabled' : ''; ?>>
+                                            ✅ Agarrado
+                                        </button>
+                                        <button class="button button-small wbi-mark-missing"
+                                                data-idx="<?php echo intval( $idx ); ?>"
+                                                data-item-id="<?php echo $item_id; ?>"
+                                                <?php echo $is_resolved ? 'disabled' : ''; ?>>
+                                            ❌ Faltante
+                                        </button>
+                                    </div>
+                                    <!-- Missing/Replace form (hidden by default) -->
+                                    <div class="wbi-missing-form" id="wbi-missing-form-<?php echo intval( $idx ); ?>" style="display:none; border:1px solid #ccd0d4; padding:10px; border-radius:4px; background:#fafafa;">
+                                        <label style="display:block;margin-bottom:6px;font-weight:bold;">Tipo de faltante:</label>
+                                        <label style="display:block;margin-bottom:4px;">
+                                            <input type="radio" name="wbi_missing_type_<?php echo intval( $idx ); ?>" value="missing" checked> Producto faltante
+                                        </label>
+                                        <label style="display:block;margin-bottom:8px;">
+                                            <input type="radio" name="wbi_missing_type_<?php echo intval( $idx ); ?>" value="replaced"> Reemplazar por otro
+                                        </label>
+                                        <div class="wbi-replacement-field" id="wbi-replacement-<?php echo intval( $idx ); ?>" style="display:none;margin-bottom:8px;">
+                                            <input type="text" class="regular-text" placeholder="SKU o nombre del reemplazo" id="wbi-replacement-val-<?php echo intval( $idx ); ?>">
+                                        </div>
+                                        <textarea class="large-text" rows="2" placeholder="Observaciones..." id="wbi-item-notes-<?php echo intval( $idx ); ?>"><?php echo esc_textarea( $manual_notes ); ?></textarea>
+                                        <div style="margin-top:8px;display:flex;gap:6px;">
+                                            <button class="button button-primary button-small wbi-confirm-missing"
+                                                    data-idx="<?php echo intval( $idx ); ?>"
+                                                    data-item-id="<?php echo $item_id; ?>">
+                                                Confirmar
+                                            </button>
+                                            <button class="button button-small wbi-cancel-missing" data-idx="<?php echo intval( $idx ); ?>">
+                                                Cancelar
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <!-- Notes field -->
+                                    <input type="text" class="regular-text wbi-item-note-quick" placeholder="Notas..."
+                                           data-item-id="<?php echo $item_id; ?>"
+                                           value="<?php echo esc_attr( $manual_notes ); ?>"
+                                           style="font-size:11px;max-width:180px;">
+                                </div>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
 
+            <!-- Order notes -->
+            <div style="background:#fff;border:1px solid #ccd0d4;padding:15px 20px;margin-bottom:16px;">
+                <h3 style="margin-top:0;">Observaciones del Pedido</h3>
+                <textarea id="wbi-order-notes" class="large-text" rows="3" placeholder="Observaciones generales del armado..."><?php echo esc_textarea( get_post_meta( $order_id, '_wbi_picking_order_notes', true ) ); ?></textarea>
+                <button id="wbi-save-order-notes" class="button" style="margin-top:6px;">Guardar Observaciones</button>
+                <span id="wbi-notes-saved" style="display:none;color:#00a32a;margin-left:8px;">✅ Guardado</span>
+            </div>
+
             <!-- Action buttons -->
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
                 <button id="wbi-complete-btn" class="button button-primary"
                         style="font-size:16px;padding:10px 24px;<?php echo $pct < 100 ? 'display:none;' : ''; ?>">
-                    ✅ Completar Armado
+                    ✅ Pedido Completo
                 </button>
                 <button id="wbi-reset-btn" class="button"
                         style="font-size:14px;color:#d63638;border-color:#d63638;">
-                    🔄 Reiniciar Picking
+                    Reiniciar Picking
                 </button>
             </div>
         </div>
@@ -590,9 +675,9 @@ class WBI_Picking_Module {
                             document.getElementById('wbi-scanned-' + idx).textContent = d.scanned_item.qty_scanned;
                             var statusEl = document.getElementById('wbi-status-' + idx);
                             if ( d.scanned_item.qty_scanned >= d.scanned_item.qty_required ) {
-                                statusEl.textContent = '✅ Completo';
+                                statusEl.textContent = 'Completo';
                             } else {
-                                statusEl.textContent = '🔄 Parcial';
+                                statusEl.textContent = 'Parcial';
                             }
 
                             // Flash row green
@@ -639,6 +724,137 @@ class WBI_Picking_Module {
             scanInput.addEventListener('keydown', function(e) {
                 if ( e.key === 'Enter' ) { e.preventDefault(); doScan(); }
             });
+
+            // --- Manual picking: Agarrado ---
+            document.querySelectorAll('.wbi-mark-picked').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var idx    = this.dataset.idx;
+                    var itemId = this.dataset.itemId;
+                    var btnEl  = this;
+                    btnEl.disabled = true;
+
+                    var data = new FormData();
+                    data.append('action', 'wbi_picking_mark_item');
+                    data.append('nonce', nonce);
+                    data.append('order_id', ORDER_ID);
+                    data.append('item_id', itemId);
+                    data.append('status', 'picked');
+                    data.append('notes', document.querySelector('.wbi-item-note-quick[data-item-id="' + itemId + '"]').value);
+
+                    fetch(ajaxurl, { method:'POST', body:data })
+                        .then(function(r){ return r.json(); })
+                        .then(function(res) {
+                            if ( res.success ) {
+                                var row = document.getElementById('wbi-item-row-' + idx);
+                                row.style.background = '#d1fae5';
+                                document.getElementById('wbi-status-' + idx).textContent = 'Completo';
+                                // Disable both action buttons
+                                row.querySelectorAll('.wbi-mark-picked, .wbi-mark-missing').forEach(function(b) { b.disabled = true; });
+                                wbiBeep(880, 100);
+                                checkAllResolved();
+                            }
+                        });
+                });
+            });
+
+            // --- Manual picking: Faltante (show form) ---
+            document.querySelectorAll('.wbi-mark-missing').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var idx = this.dataset.idx;
+                    var form = document.getElementById('wbi-missing-form-' + idx);
+                    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+                });
+            });
+
+            // --- Radio toggle for replacement field ---
+            document.querySelectorAll('[name^="wbi_missing_type_"]').forEach(function(radio) {
+                radio.addEventListener('change', function() {
+                    var idx = this.name.replace('wbi_missing_type_', '');
+                    var replDiv = document.getElementById('wbi-replacement-' + idx);
+                    replDiv.style.display = this.value === 'replaced' ? 'block' : 'none';
+                });
+            });
+
+            // --- Cancel missing form ---
+            document.querySelectorAll('.wbi-cancel-missing').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var idx = this.dataset.idx;
+                    document.getElementById('wbi-missing-form-' + idx).style.display = 'none';
+                });
+            });
+
+            // --- Confirm missing/replaced ---
+            document.querySelectorAll('.wbi-confirm-missing').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var idx    = this.dataset.idx;
+                    var itemId = this.dataset.itemId;
+                    var type   = document.querySelector('[name="wbi_missing_type_' + idx + '"]:checked').value;
+                    var replacement = type === 'replaced' ? document.getElementById('wbi-replacement-val-' + idx).value : '';
+                    var notes = document.getElementById('wbi-item-notes-' + idx).value;
+
+                    var data = new FormData();
+                    data.append('action', 'wbi_picking_mark_item');
+                    data.append('nonce', nonce);
+                    data.append('order_id', ORDER_ID);
+                    data.append('item_id', itemId);
+                    data.append('status', type);
+                    data.append('replacement', replacement);
+                    data.append('notes', notes);
+
+                    fetch(ajaxurl, { method:'POST', body:data })
+                        .then(function(r){ return r.json(); })
+                        .then(function(res) {
+                            if ( res.success ) {
+                                document.getElementById('wbi-missing-form-' + idx).style.display = 'none';
+                                var row = document.getElementById('wbi-item-row-' + idx);
+                                row.style.background = '#fef3cd';
+                                document.getElementById('wbi-status-' + idx).textContent = 'Resuelto';
+                                row.querySelectorAll('.wbi-mark-picked, .wbi-mark-missing').forEach(function(b) { b.disabled = true; });
+                                checkAllResolved();
+                            }
+                        });
+                });
+            });
+
+            // --- Save order notes ---
+            var saveNotesBtn = document.getElementById('wbi-save-order-notes');
+            if ( saveNotesBtn ) {
+                saveNotesBtn.addEventListener('click', function() {
+                    var notes = document.getElementById('wbi-order-notes').value;
+                    var data  = new FormData();
+                    data.append('action', 'wbi_picking_order_notes');
+                    data.append('nonce', nonce);
+                    data.append('order_id', ORDER_ID);
+                    data.append('notes', notes);
+
+                    fetch(ajaxurl, { method:'POST', body:data })
+                        .then(function(r){ return r.json(); })
+                        .then(function(res) {
+                            if ( res.success ) {
+                                var saved = document.getElementById('wbi-notes-saved');
+                                saved.style.display = 'inline';
+                                setTimeout(function(){ saved.style.display = 'none'; }, 2000);
+                            }
+                        });
+                });
+            }
+
+            // --- Check if all items resolved ---
+            function checkAllResolved() {
+                var rows  = document.querySelectorAll('#wbi-items-table tbody tr');
+                var allDone = true;
+                rows.forEach(function(row) {
+                    var statusEl = row.querySelector('[id^="wbi-status-"]');
+                    if ( statusEl ) {
+                        var s = statusEl.textContent.trim();
+                        if ( s !== 'Completo' && s !== 'Resuelto' ) allDone = false;
+                    }
+                });
+                if ( allDone && rows.length > 0 ) {
+                    completeBtn.style.display = '';
+                    completeBtn.scrollIntoView({ behavior:'smooth', block:'center' });
+                }
+            }
 
             // --- Complete picking ---
             completeBtn.addEventListener('click', function() {
@@ -931,8 +1147,153 @@ class WBI_Picking_Module {
         if ( ! $status || 'picking' === $status ) {
             $picking_url = admin_url( 'admin.php?page=wbi-picking&order_id=' . $post->ID );
             echo '<p><a href="' . esc_url( $picking_url ) . '" class="button button-primary" style="width:100%;text-align:center;">';
-            echo 'picking' === $status ? '🔄 Continuar Armado' : '▶ Iniciar Armado';
+            echo 'picking' === $status ? 'Continuar Armado' : 'Iniciar Armado';
             echo '</a></p>';
         }
+    }
+
+    // =========================================================================
+    // Helper: check if current user can perform picking actions
+    // =========================================================================
+
+    private function current_user_can_pick() {
+        $user = wp_get_current_user();
+        return current_user_can( 'manage_woocommerce' ) || in_array( 'wbi_armador', (array) $user->roles, true );
+    }
+
+    // =========================================================================
+    // AJAX: Mark item as picked/missing/replaced
+    // =========================================================================
+
+    public function ajax_mark_item() {
+        check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
+        if ( ! $this->current_user_can_pick() ) wp_send_json_error( 'Sin permisos' );
+
+        $order_id    = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
+        $item_id     = isset( $_POST['item_id'] )  ? intval( $_POST['item_id'] )  : 0;
+        $status      = isset( $_POST['status'] )   ? sanitize_key( $_POST['status'] ) : '';
+        $replacement = isset( $_POST['replacement'] ) ? sanitize_text_field( wp_unslash( $_POST['replacement'] ) ) : '';
+        $notes       = isset( $_POST['notes'] )    ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '';
+
+        if ( ! $order_id || ! $item_id ) wp_send_json_error( 'Datos incompletos' );
+        if ( ! in_array( $status, array( 'picked', 'missing', 'replaced' ), true ) ) wp_send_json_error( 'Estado inválido' );
+
+        // Verify order exists before writing meta
+        if ( ! get_post( $order_id ) ) wp_send_json_error( 'Pedido no encontrado' );
+
+        update_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_status',      $status );
+        update_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_replacement', $replacement );
+        update_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_notes',       $notes );
+
+        wp_send_json_success( array( 'status' => $status ) );
+    }
+
+    // =========================================================================
+    // AJAX: Save order picking notes
+    // =========================================================================
+
+    public function ajax_save_order_notes() {
+        check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
+        if ( ! $this->current_user_can_pick() ) wp_send_json_error( 'Sin permisos' );
+
+        $order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
+        $notes    = isset( $_POST['notes'] )    ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '';
+
+        if ( ! $order_id ) wp_send_json_error( 'ID inválido' );
+        if ( ! get_post( $order_id ) ) wp_send_json_error( 'Pedido no encontrado' );
+
+        update_post_meta( $order_id, '_wbi_picking_order_notes', $notes );
+        wp_send_json_success( array( 'saved' => true ) );
+    }
+
+    // =========================================================================
+    // Armador Panel — simplified view for wbi_armador role
+    // =========================================================================
+
+    public function render_armador_panel() {
+        if ( ! current_user_can( 'read' ) ) wp_die( 'Sin permisos' );
+
+        $orders = wc_get_orders( array(
+            'status'   => array( 'processing', 'on-hold' ),
+            'limit'    => 50,
+            'orderby'  => 'date',
+            'order'    => 'DESC',
+        ) );
+        ?>
+        <div class="wrap">
+            <h1>Panel de Armado</h1>
+            <p>Pedidos pendientes de armado. Solo se muestran los datos necesarios para preparar los pedidos.</p>
+
+            <?php if ( empty( $orders ) ) : ?>
+                <div class="notice notice-success inline"><p>No hay pedidos pendientes de armado.</p></div>
+            <?php else : ?>
+                <?php foreach ( $orders as $order ) :
+                    $order_id      = $order->get_id();
+                    $picking_status = get_post_meta( $order_id, '_wbi_picking_status', true );
+                    if ( $picking_status === 'picked' ) continue;
+                    $items = $order->get_items();
+                ?>
+                <div style="background:#fff;border:1px solid #ccd0d4;padding:15px 20px;margin-bottom:16px;border-radius:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h2 style="margin:0;">Pedido #<?php echo intval( $order_id ); ?></h2>
+                        <span style="font-size:13px;color:#646970;">
+                            <?php echo esc_html( $order->get_date_created() ? $order->get_date_created()->date( 'd/m/Y H:i' ) : '—' ); ?>
+                        </span>
+                    </div>
+                    <p style="margin:0 0 10px;"><strong>Cliente:</strong> <?php echo esc_html( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ); ?></p>
+
+                    <table class="widefat striped">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th>SKU</th>
+                                <th>Cantidad</th>
+                                <th>Código de Barra</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ( $items as $item ) :
+                            $product      = $item->get_product();
+                            $sku          = $product ? esc_html( $product->get_sku() ) : '—';
+                            $product_id   = $item->get_product_id();
+                            $variation_id = $item->get_variation_id();
+                            $lookup_id    = $variation_id ?: $product_id;
+                            $barcode      = get_post_meta( $lookup_id, '_wbi_barcode', true );
+                            $item_id      = $item->get_id();
+                            $item_status  = get_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_status', true );
+                        ?>
+                        <tr>
+                            <td><?php echo esc_html( $item->get_name() ); ?></td>
+                            <td><?php echo $sku; ?></td>
+                            <td><?php echo intval( $item->get_quantity() ); ?></td>
+                            <td><?php echo $barcode ? '<code>' . esc_html( $barcode ) . '</code>' : '<span style="color:#aaa;">—</span>'; ?></td>
+                            <td>
+                                <?php if ( $item_status === 'picked' ) : ?>
+                                    <span style="color:#00a32a;font-weight:bold;">✅ Agarrado</span>
+                                <?php elseif ( $item_status === 'missing' ) : ?>
+                                    <span style="color:#d63638;font-weight:bold;">❌ Faltante</span>
+                                <?php elseif ( $item_status === 'replaced' ) : ?>
+                                    <span style="color:#dba617;font-weight:bold;">Reemplazado</span>
+                                <?php else : ?>
+                                    <span style="color:#646970;">Pendiente</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+
+                    <div style="margin-top:10px;">
+                        <?php if ( current_user_can( 'manage_woocommerce' ) ) : ?>
+                            <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-picking&order_id=' . $order_id ) ); ?>"
+                               class="button button-primary">Abrir picking completo</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+        <?php
     }
 }

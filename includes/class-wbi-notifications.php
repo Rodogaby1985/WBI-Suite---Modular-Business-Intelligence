@@ -281,8 +281,8 @@ class WBI_Notifications_Module {
     public function add_submenu() {
         add_submenu_page(
             'wbi-dashboard-view',
-            '🔔 Notificaciones',
-            '🔔 Notificaciones',
+            'Notificaciones',
+            '<span class="dashicons dashicons-bell" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Notificaciones',
             'manage_options',
             'wbi-notifications',
             array( $this, 'render_page' )

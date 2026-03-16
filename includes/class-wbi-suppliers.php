@@ -20,6 +20,12 @@ class WBI_Suppliers_Module {
 
         // Invalidate suppliers transient when a supplier is saved
         add_action( 'save_post_wbi_supplier', array( $this, 'invalidate_suppliers_cache' ) );
+
+        // Export handler
+        add_action( 'admin_post_wbi_suppliers_export', array( $this, 'handle_suppliers_export' ) );
+
+        // Info notice on suppliers CPT list
+        add_action( 'admin_notices', array( $this, 'suppliers_list_notice' ) );
     }
 
     // -------------------------------------------------------------------------
@@ -215,7 +221,7 @@ class WBI_Suppliers_Module {
         add_submenu_page(
             'wbi-dashboard-view',
             'Proveedores',
-            '👥 Proveedores',
+            '<span class="dashicons dashicons-store" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Proveedores',
             'manage_woocommerce',
             'wbi-suppliers',
             array( $this, 'redirect_to_suppliers_list' )
@@ -223,7 +229,7 @@ class WBI_Suppliers_Module {
         add_submenu_page(
             'wbi-dashboard-view',
             'Nuevo Proveedor',
-            '➕ Nuevo Proveedor',
+            '<span class="dashicons dashicons-plus-alt" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Nuevo Proveedor',
             'manage_woocommerce',
             'wbi-new-supplier',
             array( $this, 'redirect_to_new_supplier' )
@@ -237,6 +243,51 @@ class WBI_Suppliers_Module {
 
     public function redirect_to_new_supplier() {
         wp_safe_redirect( admin_url( 'post-new.php?post_type=wbi_supplier' ) );
+        exit;
+    }
+
+    public function suppliers_list_notice() {
+        $screen = get_current_screen();
+        if ( ! $screen || $screen->id !== 'edit-wbi_supplier' ) return;
+
+        $export_url = add_query_arg( array(
+            'action'   => 'wbi_suppliers_export',
+            '_wpnonce' => wp_create_nonce( 'wbi_suppliers_export' ),
+        ), admin_url( 'admin-post.php' ) );
+        ?>
+        <div class="notice notice-info"><p><strong>Gestión de Proveedores</strong>: Registrá tus proveedores con sus datos de contacto y condiciones comerciales. Luego podés vincular cada proveedor a tus productos desde la ficha del producto en WooCommerce. Esto te permite analizar costos por proveedor y tiempos de reabastecimiento.
+        &nbsp; <a href="<?php echo esc_url( $export_url ); ?>" class="button button-small">Exportar CSV</a></p></div>
+        <?php
+    }
+
+    public function handle_suppliers_export() {
+        if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'wbi_suppliers_export' ) ) wp_die( 'Nonce inválido' );
+        if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos' );
+
+        $suppliers = get_posts( array(
+            'post_type'      => 'wbi_supplier',
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'orderby'        => 'title',
+            'order'          => 'ASC',
+        ) );
+
+        header( 'Content-Type: text/csv; charset=utf-8' );
+        header( 'Content-Disposition: attachment; filename="wbi-suppliers-export-' . gmdate( 'Y-m-d' ) . '.csv"' );
+        $out = fopen( 'php://output', 'w' );
+        fputcsv( $out, array( 'name', 'cuit', 'contact', 'email', 'phone', 'payment_terms', 'lead_time' ) );
+        foreach ( $suppliers as $s ) {
+            fputcsv( $out, array(
+                $s->post_title,
+                get_post_meta( $s->ID, '_wbi_supplier_cuit', true ),
+                get_post_meta( $s->ID, '_wbi_supplier_contact', true ),
+                get_post_meta( $s->ID, '_wbi_supplier_email', true ),
+                get_post_meta( $s->ID, '_wbi_supplier_phone', true ),
+                get_post_meta( $s->ID, '_wbi_supplier_payment_terms', true ),
+                get_post_meta( $s->ID, '_wbi_supplier_lead_time', true ),
+            ) );
+        }
+        fclose( $out );
         exit;
     }
 }

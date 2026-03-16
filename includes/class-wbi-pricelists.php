@@ -27,8 +27,8 @@ class WBI_Pricelists_Module {
     public function register_page() {
         add_submenu_page(
             'wbi-dashboard-view',
-            '💲 Listas de Precios',
-            '💲 Listas de Precios',
+            'Listas de Precios',
+            '<span class="dashicons dashicons-list-view" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Listas de Precios',
             'manage_options',
             'wbi-pricelists',
             array( $this, 'render' )

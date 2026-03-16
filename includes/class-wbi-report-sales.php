@@ -16,7 +16,7 @@ class WBI_Report_Sales {
         add_submenu_page( 
             'wbi-dashboard-view', 
             'Detalle Ventas', 
-            'Análisis Ventas', 
+            '<span class="dashicons dashicons-chart-bar" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Análisis Ventas', 
             'manage_options', 
             'wbi-sales-report', 
             array( $this, 'render' ) 

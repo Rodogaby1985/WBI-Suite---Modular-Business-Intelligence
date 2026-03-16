@@ -22,6 +22,9 @@ class WBI_Scoring_Module {
         // WC Users list column
         add_filter( 'manage_users_columns',        array( $this, 'add_score_user_column' ) );
         add_filter( 'manage_users_custom_column',  array( $this, 'render_score_user_column' ), 10, 3 );
+
+        // CSV export
+        add_action( 'admin_post_wbi_scoring_export', array( $this, 'handle_scoring_export' ) );
     }
 
     /**
@@ -189,7 +192,7 @@ class WBI_Scoring_Module {
         add_submenu_page(
             'wbi-dashboard-view',
             'Scoring Clientes',
-            '⭐ Scoring Clientes',
+            '<span class="dashicons dashicons-star-filled" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Scoring Clientes',
             'manage_woocommerce',
             'wbi-scoring',
             array( $this, 'render_page' )
@@ -229,20 +232,22 @@ class WBI_Scoring_Module {
         $total_pages = ceil( $total_users / $per_page );
 
         $export_url = add_query_arg( array(
-            'action'      => 'wbi_export_dynamic',
-            'report_type' => 'scoring',
-            '_wpnonce'    => wp_create_nonce( 'wbi_export' ),
+            'action'   => 'wbi_scoring_export',
+            '_wpnonce' => wp_create_nonce( 'wbi_scoring_export' ),
         ), admin_url( 'admin-post.php' ) );
 
         $class_colors = array( 'A' => '#00a32a', 'B' => '#2271b1', 'C' => '#dba617', 'D' => '#d63638' );
         ?>
         <div class="wrap">
-            <h1>⭐ Scoring Clientes</h1>
+            <h1>Scoring Clientes</h1>
+
+            <div class="notice notice-info"><p><strong>Scoring RFM</strong>: Clasifica clientes según Recencia (cuándo compraron), Frecuencia (cuántas veces) y Valor Monetario (cuánto gastaron). Cada dimensión se puntúa del 1 al 5. Un cliente con score 15 es el más valioso. El recálculo es automático (1 vez por día) o manual con el botón abajo.</p></div>
 
             <!-- Recalculate button -->
             <form method="post" style="margin-bottom:20px;">
                 <?php wp_nonce_field( 'wbi_scoring_recalc_page', '_wbi_scoring_nonce' ); ?>
-                <button type="submit" name="wbi_scoring_recalc_submit" class="button button-secondary">🔄 Recalcular Scores</button>
+                <button type="submit" name="wbi_scoring_recalc_submit" class="button button-secondary">Recalcular Scores</button>
+                <a href="<?php echo esc_url( $export_url ); ?>" class="button">Exportar CSV</a>
             </form>
 
             <!-- Summary cards -->
@@ -276,7 +281,6 @@ class WBI_Scoring_Module {
                         <?php endforeach; ?>
                     </select>
                     <button class="button button-primary">Filtrar</button>
-                    <a href="<?php echo esc_url( $export_url ); ?>" class="button">📥 Exportar CSV</a>
                 </form>
             </div>
 
@@ -484,5 +488,54 @@ class WBI_Scoring_Module {
              ORDER BY CAST(um_score.meta_value AS SIGNED) DESC
              LIMIT 10000"
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // Admin-post CSV export handler
+    // -------------------------------------------------------------------------
+
+    public function handle_scoring_export() {
+        if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'wbi_scoring_export' ) ) wp_die( 'Nonce inválido' );
+        if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos' );
+
+        global $wpdb;
+
+        $users = $wpdb->get_results(
+            "SELECT u.ID, u.display_name, u.user_email,
+                    um_score.meta_value  AS score,
+                    um_class.meta_value  AS class,
+                    um_rec.meta_value    AS recency,
+                    um_freq.meta_value   AS frequency,
+                    um_mon.meta_value    AS monetary,
+                    um_seg.meta_value    AS segment
+             FROM {$wpdb->users} u
+             JOIN {$wpdb->usermeta} um_score  ON u.ID = um_score.user_id  AND um_score.meta_key  = '_wbi_score'
+             JOIN {$wpdb->usermeta} um_class  ON u.ID = um_class.user_id  AND um_class.meta_key  = '_wbi_score_class'
+             LEFT JOIN {$wpdb->usermeta} um_rec   ON u.ID = um_rec.user_id   AND um_rec.meta_key   = '_wbi_score_recency'
+             LEFT JOIN {$wpdb->usermeta} um_freq  ON u.ID = um_freq.user_id  AND um_freq.meta_key  = '_wbi_score_frequency'
+             LEFT JOIN {$wpdb->usermeta} um_mon   ON u.ID = um_mon.user_id   AND um_mon.meta_key   = '_wbi_score_monetary'
+             LEFT JOIN {$wpdb->usermeta} um_seg   ON u.ID = um_seg.user_id   AND um_seg.meta_key   = '_wbi_score_segment'
+             ORDER BY CAST(um_score.meta_value AS SIGNED) DESC
+             LIMIT 10000"
+        );
+
+        header( 'Content-Type: text/csv; charset=utf-8' );
+        header( 'Content-Disposition: attachment; filename="wbi-scoring-export-' . gmdate( 'Y-m-d' ) . '.csv"' );
+        $out = fopen( 'php://output', 'w' );
+        fputcsv( $out, array( 'customer_name', 'email', 'rfm_score', 'recency', 'frequency', 'monetary', 'segment', 'class' ) );
+        foreach ( $users as $u ) {
+            fputcsv( $out, array(
+                $u->display_name,
+                $u->user_email,
+                $u->score,
+                $u->recency,
+                $u->frequency,
+                $u->monetary,
+                $u->segment,
+                $u->class,
+            ) );
+        }
+        fclose( $out );
+        exit;
     }
 }

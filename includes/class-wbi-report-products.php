@@ -12,7 +12,7 @@ class WBI_Report_Products {
     }
 
     public function register() {
-        add_submenu_page( 'wbi-dashboard-view', 'Productos & Stock', 'Productos & Stock', 'manage_options', 'wbi-products-report', array( $this, 'render' ) );
+        add_submenu_page( 'wbi-dashboard-view', 'Productos & Stock', '<span class="dashicons dashicons-archive" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Productos & Stock', 'manage_options', 'wbi-products-report', array( $this, 'render' ) );
     }
 
     public function enqueue_assets( $hook ) {

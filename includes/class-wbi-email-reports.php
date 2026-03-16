@@ -21,6 +21,9 @@ class WBI_Email_Reports {
 
         // Schedule on init if not yet scheduled
         add_action( 'init', array( $this, 'maybe_schedule_cron' ) );
+
+        // Test email AJAX handler
+        add_action( 'wp_ajax_wbi_send_test_email', array( $this, 'ajax_send_test_email' ) );
     }
 
     public function register_settings() {
@@ -295,5 +298,22 @@ class WBI_Email_Reports {
 </html>
         <?php
         return ob_get_clean();
+    }
+
+    public function ajax_send_test_email() {
+        check_ajax_referer( 'wbi_test_email_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( 'Sin permisos' );
+
+        $to      = get_option( 'admin_email' );
+        $subject = '[WBI Suite] Email de Prueba';
+        $body    = $this->build_email_body( gmdate( 'Y-m-d', strtotime( '-7 days' ) ), gmdate( 'Y-m-d', strtotime( '-1 day' ) ), 'Prueba' );
+        $headers = array( 'Content-Type: text/html; charset=UTF-8' );
+        $sent    = wp_mail( $to, $subject, $body, $headers );
+
+        if ( $sent ) {
+            wp_send_json_success( array( 'message' => 'Email de prueba enviado a ' . $to ) );
+        } else {
+            wp_send_json_error( 'No se pudo enviar el email. Verificá la configuración de correo de WordPress.' );
+        }
     }
 }
