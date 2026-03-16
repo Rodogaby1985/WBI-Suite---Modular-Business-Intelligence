@@ -19,9 +19,9 @@ class WBI_Invoice_Module {
         // Order meta box
         add_action( 'add_meta_boxes', array( $this, 'add_order_metabox' ) );
 
-        // Save customer fiscal data from metabox
+        // Save customer fiscal data from metabox (HPOS-compatible)
         add_action( 'woocommerce_process_shop_order_meta', array( $this, 'save_order_fiscal_meta' ) );
-        add_action( 'save_post_shop_order', array( $this, 'save_order_fiscal_meta' ) );
+        add_action( 'woocommerce_update_order', array( $this, 'save_order_fiscal_meta' ) );
 
         // Admin-post: view/generate PDF
         add_action( 'admin_post_wbi_view_invoice', array( $this, 'handle_view_invoice' ) );
@@ -202,13 +202,14 @@ class WBI_Invoice_Module {
             'cae_vto'              => '',
         );
 
-        // Store meta
-        update_post_meta( $order_id, '_wbi_invoice_number', $inv_number );
-        update_post_meta( $order_id, '_wbi_invoice_type', $type );
-        update_post_meta( $order_id, '_wbi_invoice_date', $inv_date );
-        update_post_meta( $order_id, '_wbi_invoice_data', wp_json_encode( $inv_data ) );
-        update_post_meta( $order_id, '_wbi_customer_cuit', $cuit );
-        update_post_meta( $order_id, '_wbi_customer_tax_condition', $tax_condition );
+        // Store meta (HPOS-compatible)
+        $order->update_meta_data( '_wbi_invoice_number', $inv_number );
+        $order->update_meta_data( '_wbi_invoice_type', $type );
+        $order->update_meta_data( '_wbi_invoice_date', $inv_date );
+        $order->update_meta_data( '_wbi_invoice_data', wp_json_encode( $inv_data ) );
+        $order->update_meta_data( '_wbi_customer_cuit', $cuit );
+        $order->update_meta_data( '_wbi_customer_tax_condition', $tax_condition );
+        $order->save();
 
         $redirect = admin_url( 'admin-post.php?action=wbi_view_invoice&order_id=' . $order_id . '&_wpnonce=' . wp_create_nonce( 'wbi_view_invoice_' . $order_id ) );
         wp_redirect( $redirect );
@@ -225,7 +226,9 @@ class WBI_Invoice_Module {
         $order_id = absint( $_GET['order_id'] ?? 0 );
         if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wbi_view_invoice_' . $order_id ) ) wp_die( 'Nonce inválido.' );
 
-        $raw = get_post_meta( $order_id, '_wbi_invoice_data', true );
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) wp_die( 'Pedido no encontrado.' );
+        $raw = $order->get_meta( '_wbi_invoice_data', true );
         if ( ! $raw ) wp_die( 'No existe factura para este pedido.' );
 
         $inv = json_decode( $raw, true );
@@ -371,11 +374,13 @@ th { background:#f0f0f0; }
             $order_id = $post_or_order->get_id();
         }
 
-        $inv_number    = get_post_meta( $order_id, '_wbi_invoice_number', true );
-        $inv_type      = get_post_meta( $order_id, '_wbi_invoice_type', true );
-        $inv_date      = get_post_meta( $order_id, '_wbi_invoice_date', true );
-        $cuit          = get_post_meta( $order_id, '_wbi_customer_cuit', true );
-        $tax_condition = get_post_meta( $order_id, '_wbi_customer_tax_condition', true );
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) return;
+        $inv_number    = $order->get_meta( '_wbi_invoice_number', true );
+        $inv_type      = $order->get_meta( '_wbi_invoice_type', true );
+        $inv_date      = $order->get_meta( '_wbi_invoice_date', true );
+        $cuit          = $order->get_meta( '_wbi_customer_cuit', true );
+        $tax_condition = $order->get_meta( '_wbi_customer_tax_condition', true );
 
         echo '<div style="font-size:12px;">';
         if ( $inv_number ) {
@@ -419,7 +424,6 @@ th { background:#f0f0f0; }
     // -------------------------------------------------------------------------
 
     public function render_page() {
-        global $wpdb;
         if ( ! current_user_can( 'manage_options' ) ) return;
 
         // Export CSV
@@ -436,41 +440,27 @@ th { background:#f0f0f0; }
         $per_page   = 20;
         $offset     = ( $paged - 1 ) * $per_page;
 
-        $type_where = '';
-        $type_args  = array();
+        // Build wc_get_orders() args for HPOS-compatible queries
+        $query_args = array(
+            'meta_key'     => '_wbi_invoice_number',
+            'meta_compare' => 'EXISTS',
+            // WooCommerce date_created range format: 'YYYY-MM-DD...YYYY-MM-DD'
+            'date_created' => $date_from . '...' . $date_to,
+            'return'       => 'ids',
+            'limit'        => -1,
+        );
         if ( in_array( $type_filter, array( 'A', 'B', 'C' ), true ) ) {
-            $type_where = ' AND pm2.meta_value = %s';
-            $type_args  = array( $type_filter );
+            $query_args['meta_query'] = array(
+                array(
+                    'key'     => '_wbi_invoice_type',
+                    'value'   => $type_filter,
+                    'compare' => '=',
+                ),
+            );
         }
-
-        $count_args = array_merge( array( $date_from . ' 00:00:00', $date_to . ' 23:59:59' ), $type_args );
-        $total_rows = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-                "SELECT COUNT(*)
-                 FROM {$wpdb->postmeta} pm
-                 INNER JOIN {$wpdb->postmeta} pm2 ON pm2.post_id = pm.post_id AND pm2.meta_key = '_wbi_invoice_type'
-                 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-                 WHERE pm.meta_key = '_wbi_invoice_number'
-                 AND p.post_date BETWEEN %s AND %s" . $type_where,
-                ...$count_args
-            )
-        );
-
-        $rows_args = array_merge( array( $date_from . ' 00:00:00', $date_to . ' 23:59:59' ), $type_args, array( $per_page, $offset ) );
-        $rows = $wpdb->get_results(
-            $wpdb->prepare(
-                // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-                "SELECT pm.post_id, pm.meta_value AS inv_number, pm2.meta_value AS inv_type, p.post_date
-                 FROM {$wpdb->postmeta} pm
-                 INNER JOIN {$wpdb->postmeta} pm2 ON pm2.post_id = pm.post_id AND pm2.meta_key = '_wbi_invoice_type'
-                 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-                 WHERE pm.meta_key = '_wbi_invoice_number'
-                 AND p.post_date BETWEEN %s AND %s" . $type_where . "
-                 ORDER BY pm.post_id DESC LIMIT %d OFFSET %d",
-                ...$rows_args
-            )
-        );
+        $all_ids    = wc_get_orders( $query_args );
+        $total_rows = count( $all_ids );
+        $page_ids   = array_slice( $all_ids, $offset, $per_page );
 
         echo '<div class="wrap">';
         echo '<h1>📑 Facturación AFIP</h1>';
@@ -494,22 +484,26 @@ th { background:#f0f0f0; }
         echo '<table class="wp-list-table widefat fixed striped wbi-sortable">';
         echo '<thead><tr><th>#Factura</th><th>Tipo</th><th>Fecha</th><th>#Pedido</th><th>Cliente</th><th>CUIT</th><th>Total</th><th>Acciones</th></tr></thead><tbody>';
 
-        if ( empty( $rows ) ) {
+        if ( empty( $page_ids ) ) {
             echo '<tr><td colspan="8">Sin facturas en el período seleccionado.</td></tr>';
         } else {
-            foreach ( $rows as $row ) {
-                $oid    = intval( $row->post_id );
+            foreach ( $page_ids as $oid ) {
+                $oid    = intval( $oid );
                 $order  = wc_get_order( $oid );
-                $cuit   = get_post_meta( $oid, '_wbi_customer_cuit', true );
+                $cuit   = $order ? $order->get_meta( '_wbi_customer_cuit', true ) : '';
                 $total  = $order ? wc_price( $order->get_total() ) : '—';
                 $name   = $order ? esc_html( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ) : '—';
-                $inv_date = date( 'd/m/Y', strtotime( $row->post_date ) );
+                $inv_number = $order ? esc_html( $order->get_meta( '_wbi_invoice_number', true ) ) : '';
+                $inv_type   = $order ? esc_html( $order->get_meta( '_wbi_invoice_type', true ) ) : '';
+                $inv_date_raw = $order ? $order->get_date_created() : null;
+                $inv_date   = $inv_date_raw ? $inv_date_raw->date( 'd/m/Y' ) : '—';
                 $view_url = wp_nonce_url( admin_url( 'admin-post.php?action=wbi_view_invoice&order_id=' . $oid ), 'wbi_view_invoice_' . $oid );
+                $edit_url = $order ? $order->get_edit_order_url() : '#';
                 echo '<tr>';
-                echo '<td>' . esc_html( $row->inv_number ) . '</td>';
-                echo '<td>' . esc_html( $row->inv_type ) . '</td>';
+                echo '<td>' . esc_html( $inv_number ) . '</td>';
+                echo '<td>' . esc_html( $inv_type ) . '</td>';
                 echo '<td>' . esc_html( $inv_date ) . '</td>';
-                echo '<td><a href="' . esc_url( get_edit_post_link( $oid ) ) . '">#' . $oid . '</a></td>';
+                echo '<td><a href="' . esc_url( $edit_url ) . '">#' . $oid . '</a></td>';
                 echo '<td>' . $name . '</td>';
                 echo '<td>' . esc_html( $cuit ) . '</td>';
                 echo '<td>' . $total . '</td>';
@@ -542,31 +536,34 @@ th { background:#f0f0f0; }
     }
 
     private function export_csv() {
-        global $wpdb;
-        $rows = $wpdb->get_results(
-            "SELECT pm.post_id, pm.meta_value AS inv_number, pm2.meta_value AS inv_type, p.post_date
-             FROM {$wpdb->postmeta} pm
-             INNER JOIN {$wpdb->postmeta} pm2 ON pm2.post_id = pm.post_id AND pm2.meta_key = '_wbi_invoice_type'
-             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-             WHERE pm.meta_key = '_wbi_invoice_number'
-             ORDER BY pm.post_id DESC
-             LIMIT 1000"
-        );
+        $order_ids = wc_get_orders( array(
+            'meta_key'     => '_wbi_invoice_number',
+            'meta_compare' => 'EXISTS',
+            'limit'        => 1000,
+            'orderby'      => 'ID',
+            'order'        => 'DESC',
+            'return'       => 'ids',
+        ) );
 
         header( 'Content-Type: text/csv; charset=UTF-8' );
         header( 'Content-Disposition: attachment; filename="facturas-wbi-' . date( 'Y-m-d' ) . '.csv"' );
         echo "\xEF\xBB\xBF"; // UTF-8 BOM
         echo "Nro Factura,Tipo,Fecha,Nro Pedido,Cliente,CUIT,Total\n";
-        foreach ( $rows as $row ) {
-            $oid   = intval( $row->post_id );
+        foreach ( $order_ids as $oid ) {
+            $oid   = intval( $oid );
             $order = wc_get_order( $oid );
-            $name  = $order ? $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() : '';
-            $total = $order ? $order->get_total() : '';
-            $cuit  = get_post_meta( $oid, '_wbi_customer_cuit', true );
+            if ( ! $order ) continue;
+            $name       = $order->get_billing_first_name() . ' ' . $order->get_billing_last_name();
+            $total      = $order->get_total();
+            $cuit       = $order->get_meta( '_wbi_customer_cuit', true );
+            $inv_number = $order->get_meta( '_wbi_invoice_number', true );
+            $inv_type   = $order->get_meta( '_wbi_invoice_type', true );
+            $inv_date_raw = $order->get_date_created();
+            $inv_date   = $inv_date_raw ? $inv_date_raw->date( 'd/m/Y' ) : '';
             echo implode( ',', array_map( 'wbi_csv_escape', array(
-                $row->inv_number,
-                $row->inv_type,
-                date( 'd/m/Y', strtotime( $row->post_date ) ),
+                $inv_number,
+                $inv_type,
+                $inv_date,
                 $oid,
                 $name,
                 $cuit,
