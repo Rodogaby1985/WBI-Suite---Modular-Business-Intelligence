@@ -4,9 +4,12 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class WBI_Remitos_Module {
 
     public function __construct() {
-        // Order actions button
+        // Order actions dropdown (secondary method — still works for non-HPOS)
         add_action( 'woocommerce_order_actions', array( $this, 'add_order_action' ) );
         add_action( 'woocommerce_order_action_wbi_generate_remito', array( $this, 'process_order_action' ) );
+
+        // Meta box on the order edit screen (primary method — compatible with legacy + HPOS)
+        add_action( 'add_meta_boxes', array( $this, 'register_meta_box' ) );
 
         // AJAX endpoint for remito generation (also used directly via admin-post)
         add_action( 'wp_ajax_wbi_generate_remito', array( $this, 'generate_remito' ) );
@@ -20,7 +23,65 @@ class WBI_Remitos_Module {
     }
 
     // -------------------------------------------------------------------------
-    // Order actions hook (adds button in WC order edit screen)
+    // Meta box on the order edit screen (legacy + HPOS compatible)
+    // -------------------------------------------------------------------------
+
+    public function register_meta_box() {
+        // Legacy orders screen (WooCommerce < 8 or HPOS disabled)
+        add_meta_box(
+            'wbi-remito-meta-box',
+            '<span class="dashicons dashicons-media-text" style="vertical-align:middle;margin-right:4px;"></span> Remito',
+            array( $this, 'render_remito_meta_box' ),
+            'shop_order',
+            'side',
+            'default'
+        );
+        // HPOS orders screen (WooCommerce 8+ with HPOS enabled)
+        add_meta_box(
+            'wbi-remito-meta-box',
+            '<span class="dashicons dashicons-media-text" style="vertical-align:middle;margin-right:4px;"></span> Remito',
+            array( $this, 'render_remito_meta_box' ),
+            'woocommerce_page_wc-orders',
+            'side',
+            'default'
+        );
+    }
+
+    public function render_remito_meta_box( $post_or_order ) {
+        // Accept both a WP_Post (legacy) and a WC_Order (HPOS)
+        if ( $post_or_order instanceof WP_Post ) {
+            $order = wc_get_order( $post_or_order->ID );
+        } else {
+            $order = $post_or_order;
+        }
+
+        if ( ! $order ) return;
+
+        $order_id      = $order->get_id();
+        $remito_number = $order->get_meta( '_wbi_remito_number' );
+        $remito_date   = $order->get_meta( '_wbi_remito_date' );
+
+        if ( $remito_number ) {
+            $print_url = wp_nonce_url(
+                admin_url( 'admin-post.php?action=wbi_generate_remito&order_id=' . $order_id ),
+                'wbi_remito_' . $order_id
+            );
+            $date_fmt = $remito_date ? date_i18n( 'd/m/Y', strtotime( $remito_date ) ) : '—';
+            echo '<p><strong>N° Remito:</strong> ' . esc_html( str_pad( intval( $remito_number ), 6, '0', STR_PAD_LEFT ) ) . '</p>';
+            echo '<p><strong>Fecha:</strong> ' . esc_html( $date_fmt ) . '</p>';
+            echo '<p><a href="' . esc_url( $print_url ) . '" target="_blank" class="button button-primary" style="margin-top:6px;">🖨 Ver / Imprimir Remito</a></p>';
+        } else {
+            $generate_url = wp_nonce_url(
+                admin_url( 'admin-post.php?action=wbi_generate_remito&order_id=' . $order_id ),
+                'wbi_remito_' . $order_id
+            );
+            echo '<p style="color:#555;font-size:12px;">Aún no se generó un remito para este pedido.</p>';
+            echo '<p><a href="' . esc_url( $generate_url ) . '" target="_blank" class="button button-primary" style="margin-top:6px;">📄 Generar Remito</a></p>';
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Order actions hook (adds item in WC order actions dropdown)
     // -------------------------------------------------------------------------
 
     public function add_order_action( $actions ) {
@@ -30,31 +91,43 @@ class WBI_Remitos_Module {
 
     /**
      * Called when the WooCommerce order action dropdown fires the remito action.
-     * Stores the remito number and redirects to printable view.
+     * Ensures the remito number is stored and adds an order note with a link.
+     * Does NOT use echo '<script>' (which fails with the HPOS redirect).
      */
     public function process_order_action( $order ) {
-        $order_id = $order->get_id();
-        $remito_number = $this->ensure_remito_number( $order_id );
+        $remito_number = $this->ensure_remito_number( $order );
         $url = wp_nonce_url(
-            admin_url( 'admin-post.php?action=wbi_generate_remito&order_id=' . $order_id ),
-            'wbi_remito_' . $order_id
+            admin_url( 'admin-post.php?action=wbi_generate_remito&order_id=' . $order->get_id() ),
+            'wbi_remito_' . $order->get_id()
         );
-        // Redirect to printable remito in new window via JavaScript (inline)
-        echo '<script>window.open(' . wp_json_encode( $url ) . ', "_blank");</script>';
+        /* translators: %1$s: padded remito number, %2$s: remito URL */
+        $order->add_order_note( sprintf(
+            __( 'Remito N° %1$s generado. <a href="%2$s" target="_blank">Ver / Imprimir</a>', 'wbi-suite' ),
+            str_pad( intval( $remito_number ), 6, '0', STR_PAD_LEFT ),
+            esc_url( $url )
+        ) );
     }
 
     // -------------------------------------------------------------------------
     // Remito number management
     // -------------------------------------------------------------------------
 
-    private function ensure_remito_number( $order_id ) {
-        $existing = get_post_meta( $order_id, '_wbi_remito_number', true );
+    /**
+     * Ensures a remito number exists for the given order.
+     * Uses the WC_Order meta API so it works with both legacy posts and HPOS.
+     *
+     * @param WC_Order $order
+     * @return int|string Remito number.
+     */
+    private function ensure_remito_number( $order ) {
+        $existing = $order->get_meta( '_wbi_remito_number' );
         if ( $existing ) return $existing;
 
         $counter = (int) get_option( 'wbi_remito_counter', 0 ) + 1;
         update_option( 'wbi_remito_counter', $counter, false ); // autoload = no (counter not needed on every page load)
-        update_post_meta( $order_id, '_wbi_remito_number', $counter );
-        update_post_meta( $order_id, '_wbi_remito_date', current_time( 'mysql' ) );
+        $order->update_meta_data( '_wbi_remito_number', $counter );
+        $order->update_meta_data( '_wbi_remito_date', current_time( 'mysql' ) );
+        $order->save();
         return $counter;
     }
 
@@ -66,7 +139,7 @@ class WBI_Remitos_Module {
         $order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0;
         if ( ! $order_id ) wp_die( 'Pedido no válido.' );
 
-        if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wbi_remito_' . $order_id ) ) {
+        if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'wbi_remito_' . $order_id ) ) {
             wp_die( 'Nonce inválido.' );
         }
         if ( ! current_user_can( 'edit_shop_orders' ) ) {
@@ -76,8 +149,9 @@ class WBI_Remitos_Module {
         $order = wc_get_order( $order_id );
         if ( ! $order ) wp_die( 'Pedido no encontrado.' );
 
-        $remito_number = $this->ensure_remito_number( $order_id );
-        $remito_date   = get_post_meta( $order_id, '_wbi_remito_date', true );
+        // ensure_remito_number now uses the order object API (HPOS-compatible)
+        $remito_number = $this->ensure_remito_number( $order );
+        $remito_date   = $order->get_meta( '_wbi_remito_date' );
 
         // Company info from WBI Config options
         $company_name = esc_html( get_option( 'wbi_company_name', get_bloginfo( 'name' ) ) );
@@ -229,39 +303,30 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
     public function render_log_page() {
         if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos' );
 
-        global $wpdb;
+        $per_page = 20;
+        $paged    = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
+        $offset   = ( $paged - 1 ) * $per_page;
 
-        $per_page    = 20;
-        $paged       = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
-        $offset      = ( $paged - 1 ) * $per_page;
-
-        $total = (int) $wpdb->get_var(
-            "SELECT COUNT(DISTINCT p.ID)
-             FROM {$wpdb->posts} p
-             JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_wbi_remito_number'
-             WHERE p.post_type = 'shop_order'"
-        );
-
-        $rows = $wpdb->get_results( $wpdb->prepare(
-            "SELECT p.ID AS order_id,
-                    p.post_date,
-                    pm_num.meta_value  AS remito_number,
-                    pm_date.meta_value AS remito_date,
-                    pm_name.meta_value AS billing_first,
-                    pm_lname.meta_value AS billing_last
-             FROM {$wpdb->posts} p
-             JOIN {$wpdb->postmeta} pm_num   ON p.ID = pm_num.post_id   AND pm_num.meta_key   = '_wbi_remito_number'
-             LEFT JOIN {$wpdb->postmeta} pm_date  ON p.ID = pm_date.post_id  AND pm_date.meta_key  = '_wbi_remito_date'
-             LEFT JOIN {$wpdb->postmeta} pm_name  ON p.ID = pm_name.post_id  AND pm_name.meta_key  = '_billing_first_name'
-             LEFT JOIN {$wpdb->postmeta} pm_lname ON p.ID = pm_lname.post_id AND pm_lname.meta_key = '_billing_last_name'
-             WHERE p.post_type = 'shop_order'
-             ORDER BY CAST(pm_num.meta_value AS SIGNED) DESC
-             LIMIT %d OFFSET %d",
-            $per_page,
-            $offset
+        // Use wc_get_orders() so the query works with both legacy posts and HPOS tables.
+        $all_ids = wc_get_orders( array(
+            'meta_key'     => '_wbi_remito_number',
+            'meta_compare' => 'EXISTS',
+            'return'       => 'ids',
+            'limit'        => -1,
         ) );
+        $total       = count( $all_ids );
+        $total_pages = $total > 0 ? (int) ceil( $total / $per_page ) : 1;
 
-        $total_pages = ceil( $total / $per_page );
+        // Paginated subset
+        $paged_ids = wc_get_orders( array(
+            'meta_key'     => '_wbi_remito_number',
+            'meta_compare' => 'EXISTS',
+            'return'       => 'ids',
+            'limit'        => $per_page,
+            'offset'       => $offset,
+            'orderby'      => 'meta_value_num',
+            'order'        => 'DESC',
+        ) );
 
         $export_url = add_query_arg( array(
             'action'   => 'wbi_remito_export',
@@ -271,7 +336,7 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
         <div class="wrap">
             <h1>Remitos Generados</h1>
 
-            <div class="notice notice-info"><p><strong>¿Qué son los Remitos?</strong> Un remito es un documento de entrega que acompaña la mercadería. Se genera vinculado a un pedido de WooCommerce y puede imprimirse para el transportista o cliente. Para generar un remito, abrí un pedido y usá el menú de acciones de WooCommerce.</p></div>
+            <div class="notice notice-info"><p><strong>¿Qué son los Remitos?</strong> Un remito es un documento de entrega que acompaña la mercadería. Se genera vinculado a un pedido de WooCommerce y puede imprimirse para el transportista o cliente. Para generar un remito, abrí un pedido y usá el botón <em>Generar Remito</em> del panel lateral.</p></div>
 
             <p style="color:#555;">Total: <strong><?php echo intval( $total ); ?></strong> remitos &nbsp; <a href="<?php echo esc_url( $export_url ); ?>" class="button">Exportar CSV</a></p>
 
@@ -286,21 +351,27 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
                     </tr>
                 </thead>
                 <tbody>
-                <?php if ( empty( $rows ) ) : ?>
+                <?php if ( empty( $paged_ids ) ) : ?>
                     <tr><td colspan="5" style="text-align:center;color:#888;">Aún no se generaron remitos.</td></tr>
                 <?php else : ?>
-                    <?php foreach ( $rows as $row ) :
-                        $remito_date_fmt = $row->remito_date ? date_i18n( 'd/m/Y', strtotime( $row->remito_date ) ) : '—';
-                        $client_name     = trim( $row->billing_first . ' ' . $row->billing_last ) ?: '—';
-                        $order_url       = get_edit_post_link( $row->order_id );
-                        $print_url       = wp_nonce_url(
-                            admin_url( 'admin-post.php?action=wbi_generate_remito&order_id=' . $row->order_id ),
-                            'wbi_remito_' . $row->order_id
+                    <?php foreach ( $paged_ids as $order_id ) :
+                        $order = wc_get_order( $order_id );
+                        if ( ! $order ) continue;
+
+                        $remito_number   = $order->get_meta( '_wbi_remito_number' );
+                        $remito_date     = $order->get_meta( '_wbi_remito_date' );
+                        $remito_date_fmt = $remito_date ? date_i18n( 'd/m/Y', strtotime( $remito_date ) ) : '—';
+                        $client_name     = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ) ?: '—';
+                        // Use the order's own edit URL — works for both legacy and HPOS
+                        $order_url = $order->get_edit_order_url();
+                        $print_url = wp_nonce_url(
+                            admin_url( 'admin-post.php?action=wbi_generate_remito&order_id=' . $order_id ),
+                            'wbi_remito_' . $order_id
                         );
                     ?>
                     <tr>
-                        <td><strong><?php echo esc_html( str_pad( intval( $row->remito_number ), 6, '0', STR_PAD_LEFT ) ); ?></strong></td>
-                        <td><a href="<?php echo esc_url( $order_url ); ?>">#<?php echo intval( $row->order_id ); ?></a></td>
+                        <td><strong><?php echo esc_html( str_pad( intval( $remito_number ), 6, '0', STR_PAD_LEFT ) ); ?></strong></td>
+                        <td><a href="<?php echo esc_url( $order_url ); ?>">#<?php echo intval( $order_id ); ?></a></td>
                         <td><?php echo esc_html( $remito_date_fmt ); ?></td>
                         <td><?php echo esc_html( $client_name ); ?></td>
                         <td><a href="<?php echo esc_url( $print_url ); ?>" target="_blank" class="button button-small">🖨 Reimprimir</a></td>
@@ -329,38 +400,30 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
         if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'wbi_remito_export' ) ) wp_die( 'Nonce inválido' );
         if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos' );
 
-        global $wpdb;
-
-        $rows = $wpdb->get_results(
-            "SELECT p.ID AS order_id,
-                    pm_num.meta_value   AS remito_number,
-                    pm_date.meta_value  AS remito_date,
-                    pm_name.meta_value  AS billing_first,
-                    pm_lname.meta_value AS billing_last,
-                    pm_total.meta_value AS order_total
-             FROM {$wpdb->posts} p
-             JOIN {$wpdb->postmeta} pm_num   ON p.ID = pm_num.post_id   AND pm_num.meta_key   = '_wbi_remito_number'
-             LEFT JOIN {$wpdb->postmeta} pm_date  ON p.ID = pm_date.post_id  AND pm_date.meta_key  = '_wbi_remito_date'
-             LEFT JOIN {$wpdb->postmeta} pm_name  ON p.ID = pm_name.post_id  AND pm_name.meta_key  = '_billing_first_name'
-             LEFT JOIN {$wpdb->postmeta} pm_lname ON p.ID = pm_lname.post_id AND pm_lname.meta_key = '_billing_last_name'
-             LEFT JOIN {$wpdb->postmeta} pm_total ON p.ID = pm_total.post_id AND pm_total.meta_key = '_order_total'
-             WHERE p.post_type = 'shop_order'
-             ORDER BY CAST(pm_num.meta_value AS SIGNED) DESC
-             LIMIT 10000"
-        );
+        // Use wc_get_orders() for HPOS compatibility — no direct SQL against wp_posts/wp_postmeta.
+        $order_ids = wc_get_orders( array(
+            'meta_key'     => '_wbi_remito_number',
+            'meta_compare' => 'EXISTS',
+            'return'       => 'ids',
+            'limit'        => 10000,
+        ) );
 
         header( 'Content-Type: text/csv; charset=utf-8' );
         header( 'Content-Disposition: attachment; filename="wbi-remitos-export-' . gmdate( 'Y-m-d' ) . '.csv"' );
         $out = fopen( 'php://output', 'w' );
         fputcsv( $out, array( 'remito_number', 'order_id', 'date', 'customer', 'total' ) );
-        foreach ( $rows as $row ) {
-            $date = $row->remito_date ? date_i18n( 'd/m/Y', strtotime( $row->remito_date ) ) : '';
+        foreach ( $order_ids as $order_id ) {
+            $order = wc_get_order( $order_id );
+            if ( ! $order ) continue;
+            $remito_number = $order->get_meta( '_wbi_remito_number' );
+            $remito_date   = $order->get_meta( '_wbi_remito_date' );
+            $date          = $remito_date ? date_i18n( 'd/m/Y', strtotime( $remito_date ) ) : '';
             fputcsv( $out, array(
-                str_pad( intval( $row->remito_number ), 6, '0', STR_PAD_LEFT ),
-                $row->order_id,
+                str_pad( intval( $remito_number ), 6, '0', STR_PAD_LEFT ),
+                $order_id,
                 $date,
-                trim( $row->billing_first . ' ' . $row->billing_last ),
-                $row->order_total,
+                trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ),
+                $order->get_total(),
             ) );
         }
         fclose( $out );
