@@ -15,9 +15,11 @@ class WBI_Picking_Module {
         // Order meta box — picking status
         add_action( 'add_meta_boxes', array( $this, 'add_picking_metabox' ) );
 
-        // Custom order status column in WooCommerce orders list
+        // Custom order status column in WooCommerce orders list (legacy + HPOS)
         add_filter( 'manage_edit-shop_order_columns', array( $this, 'add_picking_column' ) );
         add_action( 'manage_shop_order_posts_custom_column', array( $this, 'render_picking_column' ), 10, 2 );
+        add_filter( 'manage_woocommerce_page_wc-orders_columns', array( $this, 'add_picking_column' ) );
+        add_action( 'manage_woocommerce_page_wc-orders_custom_column', array( $this, 'render_picking_column_hpos' ), 10, 2 );
 
         // AJAX handlers
         add_action( 'wp_ajax_wbi_picking_start',      array( $this, 'ajax_start_picking' ) );
@@ -76,6 +78,10 @@ class WBI_Picking_Module {
     // =========================================================================
 
     public function render_picking_list() {
+        if ( ! $this->user_has_picking_access() ) {
+            wp_die( esc_html__( 'No tenés permisos para acceder a este módulo.', 'wbi-suite' ) );
+        }
+
         $order_id   = isset( $_GET['order_id'] ) ? intval( $_GET['order_id'] ) : 0;
         $active_tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'pending';
 
@@ -124,32 +130,33 @@ class WBI_Picking_Module {
     // ---- Tab: Pendientes ----------------------------------------------------
 
     private function render_tab_pending() {
-        global $wpdb;
-
         $per_page = 20;
         $paged    = max( 1, intval( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
         $offset   = ( $paged - 1 ) * $per_page;
 
-        // Build shared WHERE condition
-        $where = "p.post_type = 'shop_order'
-               AND p.post_status = 'wc-processing'
-               AND p.ID NOT IN (
-                   SELECT post_id FROM {$wpdb->postmeta}
-                   WHERE meta_key = '_wbi_picking_status'
-                     AND meta_value != ''
-               )";
+        // Get processing orders that have no picking status (meta does not exist or is empty)
+        $pending_ids = wc_get_orders( array(
+            'status'     => 'processing',
+            'limit'      => -1,
+            'return'     => 'ids',
+            'orderby'    => 'date',
+            'order'      => 'ASC',
+            'meta_query' => array(
+                'relation' => 'OR',
+                array(
+                    'key'     => '_wbi_picking_status',
+                    'compare' => 'NOT EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_picking_status',
+                    'value'   => '',
+                    'compare' => '=',
+                ),
+            ),
+        ) );
 
-        // Total count (for badge and pagination)
-        $total = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p WHERE {$where}" );
-
-        // Paginated IDs
-        $order_ids = $wpdb->get_col(
-            "SELECT DISTINCT p.ID
-             FROM {$wpdb->posts} p
-             WHERE {$where}
-             ORDER BY p.post_date ASC
-             LIMIT {$per_page} OFFSET {$offset}"
-        );
+        $total     = count( $pending_ids );
+        $order_ids = array_slice( $pending_ids, $offset, $per_page );
 
         echo '<h2>⏳ Pedidos Pendientes de Armado <span style="background:#d63638;color:#fff;border-radius:12px;padding:2px 10px;font-size:14px;margin-left:8px;">' . intval( $total ) . '</span></h2>';
 
@@ -205,19 +212,27 @@ class WBI_Picking_Module {
         $per_page = 20;
         $paged    = max( 1, intval( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
 
-        $query = new WP_Query( array(
-            'post_type'      => 'shop_order',
-            'post_status'    => array( 'wc-processing', 'wc-on-hold' ),
-            'posts_per_page' => $per_page,
-            'paged'          => $paged,
-            'fields'         => 'ids',
-            'meta_query'     => array(
+        $count_args = array(
+            'status'     => array( 'processing', 'on-hold' ),
+            'limit'      => -1,
+            'return'     => 'ids',
+            'meta_query' => array(
                 array( 'key' => '_wbi_picking_status', 'value' => 'picking', 'compare' => '=' ),
             ),
-        ) );
+        );
+        $all_in_progress = wc_get_orders( $count_args );
+        $total           = count( $all_in_progress );
 
-        $orders = $query->posts;
-        $total  = (int) $query->found_posts;
+        $args = array(
+            'status'     => array( 'processing', 'on-hold' ),
+            'limit'      => $per_page,
+            'page'       => $paged,
+            'return'     => 'ids',
+            'meta_query' => array(
+                array( 'key' => '_wbi_picking_status', 'value' => 'picking', 'compare' => '=' ),
+            ),
+        );
+        $orders = wc_get_orders( $args );
 
         echo '<h2>🔄 Pedidos en Proceso</h2>';
 
@@ -239,8 +254,8 @@ class WBI_Picking_Module {
         foreach ( $orders as $oid ) {
             $order       = wc_get_order( $oid );
             if ( ! $order ) continue;
-            $picking_data = json_decode( get_post_meta( $oid, '_wbi_picking_data', true ), true );
-            $user_id      = get_post_meta( $oid, '_wbi_picking_user', true );
+            $picking_data = json_decode( $order->get_meta( '_wbi_picking_data' ), true );
+            $user_id      = $order->get_meta( '_wbi_picking_user' );
             $user         = $user_id ? get_userdata( $user_id ) : null;
 
             $total_req = 0;
@@ -289,29 +304,38 @@ class WBI_Picking_Module {
         $per_page = 20;
         $paged    = max( 1, intval( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
 
-        $meta_query = array(
-            array(
-                'key'     => '_wbi_picking_status',
-                'value'   => array( 'picked', 'packed' ),
-                'compare' => 'IN',
+        // Build status list for wc_get_orders(): strip the 'wc-' prefix safely from each key.
+        $all_statuses = array_map(
+            function( $s ) { return 'wc-' === substr( $s, 0, 3 ) ? substr( $s, 3 ) : $s; },
+            array_keys( wc_get_order_statuses() )
+        );
+
+        $query_args = array(
+            'status'     => $all_statuses,
+            'limit'      => -1,
+            'return'     => 'ids',
+            'meta_query' => array(
+                array(
+                    'key'     => '_wbi_picking_status',
+                    'value'   => array( 'picked', 'packed' ),
+                    'compare' => 'IN',
+                ),
             ),
         );
 
-        $query = new WP_Query( array(
-            'post_type'      => 'shop_order',
-            'post_status'    => 'any',
-            'posts_per_page' => $per_page,
-            'paged'          => $paged,
-            'fields'         => 'ids',
-            'meta_query'     => $meta_query,
-            'date_query'     => array_filter( array(
-                $date_from ? array( 'after' => $date_from, 'inclusive' => true ) : null,
-                $date_to   ? array( 'before' => $date_to,  'inclusive' => true ) : null,
-            ) ),
-        ) );
+        if ( $date_from && $date_to ) {
+            $query_args['date_created'] = $date_from . '...' . $date_to;
+        } elseif ( $date_from ) {
+            $query_args['date_created'] = '>=' . $date_from;
+        } elseif ( $date_to ) {
+            $query_args['date_created'] = '<=' . $date_to;
+        }
 
-        $orders = $query->posts;
-        $total  = (int) $query->found_posts;
+        $all_ids = wc_get_orders( $query_args );
+        $total   = count( $all_ids );
+
+        $offset  = ( $paged - 1 ) * $per_page;
+        $orders  = array_slice( $all_ids, $offset, $per_page );
 
         echo '<h2>✅ Pedidos Completados</h2>';
 
@@ -343,10 +367,10 @@ class WBI_Picking_Module {
         foreach ( $orders as $oid ) {
             $order    = wc_get_order( $oid );
             if ( ! $order ) continue;
-            $status   = get_post_meta( $oid, '_wbi_picking_status', true );
-            $started  = get_post_meta( $oid, '_wbi_picking_started_at', true );
-            $finished = get_post_meta( $oid, '_wbi_picking_completed_at', true );
-            $user_id  = get_post_meta( $oid, '_wbi_picking_user', true );
+            $status   = $order->get_meta( '_wbi_picking_status' );
+            $started  = $order->get_meta( '_wbi_picking_started_at' );
+            $finished = $order->get_meta( '_wbi_picking_completed_at' );
+            $user_id  = $order->get_meta( '_wbi_picking_user' );
             $user     = $user_id ? get_userdata( $user_id ) : null;
 
             $minutes = '—';
@@ -355,7 +379,7 @@ class WBI_Picking_Module {
                 $minutes = round( $diff / 60, 1 ) . ' min';
             }
 
-            $picking_data = json_decode( get_post_meta( $oid, '_wbi_picking_data', true ), true );
+            $picking_data = json_decode( $order->get_meta( '_wbi_picking_data' ), true );
             $total_items  = is_array( $picking_data ) ? array_sum( array_column( $picking_data, 'qty_required' ) ) : $order->get_item_count();
 
             $status_label = 'picked' === $status
@@ -402,8 +426,8 @@ class WBI_Picking_Module {
             return;
         }
 
-        $picking_status = get_post_meta( $order_id, '_wbi_picking_status', true );
-        $picking_data   = json_decode( get_post_meta( $order_id, '_wbi_picking_data', true ), true );
+        $picking_status = $order->get_meta( '_wbi_picking_status' );
+        $picking_data   = json_decode( $order->get_meta( '_wbi_picking_data' ), true );
 
         // If not yet started, build initial picking data from order items
         if ( ! $picking_status || 'picking' !== $picking_status || ! is_array( $picking_data ) ) {
@@ -492,8 +516,8 @@ class WBI_Picking_Module {
                             $scanned      = intval( $item['qty_scanned'] );
                             $required     = intval( $item['qty_required'] );
                             $item_id      = intval( $item['item_id'] );
-                            $manual_status = get_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_status', true );
-                            $manual_notes  = get_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_notes', true );
+                            $manual_status = $order->get_meta( '_wbi_picking_item_' . $item_id . '_status' );
+                            $manual_notes  = $order->get_meta( '_wbi_picking_item_' . $item_id . '_notes' );
                             if ( $manual_status === 'picked' ) {
                                 $item_status = 'complete';
                             } elseif ( $manual_status === 'missing' || $manual_status === 'replaced' ) {
@@ -584,7 +608,7 @@ class WBI_Picking_Module {
             <!-- Order notes -->
             <div style="background:#fff;border:1px solid #ccd0d4;padding:15px 20px;margin-bottom:16px;">
                 <h3 style="margin-top:0;">Observaciones del Pedido</h3>
-                <textarea id="wbi-order-notes" class="large-text" rows="3" placeholder="Observaciones generales del armado..."><?php echo esc_textarea( get_post_meta( $order_id, '_wbi_picking_order_notes', true ) ); ?></textarea>
+                <textarea id="wbi-order-notes" class="large-text" rows="3" placeholder="Observaciones generales del armado..."><?php echo esc_textarea( $order->get_meta( '_wbi_picking_order_notes' ) ); ?></textarea>
                 <button id="wbi-save-order-notes" class="button" style="margin-top:6px;">Guardar Observaciones</button>
                 <span id="wbi-notes-saved" style="display:none;color:#00a32a;margin-left:8px;">✅ Guardado</span>
             </div>
@@ -910,7 +934,7 @@ class WBI_Picking_Module {
 
     public function ajax_start_picking() {
         check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
-        if ( ! current_user_can( 'manage_woocommerce' ) ) wp_send_json_error( 'Sin permisos' );
+        if ( ! $this->current_user_can_pick() ) wp_send_json_error( 'Sin permisos' );
 
         $order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
         if ( ! $order_id ) wp_send_json_error( 'ID inválido' );
@@ -937,10 +961,11 @@ class WBI_Picking_Module {
             );
         }
 
-        update_post_meta( $order_id, '_wbi_picking_status',     'picking' );
-        update_post_meta( $order_id, '_wbi_picking_data',       wp_json_encode( $items ) );
-        update_post_meta( $order_id, '_wbi_picking_started_at', current_time( 'mysql' ) );
-        update_post_meta( $order_id, '_wbi_picking_user',       get_current_user_id() );
+        $order->update_meta_data( '_wbi_picking_status',     'picking' );
+        $order->update_meta_data( '_wbi_picking_data',       wp_json_encode( $items ) );
+        $order->update_meta_data( '_wbi_picking_started_at', current_time( 'mysql' ) );
+        $order->update_meta_data( '_wbi_picking_user',       get_current_user_id() );
+        $order->save();
 
         $order->add_order_note( '📦 Armado iniciado por ' . wp_get_current_user()->display_name );
 
@@ -949,14 +974,17 @@ class WBI_Picking_Module {
 
     public function ajax_scan_item() {
         check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
-        if ( ! current_user_can( 'manage_woocommerce' ) ) wp_send_json_error( 'Sin permisos' );
+        if ( ! $this->current_user_can_pick() ) wp_send_json_error( 'Sin permisos' );
 
         $order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
         $barcode  = isset( $_POST['barcode'] )  ? sanitize_text_field( wp_unslash( $_POST['barcode'] ) ) : '';
 
         if ( ! $order_id || empty( $barcode ) ) wp_send_json_error( 'Datos incompletos' );
 
-        $picking_data = json_decode( get_post_meta( $order_id, '_wbi_picking_data', true ), true );
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) wp_send_json_error( 'Pedido no encontrado' );
+
+        $picking_data = json_decode( $order->get_meta( '_wbi_picking_data' ), true );
         if ( ! is_array( $picking_data ) ) wp_send_json_error( 'No hay datos de picking' );
 
         $found            = false;
@@ -994,7 +1022,8 @@ class WBI_Picking_Module {
             ) );
         }
 
-        update_post_meta( $order_id, '_wbi_picking_data', wp_json_encode( $picking_data ) );
+        $order->update_meta_data( '_wbi_picking_data', wp_json_encode( $picking_data ) );
+        $order->save();
 
         $total_required = array_sum( array_column( $picking_data, 'qty_required' ) );
         $total_scanned  = array_sum( array_column( $picking_data, 'qty_scanned' ) );
@@ -1012,7 +1041,7 @@ class WBI_Picking_Module {
 
     public function ajax_complete_picking() {
         check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
-        if ( ! current_user_can( 'manage_woocommerce' ) ) wp_send_json_error( 'Sin permisos' );
+        if ( ! $this->current_user_can_pick() ) wp_send_json_error( 'Sin permisos' );
 
         $order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
         if ( ! $order_id ) wp_send_json_error( 'ID inválido' );
@@ -1020,12 +1049,13 @@ class WBI_Picking_Module {
         $order = wc_get_order( $order_id );
         if ( ! $order ) wp_send_json_error( 'Pedido no encontrado' );
 
-        $started = get_post_meta( $order_id, '_wbi_picking_started_at', true );
+        $started = $order->get_meta( '_wbi_picking_started_at' );
         $now     = current_time( 'mysql' );
         $minutes = $started ? round( ( strtotime( $now ) - strtotime( $started ) ) / 60, 1 ) : 0;
 
-        update_post_meta( $order_id, '_wbi_picking_status',       'picked' );
-        update_post_meta( $order_id, '_wbi_picking_completed_at', $now );
+        $order->update_meta_data( '_wbi_picking_status',       'picked' );
+        $order->update_meta_data( '_wbi_picking_completed_at', $now );
+        $order->save();
 
         $user = wp_get_current_user();
         $order->add_order_note( '✅ Armado completado por ' . $user->display_name . ' — Tiempo: ' . $minutes . ' min' );
@@ -1038,21 +1068,22 @@ class WBI_Picking_Module {
 
     public function ajax_reset_picking() {
         check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
-        if ( ! current_user_can( 'manage_woocommerce' ) ) wp_send_json_error( 'Sin permisos' );
+        if ( ! $this->current_user_can_pick() ) wp_send_json_error( 'Sin permisos' );
 
         $order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
         if ( ! $order_id ) wp_send_json_error( 'ID inválido' );
 
-        delete_post_meta( $order_id, '_wbi_picking_status' );
-        delete_post_meta( $order_id, '_wbi_picking_data' );
-        delete_post_meta( $order_id, '_wbi_picking_started_at' );
-        delete_post_meta( $order_id, '_wbi_picking_completed_at' );
-        delete_post_meta( $order_id, '_wbi_picking_user' );
-
         $order = wc_get_order( $order_id );
-        if ( $order ) {
-            $order->add_order_note( '🔄 Armado reiniciado por ' . wp_get_current_user()->display_name );
-        }
+        if ( ! $order ) wp_send_json_error( 'Pedido no encontrado' );
+
+        $order->delete_meta_data( '_wbi_picking_status' );
+        $order->delete_meta_data( '_wbi_picking_data' );
+        $order->delete_meta_data( '_wbi_picking_started_at' );
+        $order->delete_meta_data( '_wbi_picking_completed_at' );
+        $order->delete_meta_data( '_wbi_picking_user' );
+        $order->save();
+
+        $order->add_order_note( '🔄 Armado reiniciado por ' . wp_get_current_user()->display_name );
 
         wp_send_json_success( array( 'message' => 'Picking reiniciado' ) );
     }
@@ -1074,20 +1105,9 @@ class WBI_Picking_Module {
 
     public function render_picking_column( $column, $post_id ) {
         if ( 'wbi_picking' !== $column ) return;
-        $status = get_post_meta( $post_id, '_wbi_picking_status', true );
-        switch ( $status ) {
-            case 'picking':
-                echo '<span style="color:orange;font-weight:bold;">🔄 En proceso</span>';
-                break;
-            case 'picked':
-                echo '<span style="color:green;font-weight:bold;">✅ Armado</span>';
-                break;
-            case 'packed':
-                echo '<span style="color:#2271b1;font-weight:bold;">📦 Despachado</span>';
-                break;
-            default:
-                echo '<span style="color:#999;">⏳ Pendiente</span>';
-        }
+        $order  = wc_get_order( $post_id );
+        $status = $order ? $order->get_meta( '_wbi_picking_status' ) : '';
+        $this->render_picking_status_badge( $status );
     }
 
     // =========================================================================
@@ -1095,21 +1115,35 @@ class WBI_Picking_Module {
     // =========================================================================
 
     public function add_picking_metabox() {
-        add_meta_box(
-            'wbi_picking_box',
-            '📦 Estado de Armado — WBI',
-            array( $this, 'render_picking_metabox' ),
-            'shop_order',
-            'side',
-            'high'
-        );
+        $screens = array( 'shop_order' );
+        if ( function_exists( 'wc_get_page_screen_id' ) ) {
+            $screens[] = wc_get_page_screen_id( 'shop-order' );
+        }
+        foreach ( array_unique( $screens ) as $screen ) {
+            add_meta_box(
+                'wbi_picking_box',
+                '📦 Estado de Armado — WBI',
+                array( $this, 'render_picking_metabox' ),
+                $screen,
+                'side',
+                'high'
+            );
+        }
     }
 
-    public function render_picking_metabox( $post ) {
-        $status    = get_post_meta( $post->ID, '_wbi_picking_status', true );
-        $started   = get_post_meta( $post->ID, '_wbi_picking_started_at', true );
-        $completed = get_post_meta( $post->ID, '_wbi_picking_completed_at', true );
-        $user_id   = get_post_meta( $post->ID, '_wbi_picking_user', true );
+    public function render_picking_metabox( $post_or_order ) {
+        if ( $post_or_order instanceof WP_Post ) {
+            $order_id = $post_or_order->ID;
+        } else {
+            $order_id = $post_or_order->get_id();
+        }
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) return;
+
+        $status    = $order->get_meta( '_wbi_picking_status' );
+        $started   = $order->get_meta( '_wbi_picking_started_at' );
+        $completed = $order->get_meta( '_wbi_picking_completed_at' );
+        $user_id   = $order->get_meta( '_wbi_picking_user' );
 
         $status_labels = array(
             ''        => '⏳ Pendiente de armado',
@@ -1133,7 +1167,7 @@ class WBI_Picking_Module {
         }
 
         // Picking progress
-        $picking_data = json_decode( get_post_meta( $post->ID, '_wbi_picking_data', true ), true );
+        $picking_data = json_decode( $order->get_meta( '_wbi_picking_data' ), true );
         if ( is_array( $picking_data ) && ! empty( $picking_data ) ) {
             $total_req = array_sum( array_column( $picking_data, 'qty_required' ) );
             $total_scn = array_sum( array_column( $picking_data, 'qty_scanned' ) );
@@ -1145,7 +1179,7 @@ class WBI_Picking_Module {
         }
 
         if ( ! $status || 'picking' === $status ) {
-            $picking_url = admin_url( 'admin.php?page=wbi-picking&order_id=' . $post->ID );
+            $picking_url = admin_url( 'admin.php?page=wbi-picking&order_id=' . $order_id );
             echo '<p><a href="' . esc_url( $picking_url ) . '" class="button button-primary" style="width:100%;text-align:center;">';
             echo 'picking' === $status ? 'Continuar Armado' : 'Iniciar Armado';
             echo '</a></p>';
@@ -1154,6 +1188,10 @@ class WBI_Picking_Module {
 
     // =========================================================================
     // Helper: check if current user can perform picking actions
+    //
+    // This is the OPERATIONAL permission check: can the user actually pick items?
+    // Both managers (manage_woocommerce) and warehouse staff (wbi_armador role)
+    // can perform picking operations regardless of module-level settings.
     // =========================================================================
 
     private function current_user_can_pick() {
@@ -1178,12 +1216,13 @@ class WBI_Picking_Module {
         if ( ! $order_id || ! $item_id ) wp_send_json_error( 'Datos incompletos' );
         if ( ! in_array( $status, array( 'picked', 'missing', 'replaced' ), true ) ) wp_send_json_error( 'Estado inválido' );
 
-        // Verify order exists before writing meta
-        if ( ! get_post( $order_id ) ) wp_send_json_error( 'Pedido no encontrado' );
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) wp_send_json_error( 'Pedido no encontrado' );
 
-        update_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_status',      $status );
-        update_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_replacement', $replacement );
-        update_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_notes',       $notes );
+        $order->update_meta_data( '_wbi_picking_item_' . $item_id . '_status',      $status );
+        $order->update_meta_data( '_wbi_picking_item_' . $item_id . '_replacement', $replacement );
+        $order->update_meta_data( '_wbi_picking_item_' . $item_id . '_notes',       $notes );
+        $order->save();
 
         wp_send_json_success( array( 'status' => $status ) );
     }
@@ -1200,9 +1239,12 @@ class WBI_Picking_Module {
         $notes    = isset( $_POST['notes'] )    ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '';
 
         if ( ! $order_id ) wp_send_json_error( 'ID inválido' );
-        if ( ! get_post( $order_id ) ) wp_send_json_error( 'Pedido no encontrado' );
 
-        update_post_meta( $order_id, '_wbi_picking_order_notes', $notes );
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) wp_send_json_error( 'Pedido no encontrado' );
+
+        $order->update_meta_data( '_wbi_picking_order_notes', $notes );
+        $order->save();
         wp_send_json_success( array( 'saved' => true ) );
     }
 
@@ -1211,7 +1253,13 @@ class WBI_Picking_Module {
     // =========================================================================
 
     public function render_armador_panel() {
-        if ( ! current_user_can( 'read' ) ) wp_die( 'Sin permisos' );
+        $user = wp_get_current_user();
+        $is_armador  = in_array( 'wbi_armador', (array) $user->roles, true );
+        $is_manager  = current_user_can( 'manage_woocommerce' );
+
+        if ( ! $is_armador && ! $this->user_has_picking_access() ) {
+            wp_die( esc_html__( 'No tenés permisos para acceder al Panel de Armado.', 'wbi-suite' ) );
+        }
 
         $orders = wc_get_orders( array(
             'status'   => array( 'processing', 'on-hold' ),
@@ -1219,81 +1267,186 @@ class WBI_Picking_Module {
             'orderby'  => 'date',
             'order'    => 'DESC',
         ) );
+
+        // Filter out fully-picked orders
+        $display_orders = array();
+        foreach ( $orders as $order ) {
+            $picking_status = $order->get_meta( '_wbi_picking_status' );
+            if ( 'picked' !== $picking_status ) {
+                $display_orders[] = $order;
+            }
+        }
         ?>
         <div class="wrap">
             <h1>Panel de Armado</h1>
             <p>Pedidos pendientes de armado. Solo se muestran los datos necesarios para preparar los pedidos.</p>
 
-            <?php if ( empty( $orders ) ) : ?>
+            <?php if ( empty( $display_orders ) ) : ?>
                 <div class="notice notice-success inline"><p>No hay pedidos pendientes de armado.</p></div>
             <?php else : ?>
-                <?php foreach ( $orders as $order ) :
-                    $order_id      = $order->get_id();
-                    $picking_status = get_post_meta( $order_id, '_wbi_picking_status', true );
-                    if ( $picking_status === 'picked' ) continue;
-                    $items = $order->get_items();
-                ?>
-                <div style="background:#fff;border:1px solid #ccd0d4;padding:15px 20px;margin-bottom:16px;border-radius:4px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                        <h2 style="margin:0;">Pedido #<?php echo intval( $order_id ); ?></h2>
-                        <span style="font-size:13px;color:#646970;">
-                            <?php echo esc_html( $order->get_date_created() ? $order->get_date_created()->date( 'd/m/Y H:i' ) : '—' ); ?>
-                        </span>
-                    </div>
-                    <p style="margin:0 0 10px;"><strong>Cliente:</strong> <?php echo esc_html( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ); ?></p>
-
-                    <table class="widefat striped">
-                        <thead>
-                            <tr>
-                                <th>Producto</th>
-                                <th>SKU</th>
-                                <th>Cantidad</th>
-                                <th>Código de Barra</th>
-                                <th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        <?php foreach ( $items as $item ) :
-                            $product      = $item->get_product();
-                            $sku          = $product ? esc_html( $product->get_sku() ) : '—';
-                            $product_id   = $item->get_product_id();
-                            $variation_id = $item->get_variation_id();
-                            $lookup_id    = $variation_id ?: $product_id;
-                            $barcode      = get_post_meta( $lookup_id, '_wbi_barcode', true );
-                            $item_id      = $item->get_id();
-                            $item_status  = get_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_status', true );
-                        ?>
+                <table class="widefat striped" style="margin-top:16px;">
+                    <thead>
                         <tr>
-                            <td><?php echo esc_html( $item->get_name() ); ?></td>
-                            <td><?php echo $sku; ?></td>
-                            <td><?php echo intval( $item->get_quantity() ); ?></td>
-                            <td><?php echo $barcode ? '<code>' . esc_html( $barcode ) . '</code>' : '<span style="color:#aaa;">—</span>'; ?></td>
+                            <th>#Pedido</th>
+                            <th>Fecha</th>
+                            <th>Cliente</th>
+                            <th>Items</th>
+                            <th>Total</th>
+                            <th>Estado Armado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ( $display_orders as $order ) :
+                        $order_id       = $order->get_id();
+                        $picking_status = $order->get_meta( '_wbi_picking_status' );
+                    ?>
+                        <tr>
                             <td>
-                                <?php if ( $item_status === 'picked' ) : ?>
-                                    <span style="color:#00a32a;font-weight:bold;">✅ Agarrado</span>
-                                <?php elseif ( $item_status === 'missing' ) : ?>
-                                    <span style="color:#d63638;font-weight:bold;">❌ Faltante</span>
-                                <?php elseif ( $item_status === 'replaced' ) : ?>
-                                    <span style="color:#dba617;font-weight:bold;">Reemplazado</span>
+                                <strong>#<?php echo intval( $order_id ); ?></strong>
+                            </td>
+                            <td><?php echo esc_html( $order->get_date_created() ? $order->get_date_created()->date( 'd/m/Y H:i' ) : '—' ); ?></td>
+                            <td><?php echo esc_html( $order->get_formatted_billing_full_name() ); ?></td>
+                            <td><?php echo intval( $order->get_item_count() ); ?></td>
+                            <td><?php echo wp_kses_post( $order->get_formatted_order_total() ); ?></td>
+                            <td><?php $this->render_picking_status_badge( $picking_status ); ?></td>
+                            <td>
+                                <?php if ( $is_manager ) : ?>
+                                    <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-picking&order_id=' . $order_id ) ); ?>"
+                                       class="button button-primary button-small">
+                                        Abrir picking completo
+                                    </a>
                                 <?php else : ?>
-                                    <span style="color:#646970;">Pendiente</span>
+                                    <button class="button button-small wbi-armador-toggle"
+                                            data-order="<?php echo intval( $order_id ); ?>">
+                                        Ver items
+                                    </button>
                                 <?php endif; ?>
                             </td>
                         </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
-
-                    <div style="margin-top:10px;">
-                        <?php if ( current_user_can( 'manage_woocommerce' ) ) : ?>
-                            <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-picking&order_id=' . $order_id ) ); ?>"
-                               class="button button-primary">Abrir picking completo</a>
+                        <?php if ( ! $is_manager ) : ?>
+                        <tr class="wbi-armador-detail" id="wbi-detail-<?php echo intval( $order_id ); ?>" style="display:none;">
+                            <td colspan="7" style="padding:0;">
+                                <div style="padding:12px 20px;background:#f9f9f9;border-top:1px solid #e0e0e0;">
+                                    <table class="widefat striped" style="margin:0;">
+                                        <thead>
+                                            <tr>
+                                                <th>Producto</th>
+                                                <th>SKU</th>
+                                                <th>Cantidad</th>
+                                                <th>Código de Barra</th>
+                                                <th>Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                        <?php foreach ( $order->get_items() as $item ) :
+                                            $product      = $item->get_product();
+                                            $sku          = $product ? esc_html( $product->get_sku() ) : '—';
+                                            $product_id   = $item->get_product_id();
+                                            $variation_id = $item->get_variation_id();
+                                            $lookup_id    = $variation_id ?: $product_id;
+                                            $barcode      = get_post_meta( $lookup_id, '_wbi_barcode', true );
+                                            $item_id      = $item->get_id();
+                                            $item_status  = $order->get_meta( '_wbi_picking_item_' . $item_id . '_status' );
+                                        ?>
+                                            <tr>
+                                                <td><?php echo esc_html( $item->get_name() ); ?></td>
+                                                <td><?php echo esc_html( $sku ); ?></td>
+                                                <td><?php echo intval( $item->get_quantity() ); ?></td>
+                                                <td><?php echo $barcode ? '<code>' . esc_html( $barcode ) . '</code>' : '<span style="color:#aaa;">—</span>'; ?></td>
+                                                <td>
+                                                    <?php if ( 'picked' === $item_status ) : ?>
+                                                        <span style="color:#00a32a;font-weight:bold;">✅ Agarrado</span>
+                                                    <?php elseif ( 'missing' === $item_status ) : ?>
+                                                        <span style="color:#d63638;font-weight:bold;">❌ Faltante</span>
+                                                    <?php elseif ( 'replaced' === $item_status ) : ?>
+                                                        <span style="color:#dba617;font-weight:bold;">Reemplazado</span>
+                                                    <?php else : ?>
+                                                        <span style="color:#646970;">Pendiente</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>
                         <?php endif; ?>
-                    </div>
-                </div>
-                <?php endforeach; ?>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+
+                <script>
+                (function() {
+                    document.querySelectorAll('.wbi-armador-toggle').forEach(function(btn) {
+                        btn.addEventListener('click', function() {
+                            var orderId = this.dataset.order;
+                            var detail  = document.getElementById('wbi-detail-' + orderId);
+                            if ( detail ) {
+                                var visible = detail.style.display !== 'none';
+                                detail.style.display = visible ? 'none' : 'table-row';
+                                this.textContent     = visible ? 'Ver items' : 'Ocultar items';
+                            }
+                        });
+                    });
+                })();
+                </script>
             <?php endif; ?>
         </div>
         <?php
+    }
+
+    // =========================================================================
+    // Helper: render picking status badge
+    // =========================================================================
+
+    private function render_picking_status_badge( $status ) {
+        switch ( $status ) {
+            case 'picking':
+                echo '<span style="color:orange;font-weight:bold;">🔄 En proceso</span>';
+                break;
+            case 'picked':
+                echo '<span style="color:green;font-weight:bold;">✅ Armado</span>';
+                break;
+            case 'packed':
+                echo '<span style="color:#2271b1;font-weight:bold;">📦 Despachado</span>';
+                break;
+            default:
+                echo '<span style="color:#999;">⏳ Pendiente</span>';
+        }
+    }
+
+    // =========================================================================
+    // Helper: HPOS column render (receives WC_Order object)
+    // =========================================================================
+
+    public function render_picking_column_hpos( $column, $order ) {
+        if ( 'wbi_picking' !== $column ) return;
+        $status = $order->get_meta( '_wbi_picking_status' );
+        $this->render_picking_status_badge( $status );
+    }
+
+    // =========================================================================
+    // Helper: check if current user has access to the picking module via settings
+    //
+    // This is the MODULE-LEVEL permission check: replicates the logic of
+    // WBI_Suite_Loader::user_can_access_module('picking') for use within this
+    // module. It reads the 'wbi_permissions_picking' setting from the plugin
+    // configuration page (Settings > Permisos por Módulo).
+    //
+    // Note: this is intentionally separate from current_user_can_pick(), which
+    // controls who can perform operational picking actions (including the
+    // wbi_armador role that always has access regardless of module settings).
+    // =========================================================================
+
+    private function user_has_picking_access() {
+        $user     = wp_get_current_user();
+        $opts     = get_option( 'wbi_modules_settings', array() );
+        $perm_key = 'wbi_permissions_picking';
+        $allowed  = ( isset( $opts[ $perm_key ] ) && ! empty( $opts[ $perm_key ] ) )
+            ? (array) $opts[ $perm_key ]
+            : array( 'administrator' );
+        return (bool) array_intersect( (array) $user->roles, $allowed );
     }
 }
