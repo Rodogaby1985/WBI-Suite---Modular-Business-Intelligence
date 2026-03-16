@@ -706,7 +706,7 @@ class WBI_Barcode_Module {
     // ---- CSV Export handler -------------------------------------------------
 
     public function handle_barcode_export() {
-        if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wbi_barcode_export' ) ) wp_die( 'Nonce inválido' );
+        if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'wbi_barcode_export' ) ) wp_die( 'Nonce inválido' );
         if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos' );
 
         $products = get_posts( array( 'post_type' => 'product', 'posts_per_page' => -1, 'post_status' => 'publish', 'fields' => 'ids' ) );
@@ -737,13 +737,36 @@ class WBI_Barcode_Module {
 
         $imported = 0;
         $errors   = array();
-        fgetcsv( $handle ); // skip header row
+        $header   = fgetcsv( $handle ); // skip/read header row
+
+        // Detect column positions from header
+        $id_col      = 0;
+        $barcode_col = 1;
+        if ( is_array( $header ) ) {
+            $header_lower = array_map( 'strtolower', $header );
+            $barcode_pos  = array_search( 'barcode', $header_lower, true );
+            if ( false !== $barcode_pos ) {
+                $barcode_col = intval( $barcode_pos );
+                // Use 'product_id' col if available, otherwise col 0
+                $id_pos = array_search( 'product_id', $header_lower, true );
+                if ( false !== $id_pos ) {
+                    $id_col = intval( $id_pos );
+                }
+            }
+        }
 
         while ( ( $row = fgetcsv( $handle ) ) !== false ) {
-            if ( count( $row ) < 2 ) continue;
-            $sku_or_id = sanitize_text_field( trim( $row[0] ) );
-            $barcode   = sanitize_text_field( trim( $row[1] ) );
-            $pid       = is_numeric( $sku_or_id ) ? intval( $sku_or_id ) : wc_get_product_id_by_sku( $sku_or_id );
+            if ( count( $row ) <= max( $id_col, $barcode_col ) ) continue;
+            $sku_or_id = sanitize_text_field( trim( $row[ $id_col ] ) );
+            $barcode   = sanitize_text_field( trim( $row[ $barcode_col ] ) );
+            if ( empty( $sku_or_id ) ) continue;
+            $pid = is_numeric( $sku_or_id ) ? intval( $sku_or_id ) : wc_get_product_id_by_sku( $sku_or_id );
+            if ( ! $pid ) {
+                // Also try by SKU if numeric lookup failed to find a product
+                if ( is_numeric( $sku_or_id ) && ! wc_get_product( intval( $sku_or_id ) ) ) {
+                    $pid = wc_get_product_id_by_sku( $sku_or_id );
+                }
+            }
             if ( ! $pid ) {
                 $errors[] = 'SKU/ID no encontrado: ' . $sku_or_id;
                 continue;

@@ -261,7 +261,7 @@ class WBI_Suppliers_Module {
     }
 
     public function handle_suppliers_export() {
-        if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wbi_suppliers_export' ) ) wp_die( 'Nonce inválido' );
+        if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'wbi_suppliers_export' ) ) wp_die( 'Nonce inválido' );
         if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos' );
 
         $suppliers = get_posts( array(

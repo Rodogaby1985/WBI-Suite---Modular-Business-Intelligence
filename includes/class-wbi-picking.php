@@ -528,18 +528,19 @@ class WBI_Picking_Module {
                             <td id="wbi-scanned-<?php echo intval( $idx ); ?>"><?php echo intval( $scanned ); ?></td>
                             <td id="wbi-status-<?php echo intval( $idx ); ?>"><?php echo esc_html( $status_labels[ $item_status ] ); ?></td>
                             <td>
+                                <?php $is_resolved = in_array( $manual_status, array( 'picked', 'missing', 'replaced' ), true ); ?>
                                 <div style="display:flex;flex-direction:column;gap:6px;">
                                     <div style="display:flex;gap:6px;flex-wrap:wrap;">
                                         <button class="button button-small wbi-mark-picked"
                                                 data-idx="<?php echo intval( $idx ); ?>"
                                                 data-item-id="<?php echo $item_id; ?>"
-                                                <?php echo in_array( $manual_status, array( 'picked', 'missing', 'replaced' ) ) ? 'disabled' : ''; ?>>
+                                                <?php echo $is_resolved ? 'disabled' : ''; ?>>
                                             ✅ Agarrado
                                         </button>
                                         <button class="button button-small wbi-mark-missing"
                                                 data-idx="<?php echo intval( $idx ); ?>"
                                                 data-item-id="<?php echo $item_id; ?>"
-                                                <?php echo in_array( $manual_status, array( 'picked', 'missing', 'replaced' ) ) ? 'disabled' : ''; ?>>
+                                                <?php echo $is_resolved ? 'disabled' : ''; ?>>
                                             ❌ Faltante
                                         </button>
                                     </div>
@@ -571,8 +572,7 @@ class WBI_Picking_Module {
                                     <input type="text" class="regular-text wbi-item-note-quick" placeholder="Notas..."
                                            data-item-id="<?php echo $item_id; ?>"
                                            value="<?php echo esc_attr( $manual_notes ); ?>"
-                                           style="font-size:11px;max-width:180px;"
-                                           <?php echo in_array( $manual_status, array( 'picked', 'missing', 'replaced' ) ) ? '' : ''; ?>>
+                                           style="font-size:11px;max-width:180px;">
                                 </div>
                             </td>
                         </tr>
@@ -1158,6 +1158,7 @@ class WBI_Picking_Module {
 
     public function ajax_mark_item() {
         check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
+        // Allow armadors (read capability) and shop managers
         if ( ! current_user_can( 'read' ) ) wp_send_json_error( 'Sin permisos' );
 
         $order_id    = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
@@ -1168,6 +1169,9 @@ class WBI_Picking_Module {
 
         if ( ! $order_id || ! $item_id ) wp_send_json_error( 'Datos incompletos' );
         if ( ! in_array( $status, array( 'picked', 'missing', 'replaced' ), true ) ) wp_send_json_error( 'Estado inválido' );
+
+        // Verify order exists before writing meta
+        if ( ! get_post( $order_id ) ) wp_send_json_error( 'Pedido no encontrado' );
 
         update_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_status',      $status );
         update_post_meta( $order_id, '_wbi_picking_item_' . $item_id . '_replacement', $replacement );
@@ -1182,12 +1186,14 @@ class WBI_Picking_Module {
 
     public function ajax_save_order_notes() {
         check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
+        // Allow armadors (read capability) and shop managers
         if ( ! current_user_can( 'read' ) ) wp_send_json_error( 'Sin permisos' );
 
         $order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
         $notes    = isset( $_POST['notes'] )    ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '';
 
         if ( ! $order_id ) wp_send_json_error( 'ID inválido' );
+        if ( ! get_post( $order_id ) ) wp_send_json_error( 'Pedido no encontrado' );
 
         update_post_meta( $order_id, '_wbi_picking_order_notes', $notes );
         wp_send_json_success( array( 'saved' => true ) );

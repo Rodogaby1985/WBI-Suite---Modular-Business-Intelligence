@@ -495,7 +495,7 @@ class WBI_Scoring_Module {
     // -------------------------------------------------------------------------
 
     public function handle_scoring_export() {
-        if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wbi_scoring_export' ) ) wp_die( 'Nonce inválido' );
+        if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'wbi_scoring_export' ) ) wp_die( 'Nonce inválido' );
         if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos' );
 
         global $wpdb;

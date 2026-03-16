@@ -719,12 +719,14 @@ class WBI_Suite_Loader {
     }
 
     public function ensure_armador_role() {
-        if ( ! get_role( 'wbi_armador' ) ) {
-            add_role( 'wbi_armador', 'Armador WBI', array( 'read' => true ) );
-        }
+        self::maybe_create_armador_role();
     }
 
     public static function on_activate() {
+        self::maybe_create_armador_role();
+    }
+
+    private static function maybe_create_armador_role() {
         if ( ! get_role( 'wbi_armador' ) ) {
             add_role( 'wbi_armador', 'Armador WBI', array( 'read' => true ) );
         }

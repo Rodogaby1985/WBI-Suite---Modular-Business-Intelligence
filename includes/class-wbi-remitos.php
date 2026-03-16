@@ -326,7 +326,7 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
     }
 
     public function handle_remito_export() {
-        if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wbi_remito_export' ) ) wp_die( 'Nonce inválido' );
+        if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'wbi_remito_export' ) ) wp_die( 'Nonce inválido' );
         if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos' );
 
         global $wpdb;
