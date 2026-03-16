@@ -86,7 +86,7 @@ class WBI_Costs_Module {
         add_submenu_page(
             'wbi-dashboard-view',
             'Costos y Márgenes',
-            '💰 Costos y Márgenes',
+            '<span class="dashicons dashicons-money-alt" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Costos y Márgenes',
             'manage_woocommerce',
             'wbi-costs-report',
             array( $this, 'render_page' )
@@ -126,15 +126,21 @@ class WBI_Costs_Module {
         ), admin_url( 'admin-post.php' ) );
         ?>
         <div class="wrap">
-            <h1>💰 Costos y Márgenes</h1>
+            <h1>Costos y Márgenes</h1>
 
             <!-- Margin alert threshold setting -->
-            <div style="background:#fff; border:1px solid #c3c4c7; border-left:4px solid #2271b1; padding:15px 20px; margin-bottom:20px; max-width:400px;">
-                <form method="post" action="options.php" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div style="background:#fff; border:1px solid #c3c4c7; border-left:4px solid #2271b1; padding:15px 20px; margin-bottom:20px; max-width:500px;">
+                <form method="post" action="options.php">
                     <?php settings_fields( 'wbi_costs_group' ); ?>
-                    <label><strong>⚠️ Umbral de Alerta de Margen (%):</strong></label>
-                    <input type="number" name="wbi_margin_alert_threshold" value="<?php echo esc_attr( $alert_threshold ); ?>" min="0" max="100" step="0.1" style="width:80px;" />
-                    <?php submit_button( 'Guardar', 'secondary', 'submit', false ); ?>
+                    <table class="form-table"><tbody>
+                        <tr>
+                            <th scope="row"><label for="wbi_margin_alert_threshold">Umbral de Alerta de Margen (%):</label></th>
+                            <td>
+                                <input type="number" id="wbi_margin_alert_threshold" name="wbi_margin_alert_threshold" value="<?php echo esc_attr( $alert_threshold ); ?>" min="0" max="100" step="0.1" style="width:80px;" />
+                                <?php submit_button( 'Guardar', 'secondary', 'submit', false ); ?>
+                            </td>
+                        </tr>
+                    </tbody></table>
                 </form>
             </div>
 

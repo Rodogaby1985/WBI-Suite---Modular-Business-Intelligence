@@ -27,8 +27,8 @@ class WBI_Cashflow_Module {
     public function register_page() {
         add_submenu_page(
             'wbi-dashboard-view',
-            '💰 Flujo de Caja',
-            '💰 Flujo de Caja',
+            'Flujo de Caja',
+            '<span class="dashicons dashicons-chart-area" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Flujo de Caja',
             'manage_options',
             'wbi-cashflow',
             array( $this, 'render' )

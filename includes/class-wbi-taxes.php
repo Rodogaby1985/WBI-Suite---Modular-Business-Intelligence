@@ -25,8 +25,8 @@ class WBI_Taxes_Module {
     public function register_page() {
         add_submenu_page(
             'wbi-dashboard-view',
-            '🏛️ Gestión Impuestos',
-            '🏛️ Impuestos',
+            'Gestión Impuestos',
+            '<span class="dashicons dashicons-bank" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Impuestos',
             'manage_options',
             'wbi-taxes',
             array( $this, 'render' )

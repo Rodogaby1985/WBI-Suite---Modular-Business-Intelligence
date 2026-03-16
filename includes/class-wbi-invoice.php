@@ -41,7 +41,7 @@ class WBI_Invoice_Module {
         add_submenu_page(
             'wbi-dashboard-view',
             '📑 Facturación',
-            '📑 Facturación',
+            '<span class="dashicons dashicons-media-spreadsheet" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Facturación',
             'manage_options',
             'wbi-invoices',
             array( $this, 'render_page' )

@@ -12,6 +12,9 @@ class WBI_Remitos_Module {
         add_action( 'wp_ajax_wbi_generate_remito', array( $this, 'generate_remito' ) );
         add_action( 'admin_post_wbi_generate_remito', array( $this, 'generate_remito' ) );
 
+        // CSV export handler
+        add_action( 'admin_post_wbi_remito_export', array( $this, 'handle_remito_export' ) );
+
         // Admin submenu
         add_action( 'admin_menu', array( $this, 'add_submenu' ), 100 );
     }
@@ -212,7 +215,7 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
         add_submenu_page(
             'wbi-dashboard-view',
             'Remitos',
-            '📄 Remitos',
+            '<span class="dashicons dashicons-media-text" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Remitos',
             'manage_woocommerce',
             'wbi-remitos',
             array( $this, 'render_log_page' )
@@ -259,10 +262,18 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
         ) );
 
         $total_pages = ceil( $total / $per_page );
+
+        $export_url = add_query_arg( array(
+            'action'   => 'wbi_remito_export',
+            '_wpnonce' => wp_create_nonce( 'wbi_remito_export' ),
+        ), admin_url( 'admin-post.php' ) );
         ?>
         <div class="wrap">
-            <h1>📄 Remitos Generados</h1>
-            <p style="color:#555;">Total: <strong><?php echo intval( $total ); ?></strong> remitos</p>
+            <h1>Remitos Generados</h1>
+
+            <div class="notice notice-info"><p><strong>¿Qué son los Remitos?</strong> Un remito es un documento de entrega que acompaña la mercadería. Se genera vinculado a un pedido de WooCommerce y puede imprimirse para el transportista o cliente. Para generar un remito, abrí un pedido y usá el menú de acciones de WooCommerce.</p></div>
+
+            <p style="color:#555;">Total: <strong><?php echo intval( $total ); ?></strong> remitos &nbsp; <a href="<?php echo esc_url( $export_url ); ?>" class="button">Exportar CSV</a></p>
 
             <table class="widefat striped wbi-sortable">
                 <thead>
@@ -312,5 +323,47 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
             endif; ?>
         </div>
         <?php
+    }
+
+    public function handle_remito_export() {
+        if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wbi_remito_export' ) ) wp_die( 'Nonce inválido' );
+        if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos' );
+
+        global $wpdb;
+
+        $rows = $wpdb->get_results(
+            "SELECT p.ID AS order_id,
+                    pm_num.meta_value   AS remito_number,
+                    pm_date.meta_value  AS remito_date,
+                    pm_name.meta_value  AS billing_first,
+                    pm_lname.meta_value AS billing_last,
+                    pm_total.meta_value AS order_total
+             FROM {$wpdb->posts} p
+             JOIN {$wpdb->postmeta} pm_num   ON p.ID = pm_num.post_id   AND pm_num.meta_key   = '_wbi_remito_number'
+             LEFT JOIN {$wpdb->postmeta} pm_date  ON p.ID = pm_date.post_id  AND pm_date.meta_key  = '_wbi_remito_date'
+             LEFT JOIN {$wpdb->postmeta} pm_name  ON p.ID = pm_name.post_id  AND pm_name.meta_key  = '_billing_first_name'
+             LEFT JOIN {$wpdb->postmeta} pm_lname ON p.ID = pm_lname.post_id AND pm_lname.meta_key = '_billing_last_name'
+             LEFT JOIN {$wpdb->postmeta} pm_total ON p.ID = pm_total.post_id AND pm_total.meta_key = '_order_total'
+             WHERE p.post_type = 'shop_order'
+             ORDER BY CAST(pm_num.meta_value AS SIGNED) DESC
+             LIMIT 10000"
+        );
+
+        header( 'Content-Type: text/csv; charset=utf-8' );
+        header( 'Content-Disposition: attachment; filename="wbi-remitos-export-' . date( 'Y-m-d' ) . '.csv"' );
+        $out = fopen( 'php://output', 'w' );
+        fputcsv( $out, array( 'remito_number', 'order_id', 'date', 'customer', 'total' ) );
+        foreach ( $rows as $row ) {
+            $date = $row->remito_date ? date_i18n( 'd/m/Y', strtotime( $row->remito_date ) ) : '';
+            fputcsv( $out, array(
+                str_pad( intval( $row->remito_number ), 6, '0', STR_PAD_LEFT ),
+                $row->order_id,
+                $date,
+                trim( $row->billing_first . ' ' . $row->billing_last ),
+                $row->order_total,
+            ) );
+        }
+        fclose( $out );
+        exit;
     }
 }

@@ -43,8 +43,8 @@ class WBI_Whatsapp_Module {
     public function add_submenu() {
         add_submenu_page(
             'wbi-dashboard-view',
-            '💬 WhatsApp Notificaciones',
-            '💬 WhatsApp',
+            'WhatsApp Notificaciones',
+            '<span class="dashicons dashicons-phone" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> WhatsApp',
             'manage_options',
             'wbi-whatsapp',
             array( $this, 'render_page' )

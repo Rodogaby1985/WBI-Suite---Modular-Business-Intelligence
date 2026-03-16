@@ -29,6 +29,10 @@ class WBI_Barcode_Module {
 
         // AJAX handler for quick barcode assignment
         add_action( 'wp_ajax_wbi_barcode_assign', array( $this, 'ajax_barcode_assign' ) );
+
+        // CSV export/import handlers
+        add_action( 'admin_post_wbi_barcode_export', array( $this, 'handle_barcode_export' ) );
+        add_action( 'wp_ajax_wbi_barcode_import', array( $this, 'handle_barcode_import' ) );
     }
 
     // -------------------------------------------------------------------------
@@ -196,7 +200,7 @@ class WBI_Barcode_Module {
         add_submenu_page(
             'wbi-dashboard-view',
             'Códigos de Barra',
-            '📊 Códigos de Barra',
+            '<span class="dashicons dashicons-tag" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Códigos de Barra',
             'manage_woocommerce',
             'wbi-barcodes',
             array( $this, 'render_page' )
@@ -208,20 +212,24 @@ class WBI_Barcode_Module {
         $nonce      = wp_create_nonce( 'wbi_barcode_nonce' );
         ?>
         <div class="wrap">
-            <h1>📊 Gestión de Códigos de Barra</h1>
+            <h1>Gestión de Códigos de Barra</h1>
 
             <nav class="nav-tab-wrapper">
                 <a href="?page=wbi-barcodes&tab=scanner"
                    class="nav-tab <?php echo 'scanner' === $active_tab ? 'nav-tab-active' : ''; ?>">
-                    🔍 Escáner
+                    Escáner
                 </a>
                 <a href="?page=wbi-barcodes&tab=missing"
                    class="nav-tab <?php echo 'missing' === $active_tab ? 'nav-tab-active' : ''; ?>">
-                    ⚠️ Productos sin Código
+                    Productos sin Código
                 </a>
                 <a href="?page=wbi-barcodes&tab=all"
                    class="nav-tab <?php echo 'all' === $active_tab ? 'nav-tab-active' : ''; ?>">
-                    📋 Todos los Códigos
+                    Todos los Códigos
+                </a>
+                <a href="?page=wbi-barcodes&tab=import_export"
+                   class="nav-tab <?php echo 'import_export' === $active_tab ? 'nav-tab-active' : ''; ?>">
+                    Importar/Exportar
                 </a>
             </nav>
 
@@ -231,6 +239,8 @@ class WBI_Barcode_Module {
                     $this->render_tab_scanner( $nonce );
                 } elseif ( 'missing' === $active_tab ) {
                     $this->render_tab_missing( $nonce );
+                } elseif ( 'import_export' === $active_tab ) {
+                    $this->render_tab_import_export();
                 } else {
                     $this->render_tab_all();
                 }
@@ -603,5 +613,145 @@ class WBI_Barcode_Module {
             ?>
         <?php endif; ?>
         <?php
+    }
+
+    // ---- Tab: Importar/Exportar ---------------------------------------------
+
+    private function render_tab_import_export() {
+        $export_url = add_query_arg( array(
+            'action'   => 'wbi_barcode_export',
+            '_wpnonce' => wp_create_nonce( 'wbi_barcode_export' ),
+        ), admin_url( 'admin-post.php' ) );
+        $import_nonce = wp_create_nonce( 'wbi_barcode_import' );
+        $ajax_url     = admin_url( 'admin-ajax.php' );
+        ?>
+        <h2>Importar / Exportar Códigos de Barra</h2>
+
+        <div style="display:flex; gap:30px; flex-wrap:wrap;">
+
+            <!-- Export -->
+            <div style="flex:1; min-width:280px; border:1px solid #ccd0d4; padding:20px; border-radius:4px;">
+                <h3 style="margin-top:0;">Exportar CSV</h3>
+                <p>Descargá todos los productos con sus códigos de barra en formato CSV.</p>
+                <p>Columnas: <code>product_id, sku, name, barcode</code></p>
+                <a href="<?php echo esc_url( $export_url ); ?>" class="button button-primary">Exportar CSV</a>
+            </div>
+
+            <!-- Import -->
+            <div style="flex:1; min-width:280px; border:1px solid #ccd0d4; padding:20px; border-radius:4px;">
+                <h3 style="margin-top:0;">Importar CSV</h3>
+                <p>El archivo debe tener columnas: <code>product_id</code> (o SKU) y <code>barcode</code>. La primera fila se ignora (encabezado).</p>
+                <div id="wbi-import-result" style="display:none; margin-bottom:10px;"></div>
+                <input type="file" id="wbi-barcode-csv-file" accept=".csv" style="margin-bottom:10px; display:block;">
+                <button id="wbi-barcode-import-btn" class="button button-primary">Importar CSV</button>
+            </div>
+        </div>
+
+        <script>
+        (function() {
+            var importBtn  = document.getElementById('wbi-barcode-import-btn');
+            var fileInput  = document.getElementById('wbi-barcode-csv-file');
+            var resultDiv  = document.getElementById('wbi-import-result');
+
+            if ( ! importBtn ) return;
+
+            importBtn.addEventListener('click', function() {
+                var file = fileInput.files[0];
+                if ( ! file ) { alert('Seleccioná un archivo CSV primero.'); return; }
+
+                importBtn.disabled = true;
+                importBtn.textContent = 'Importando...';
+
+                var form = new FormData();
+                form.append('action', 'wbi_barcode_import');
+                form.append('nonce', '<?php echo esc_js( $import_nonce ); ?>');
+                form.append('wbi_csv_file', file);
+
+                fetch('<?php echo esc_js( $ajax_url ); ?>', { method:'POST', body:form })
+                    .then(function(r){ return r.json(); })
+                    .then(function(res) {
+                        importBtn.disabled = false;
+                        importBtn.textContent = 'Importar CSV';
+                        resultDiv.style.display = 'block';
+                        if ( res.success ) {
+                            resultDiv.style.background = '#d1fae5';
+                            resultDiv.style.border = '1px solid #00a32a';
+                            resultDiv.style.padding = '10px';
+                            resultDiv.style.borderRadius = '4px';
+                            var html = '<strong>✅ Importación completada</strong><br>';
+                            html += 'Registros importados: <strong>' + res.data.imported + '</strong>';
+                            if ( res.data.errors && res.data.errors.length ) {
+                                html += '<br>Errores (' + res.data.errors.length + '): ' + res.data.errors.slice(0,5).join(', ');
+                            }
+                            resultDiv.innerHTML = html;
+                        } else {
+                            resultDiv.style.background = '#fce8e8';
+                            resultDiv.style.border = '1px solid #d63638';
+                            resultDiv.style.padding = '10px';
+                            resultDiv.style.borderRadius = '4px';
+                            resultDiv.innerHTML = '<strong>❌ Error:</strong> ' + ( res.data || 'Error desconocido' );
+                        }
+                    })
+                    .catch(function() {
+                        importBtn.disabled = false;
+                        importBtn.textContent = 'Importar CSV';
+                        alert('Error de red al importar.');
+                    });
+            });
+        })();
+        </script>
+        <?php
+    }
+
+    // ---- CSV Export handler -------------------------------------------------
+
+    public function handle_barcode_export() {
+        if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wbi_barcode_export' ) ) wp_die( 'Nonce inválido' );
+        if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos' );
+
+        $products = get_posts( array( 'post_type' => 'product', 'posts_per_page' => -1, 'post_status' => 'publish', 'fields' => 'ids' ) );
+
+        header( 'Content-Type: text/csv; charset=utf-8' );
+        header( 'Content-Disposition: attachment; filename="wbi-barcodes-export-' . date( 'Y-m-d' ) . '.csv"' );
+        $out = fopen( 'php://output', 'w' );
+        fputcsv( $out, array( 'product_id', 'sku', 'name', 'barcode' ) );
+        foreach ( $products as $pid ) {
+            $p = wc_get_product( $pid );
+            if ( ! $p ) continue;
+            fputcsv( $out, array( $pid, $p->get_sku(), $p->get_name(), get_post_meta( $pid, '_wbi_barcode', true ) ) );
+        }
+        fclose( $out );
+        exit;
+    }
+
+    // ---- CSV Import handler -------------------------------------------------
+
+    public function handle_barcode_import() {
+        check_ajax_referer( 'wbi_barcode_import', 'nonce' );
+        if ( ! current_user_can( 'manage_woocommerce' ) ) wp_send_json_error( 'Sin permisos' );
+        if ( empty( $_FILES['wbi_csv_file'] ) ) wp_send_json_error( 'No se recibió archivo' );
+
+        $file   = $_FILES['wbi_csv_file']['tmp_name'];
+        $handle = fopen( $file, 'r' );
+        if ( ! $handle ) wp_send_json_error( 'No se pudo leer el archivo' );
+
+        $imported = 0;
+        $errors   = array();
+        fgetcsv( $handle ); // skip header row
+
+        while ( ( $row = fgetcsv( $handle ) ) !== false ) {
+            if ( count( $row ) < 2 ) continue;
+            $sku_or_id = sanitize_text_field( trim( $row[0] ) );
+            $barcode   = sanitize_text_field( trim( $row[1] ) );
+            $pid       = is_numeric( $sku_or_id ) ? intval( $sku_or_id ) : wc_get_product_id_by_sku( $sku_or_id );
+            if ( ! $pid ) {
+                $errors[] = 'SKU/ID no encontrado: ' . $sku_or_id;
+                continue;
+            }
+            update_post_meta( $pid, '_wbi_barcode', $barcode );
+            $imported++;
+        }
+        fclose( $handle );
+        wp_send_json_success( array( 'imported' => $imported, 'errors' => $errors ) );
     }
 }
