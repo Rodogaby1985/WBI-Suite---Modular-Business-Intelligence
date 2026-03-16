@@ -554,11 +554,21 @@ class WBI_Suite_Loader {
         echo '</div>';
     }
 
+    /**
+     * Check if the current user can access a given module.
+     *
+     * @param string $module_slug The module slug with the 'wbi_enable_' prefix removed
+     *                            (e.g. 'picking' for 'wbi_enable_picking').
+     * @return bool
+     */
     public function user_can_access_module( $module_slug ) {
         $user     = wp_get_current_user();
         $perm_key = 'wbi_permissions_' . $module_slug;
         $opts     = get_option( 'wbi_modules_settings', array() );
-        $permissions = isset( $opts[ $perm_key ] ) ? (array) $opts[ $perm_key ] : array( 'administrator' );
+        // Fall back to administrator-only when option is unset OR saved as empty array.
+        $permissions = ( isset( $opts[ $perm_key ] ) && ! empty( $opts[ $perm_key ] ) )
+            ? (array) $opts[ $perm_key ]
+            : array( 'administrator' );
         return (bool) array_intersect( $user->roles, $permissions );
     }
 

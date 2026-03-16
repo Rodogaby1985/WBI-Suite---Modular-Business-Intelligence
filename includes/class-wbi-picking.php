@@ -1158,8 +1158,10 @@ class WBI_Picking_Module {
 
     public function ajax_mark_item() {
         check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
-        // Allow armadors (read capability) and shop managers
-        if ( ! current_user_can( 'read' ) ) wp_send_json_error( 'Sin permisos' );
+        // Allow armadors and shop managers/admins
+        $user    = wp_get_current_user();
+        $allowed = current_user_can( 'manage_woocommerce' ) || in_array( 'wbi_armador', (array) $user->roles, true );
+        if ( ! $allowed ) wp_send_json_error( 'Sin permisos' );
 
         $order_id    = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
         $item_id     = isset( $_POST['item_id'] )  ? intval( $_POST['item_id'] )  : 0;
@@ -1186,8 +1188,10 @@ class WBI_Picking_Module {
 
     public function ajax_save_order_notes() {
         check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
-        // Allow armadors (read capability) and shop managers
-        if ( ! current_user_can( 'read' ) ) wp_send_json_error( 'Sin permisos' );
+        // Allow armadors and shop managers/admins
+        $user    = wp_get_current_user();
+        $allowed = current_user_can( 'manage_woocommerce' ) || in_array( 'wbi_armador', (array) $user->roles, true );
+        if ( ! $allowed ) wp_send_json_error( 'Sin permisos' );
 
         $order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
         $notes    = isset( $_POST['notes'] )    ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '';

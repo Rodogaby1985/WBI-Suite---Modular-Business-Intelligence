@@ -760,12 +760,14 @@ class WBI_Barcode_Module {
             $sku_or_id = sanitize_text_field( trim( $row[ $id_col ] ) );
             $barcode   = sanitize_text_field( trim( $row[ $barcode_col ] ) );
             if ( empty( $sku_or_id ) ) continue;
-            $pid = is_numeric( $sku_or_id ) ? intval( $sku_or_id ) : wc_get_product_id_by_sku( $sku_or_id );
-            if ( ! $pid ) {
-                // Also try by SKU if numeric lookup failed to find a product
-                if ( is_numeric( $sku_or_id ) && ! wc_get_product( intval( $sku_or_id ) ) ) {
+            // Try numeric ID first; if product not found, fall back to SKU lookup.
+            if ( is_numeric( $sku_or_id ) ) {
+                $pid = intval( $sku_or_id );
+                if ( ! wc_get_product( $pid ) ) {
                     $pid = wc_get_product_id_by_sku( $sku_or_id );
                 }
+            } else {
+                $pid = wc_get_product_id_by_sku( $sku_or_id );
             }
             if ( ! $pid ) {
                 $errors[] = 'SKU/ID no encontrado: ' . $sku_or_id;
