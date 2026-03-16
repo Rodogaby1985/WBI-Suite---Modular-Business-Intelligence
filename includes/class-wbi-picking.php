@@ -136,11 +136,11 @@ class WBI_Picking_Module {
 
         // Get processing orders that have no picking status (meta does not exist or is empty)
         $pending_ids = wc_get_orders( array(
-            'status'     => 'processing',
+            'status'     => array( 'processing', 'on-hold' ),
             'limit'      => -1,
             'return'     => 'ids',
             'orderby'    => 'date',
-            'order'      => 'ASC',
+            'order'      => 'DESC',
             'meta_query' => array(
                 'relation' => 'OR',
                 array(
@@ -228,6 +228,8 @@ class WBI_Picking_Module {
             'limit'      => $per_page,
             'page'       => $paged,
             'return'     => 'ids',
+            'orderby'    => 'date',
+            'order'      => 'DESC',
             'meta_query' => array(
                 array( 'key' => '_wbi_picking_status', 'value' => 'picking', 'compare' => '=' ),
             ),
@@ -1261,29 +1263,61 @@ class WBI_Picking_Module {
             wp_die( esc_html__( 'No tenés permisos para acceder al Panel de Armado.', 'wbi-suite' ) );
         }
 
-        $orders = wc_get_orders( array(
-            'status'   => array( 'processing', 'on-hold' ),
-            'limit'    => 50,
-            'orderby'  => 'date',
-            'order'    => 'DESC',
-        ) );
+        $per_page = 20;
+        $paged    = max( 1, intval( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
 
-        // Filter out fully-picked orders
-        $display_orders = array();
-        foreach ( $orders as $order ) {
-            $picking_status = $order->get_meta( '_wbi_picking_status' );
-            if ( 'picked' !== $picking_status ) {
-                $display_orders[] = $order;
-            }
-        }
+        // Count total (exclude fully-picked orders at DB level)
+        $total_ids = wc_get_orders( array(
+            'status'     => array( 'processing', 'on-hold' ),
+            'limit'      => -1,
+            'return'     => 'ids',
+            'meta_query' => array(
+                'relation' => 'OR',
+                array(
+                    'key'     => '_wbi_picking_status',
+                    'compare' => 'NOT EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_picking_status',
+                    'value'   => 'picked',
+                    'compare' => '!=',
+                ),
+            ),
+        ) );
+        $total = count( $total_ids );
+
+        $display_orders = wc_get_orders( array(
+            'status'     => array( 'processing', 'on-hold' ),
+            'limit'      => $per_page,
+            'page'       => $paged,
+            'orderby'    => 'date',
+            'order'      => 'DESC',
+            'meta_query' => array(
+                'relation' => 'OR',
+                array(
+                    'key'     => '_wbi_picking_status',
+                    'compare' => 'NOT EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_picking_status',
+                    'value'   => 'picked',
+                    'compare' => '!=',
+                ),
+            ),
+        ) );
         ?>
         <div class="wrap">
-            <h1>Panel de Armado</h1>
+            <h1>Panel de Armado <span style="background:#d63638;color:#fff;border-radius:12px;padding:2px 10px;font-size:14px;margin-left:8px;"><?php echo intval( $total ); ?></span></h1>
             <p>Pedidos pendientes de armado. Solo se muestran los datos necesarios para preparar los pedidos.</p>
 
             <?php if ( empty( $display_orders ) ) : ?>
                 <div class="notice notice-success inline"><p>No hay pedidos pendientes de armado.</p></div>
-            <?php else : ?>
+            <?php else :
+                $offset = ( $paged - 1 ) * $per_page;
+                $from   = $offset + 1;
+                $to     = min( $offset + $per_page, $total );
+                echo '<p style="color:#50575e;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total ) . ' pedidos.</p>';
+            ?>
                 <table class="widefat striped" style="margin-top:16px;">
                     <thead>
                         <tr>
@@ -1392,6 +1426,20 @@ class WBI_Picking_Module {
                     });
                 })();
                 </script>
+
+                <?php if ( $total > $per_page ) :
+                    $pagination = paginate_links( array(
+                        'base'      => add_query_arg( 'paged', '%#%' ),
+                        'format'    => '',
+                        'current'   => $paged,
+                        'total'     => ceil( $total / $per_page ),
+                        'prev_text' => '&laquo;',
+                        'next_text' => '&raquo;',
+                    ) );
+                    if ( $pagination ) : ?>
+                        <div class="tablenav"><div class="tablenav-pages" style="margin-top:10px;"><?php echo $pagination; ?></div></div>
+                    <?php endif;
+                endif; ?>
             <?php endif; ?>
         </div>
         <?php
