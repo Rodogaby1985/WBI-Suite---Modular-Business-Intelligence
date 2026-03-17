@@ -286,6 +286,7 @@ class WBI_Scoring_Module {
 
             <p style="color:#555;">Total: <strong><?php echo intval( $total_users ); ?></strong> clientes</p>
 
+            <div class="wbi-table-responsive">
             <table class="widefat striped wbi-sortable">
                 <thead>
                     <tr>
@@ -322,6 +323,7 @@ class WBI_Scoring_Module {
                 <?php endif; ?>
                 </tbody>
             </table>
+            </div>
 
             <?php if ( $total_pages > 1 ) :
                 $pagination = paginate_links( array(

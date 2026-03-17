@@ -266,6 +266,7 @@ class WBI_Cashflow_Module {
             <!-- TABLA DE PROYECCIÓN -->
             <div style="background:#fff; padding:20px; border:1px solid #c3c4c7; margin-bottom:20px;">
                 <h2 style="margin-top:0;">📅 Tabla de Proyección Mensual</h2>
+                <div class="wbi-table-responsive">
                 <table class="widefat striped">
                     <thead>
                         <tr>
@@ -305,6 +306,7 @@ class WBI_Cashflow_Module {
                     <?php endforeach; ?>
                     </tbody>
                 </table>
+                </div>
                 <p style="font-size:12px; color:#646970; margin-top:10px;">
                     * Los ingresos futuros se proyectan como el promedio de los últimos 3 meses reales.
                 </p>
@@ -317,6 +319,7 @@ class WBI_Cashflow_Module {
                 <div style="background:#fff; padding:20px; border:1px solid #c3c4c7;">
                     <h2 style="margin-top:0;">💸 Gastos Configurados</h2>
                     <?php if ( ! empty( $expenses ) ) : ?>
+                    <div class="wbi-table-responsive">
                     <table class="widefat striped">
                         <thead>
                             <tr>
@@ -349,6 +352,7 @@ class WBI_Cashflow_Module {
                         <?php endforeach; ?>
                         </tbody>
                     </table>
+                    </div>
                     <?php else : ?>
                         <p style="color:#646970;">No hay gastos registrados aún.</p>
                     <?php endif; ?>

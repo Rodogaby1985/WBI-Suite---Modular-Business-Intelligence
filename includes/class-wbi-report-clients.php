@@ -101,18 +101,22 @@ class WBI_Report_Clients {
                         </script>';
                     }
 
+                    echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Total Gastado</th><th>Cant. Pedidos</th></tr></thead><tbody>';
                     if($top) foreach($top as $c) echo "<tr><td><strong>" . esc_html($c->display_name) . "</strong></td><td>" . esc_html($c->user_email) . "</td><td>".wc_price($c->total_val)."</td><td>" . intval($c->count_val) . "</td></tr>";
                     else echo "<tr><td colspan=4>No hay datos.</td></tr>";
                     echo '</tbody></table>';
+                    echo '</div>';
                     
                 } elseif($tab=='active'){
                     $active = $this->engine->get_active_customers_list();
                     echo '<h3>✅ Clientes Activos (Últimos 60 días)</h3>';
+                    echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Última Compra</th></tr></thead><tbody>';
                     if($active) foreach($active as $a) echo "<tr><td>" . esc_html($a->display_name) . "</td><td>" . esc_html($a->user_email) . "</td><td>".date('d/m/Y', strtotime($a->last_buy))."</td></tr>";
                     else echo "<tr><td colspan=3>Sin actividad.</td></tr>";
                     echo '</tbody></table>';
+                    echo '</div>';
                 } elseif($tab=='zones'){
                     if ( $city !== '' ) {
                         // Detail view: show users for the selected city
@@ -124,6 +128,7 @@ class WBI_Report_Clients {
                         $customers = $this->engine->get_customers_by_city( $city );
                         $count = $customers ? count( $customers ) : 0;
                         echo '<h3>👥 Detalle de usuarios en: ' . esc_html( $city ) . ' (' . intval( $count ) . ')</h3>';
+                        echo '<div class="wbi-table-responsive">'; 
                         echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Fecha de Registro</th><th>Ciudad</th></tr></thead><tbody>';
                         if ( $customers ) {
                             foreach ( $customers as $u ) {
@@ -133,10 +138,12 @@ class WBI_Report_Clients {
                             echo '<tr><td colspan="4">Sin datos.</td></tr>';
                         }
                         echo '</tbody></table>';
+                        echo '</div>';
                     } else {
                         // Summary view: show zones table with clickable counts
                         $zones = $this->engine->get_new_customers_zones();
                         echo '<h3>🗺️ Nuevos registros (Últimos 60 días)</h3>';
+                        echo '<div class="wbi-table-responsive">'; 
                         echo '<table class="widefat striped wbi-sortable" style="max-width:500px;"><thead><tr><th>Ciudad</th><th>Nuevos Registros</th></tr></thead><tbody>';
                         if ( $zones ) {
                             foreach ( $zones as $z ) {
@@ -154,6 +161,7 @@ class WBI_Report_Clients {
                             echo '<tr><td colspan="2">Sin datos.</td></tr>';
                         }
                         echo '</tbody></table>';
+                        echo '</div>';
                     }
                 }
                 ?>

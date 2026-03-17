@@ -2,7 +2,7 @@
 /**
  * Plugin Name: wooErp — Suite de Gestión para WooCommerce
  * Description: Suite modular de gestión integral: B2B, BI, Stock, Facturación, Picking y más.
- * Version: 7.1.0
+ * Version: 8.0.0
  * Author: Rodrigo Castañera
  */
 
@@ -27,6 +27,8 @@ class WBI_Suite_Loader {
         // Admin notice and redirect when license is not active
         add_action( 'admin_notices', array( $this, 'license_admin_notice' ) );
         add_action( 'admin_init', array( $this, 'maybe_redirect_to_license' ) );
+
+        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_css' ) );
 
         // Ensure the armador role exists
         add_action( 'init', array( $this, 'ensure_armador_role' ) );
@@ -476,6 +478,20 @@ class WBI_Suite_Loader {
         }
     }
 
+    public function enqueue_admin_css( $hook ) {
+        if ( strpos( $hook, 'wbi' ) === false &&
+             'toplevel_page_wbi-dashboard-view' !== $hook &&
+             strpos( $hook, 'woocommerce_page_wbi' ) === false ) {
+            return;
+        }
+        wp_enqueue_style(
+            'wbi-admin',
+            plugin_dir_url( __FILE__ ) . 'assets/admin.css',
+            array(),
+            '8.0.0'
+        );
+    }
+
     public function register_settings() {
         register_setting( 'wbi_group', 'wbi_modules_settings' );
         
@@ -587,7 +603,7 @@ class WBI_Suite_Loader {
         }
 
         $license_active = class_exists( 'WBI_License_Manager' ) && WBI_License_Manager::is_active();
-        $version        = '7.1.0';
+        $version        = '8.0.0';
 
         // Module definitions: key, icon, name, description, page_slug, group
         $modules = array(
@@ -622,38 +638,6 @@ class WBI_Suite_Loader {
         }
         ?>
         <div class="wrap">
-            <style>
-            .wbi-config-header { display:flex; align-items:center; gap:15px; margin-bottom:24px; padding:20px; background:#fff; border:1px solid #c3c4c7; border-radius:6px; }
-            .wbi-config-header h1 { margin:0; font-size:24px; }
-            .wbi-version-badge { background:#0073aa; color:#fff; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:bold; }
-            .wbi-license-badge { padding:3px 10px; border-radius:12px; font-size:12px; font-weight:bold; }
-            .wbi-license-badge.active { background:#00a32a; color:#fff; }
-            .wbi-license-badge.inactive { background:#d63638; color:#fff; }
-            .wbi-stats { margin-left:auto; font-size:13px; color:#50575e; }
-
-            .wbi-group-title { font-size:16px; font-weight:bold; margin:24px 0 10px; color:#1d2327; border-bottom:2px solid #e0e0e0; padding-bottom:6px; }
-            .wbi-card-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; margin-bottom:8px; }
-            @media (max-width:1100px) { .wbi-card-grid { grid-template-columns:repeat(2, 1fr); } }
-            @media (max-width:700px)  { .wbi-card-grid { grid-template-columns:1fr; } }
-
-            .wbi-module-card { background:#fff; border:2px solid #e0e0e0; border-radius:8px; padding:16px; transition:box-shadow .2s, border-color .2s, transform .15s; display:flex; flex-direction:column; gap:10px; }
-            .wbi-module-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.1); transform:translateY(-2px); }
-            .wbi-module-card.active { border-color:#00a32a; }
-            .wbi-module-card .card-icon { font-size:28px; line-height:1; }
-            .wbi-module-card .card-name { font-size:15px; font-weight:700; color:#1d2327; margin:0; }
-            .wbi-module-card .card-desc { font-size:12px; color:#50575e; margin:0; }
-            .wbi-module-card .card-footer { display:flex; align-items:center; justify-content:space-between; margin-top:4px; }
-            .wbi-module-card .card-link { font-size:12px; color:#0073aa; text-decoration:none; }
-            .wbi-module-card .card-link:hover { text-decoration:underline; }
-
-            /* Toggle switch */
-            .wbi-toggle { position:relative; display:inline-block; width:44px; height:22px; }
-            .wbi-toggle input { opacity:0; width:0; height:0; }
-            .wbi-toggle-slider { position:absolute; cursor:pointer; inset:0; background:#ccc; border-radius:22px; transition:.3s; }
-            .wbi-toggle-slider:before { content:''; position:absolute; width:16px; height:16px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.3s; }
-            .wbi-toggle input:checked + .wbi-toggle-slider { background:#00a32a; }
-            .wbi-toggle input:checked + .wbi-toggle-slider:before { transform:translateX(22px); }
-            </style>
 
             <!-- Header -->
             <div class="wbi-config-header">

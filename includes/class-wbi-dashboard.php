@@ -29,47 +29,13 @@ class WBI_Dashboard_View {
         if ( 'toplevel_page_wbi-dashboard-view' !== $hook ) return;
 
         wp_enqueue_script( 'wbi-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '4.4.0', false );
-        
-        wp_register_style( 'wbi-admin-css', false );
-        wp_enqueue_style( 'wbi-admin-css' );
-        // ESTILOS VISUALES COMPLETOS (RESTAURADOS)
-        wp_add_inline_style( 'wbi-admin-css', "
-            .wbi-wrap { max-width: 1250px; margin: 20px 20px 50px; }
-            .wbi-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-            .wbi-section-title { font-size: 16px; margin: 35px 0 15px; border-bottom: 1px solid #ccc; padding-bottom: 8px; color:#2c3338; font-weight:600; }
-            
-            /* GRID SYSTEMS */
-            .wbi-grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px; }
-            .wbi-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 20px; }
-            
-            /* CARDS */
-            .wbi-card { background: #fff; border: 1px solid #c3c4c7; border-radius: 3px; padding: 20px; box-shadow: 0 1px 1px rgba(0,0,0,.04); }
-            .wbi-card.blue { border-top: 3px solid #2271b1; }
-            .wbi-card.green { border-top: 3px solid #00a32a; }
-            .wbi-card.red { border-top: 3px solid #d63638; }
-            .wbi-card.orange { border-top: 3px solid #dba617; }
-            
-            /* TYPOGRAPHY */
-            .wbi-number { font-size: 28px; font-weight: 700; color: #1d2327; margin: 10px 0 5px; line-height:1; }
-            .wbi-label { text-transform: uppercase; font-size: 11px; color: #646970; font-weight: 600; letter-spacing: 0.5px; }
-            .wbi-compare-value { font-size: 13px; color: #646970; margin-top: 4px; }
-            .wbi-delta { font-weight: 700; }
-            .wbi-delta.positive { color: #00a32a; }
-            .wbi-delta.negative { color: #d63638; }
-            
-            /* TABLES */
-            .wbi-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-            .wbi-table th { text-align: left; border-bottom: 2px solid #f0f0f1; padding: 8px 4px; color: #50575e; font-size:11px; text-transform:uppercase; }
-            .wbi-table td { border-bottom: 1px solid #f0f0f1; padding: 8px 4px; color: #3c434a; }
-            .wbi-table tr:last-child td { border-bottom: none; }
-            
-            /* FILTERS BAR */
-            .wbi-filter-bar { background: #fff; padding: 15px 20px; border: 1px solid #c3c4c7; margin-bottom: 25px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; border-radius: 3px; border-left: 4px solid #2271b1; }
-            .wbi-date-inputs { display: inline-flex; gap: 10px; align-items: center; background: #f0f0f1; padding: 5px 10px; border-radius: 4px; }
-            
-            /* CHARTS */
-            .wbi-chart-container { position: relative; max-height: 300px; }
-        ");
+
+        wp_enqueue_style(
+            'wbi-admin',
+            plugin_dir_url( dirname( __FILE__ ) ) . 'assets/admin.css',
+            array(),
+            '8.0.0'
+        );
     }
 
     /**
