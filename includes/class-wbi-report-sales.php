@@ -109,10 +109,12 @@ class WBI_Report_Sales {
                         </script>';
                     }
 
+                    echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Fecha</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
                     if ( $data ) foreach($data as $r) echo "<tr><td>" . esc_html($r->period) . "</td><td>" . intval($r->orders) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
                     else echo '<tr><td colspan="3">Sin datos en este periodo.</td></tr>';
                     echo '</tbody></table>';
+                    echo '</div>';
                     
                 } elseif ( $tab === 'source' ) {
                     $data = $this->engine->get_sales_by_source($start, $end, $statuses);
@@ -127,10 +129,12 @@ class WBI_Report_Sales {
                         })();
                         </script>';
                     }
+                    echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Origen</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
                     if($data) foreach($data as $r) echo "<tr><td>" . esc_html(ucfirst($r->source?:'Web/Directo')) . "</td><td>" . intval($r->count) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
                     else echo "<tr><td colspan=3>No se ha definido origen para las ventas de este periodo.</td></tr>";
                     echo '</tbody></table>';
+                    echo '</div>';
                     
                 } elseif ( $tab === 'cat' ) {
                     $data = $this->engine->get_sales_by_taxonomy('product_cat', $start, $end, $statuses);
@@ -145,17 +149,21 @@ class WBI_Report_Sales {
                         })();
                         </script>';
                     }
+                    echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Categoría</th><th>Unidades Vendidas</th><th>Total Generado ($)</th></tr></thead><tbody>';
                     if($data) foreach($data as $r) echo "<tr><td>" . esc_html($r->name) . "</td><td>" . intval($r->qty) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
                     else echo "<tr><td colspan=3>Sin datos.</td></tr>";
                     echo '</tbody></table>';
+                    echo '</div>';
                     
                 } elseif ( $tab === 'collection' ) {
                     $data = $this->engine->get_sales_by_taxonomy('coleccion', $start, $end, $statuses);
+                    echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Colección</th><th>Unidades Vendidas</th><th>Total Generado ($)</th></tr></thead><tbody>';
                     if($data) foreach($data as $r) echo "<tr><td>" . esc_html($r->name) . "</td><td>" . intval($r->qty) . "</td><td><strong>" . wc_price($r->total) . "</strong></td></tr>";
                     else echo "<tr><td colspan=3>No se encontraron ventas asociadas a colecciones en este periodo (o la taxonomía 'coleccion' no existe).</td></tr>";
                     echo '</tbody></table>';
+                    echo '</div>';
 
                 } elseif ( $tab === 'province' ) {
                     $province = isset($_GET['province']) ? sanitize_text_field($_GET['province']) : '';
@@ -182,6 +190,7 @@ class WBI_Report_Sales {
                             'wc-failed'     => '🚫 Fallido',
                             'wc-refunded'   => '↩ Reembolsado',
                         );
+                        echo '<div class="wbi-table-responsive">'; 
                         echo '<table class="widefat striped wbi-sortable"><thead><tr><th>#Pedido</th><th>Fecha</th><th>Cliente</th><th>Email</th><th>Total</th><th>Estado</th></tr></thead><tbody>';
                         if ( $orders ) {
                             foreach ( $orders as $o ) {
@@ -201,6 +210,7 @@ class WBI_Report_Sales {
                             echo '<tr><td colspan="6">Sin datos de pedidos para esta provincia.</td></tr>';
                         }
                         echo '</tbody></table>';
+                        echo '</div>';
                     } else {
                         // Summary view: show chart + table with clickable order counts
                         $data = $this->engine->get_sales_by_province($start, $end, $statuses);
@@ -217,6 +227,7 @@ class WBI_Report_Sales {
                             })();
                             </script>';
                         }
+                        echo '<div class="wbi-table-responsive">'; 
                         echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Provincia</th><th>Cant. Pedidos</th><th>Total Facturado</th></tr></thead><tbody>';
                         if($data) foreach($data as $r) {
                             $prov_name = WBI_Metrics_Engine::get_province_name( $r->province ?: '' ) ?: 'Desconocida';
@@ -234,6 +245,7 @@ class WBI_Report_Sales {
                             }
                         } else echo "<tr><td colspan=3>Sin datos de provincia en este periodo.</td></tr>";
                         echo '</tbody></table>';
+                        echo '</div>';
                     }
                 }
                 ?>

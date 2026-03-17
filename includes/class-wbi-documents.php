@@ -486,7 +486,7 @@ class WBI_Documents_Module {
         <div class="wrap">
             <h1>📑 Documentos Comerciales</h1>
 
-            <nav class="nav-tab-wrapper" style="margin-bottom:20px;">
+            <nav class="nav-tab-wrapper wbi-nav-tabs" style="margin-bottom:20px;">
                 <a href="<?php echo esc_url( $base_url . '&tab=pending' ); ?>"
                    class="nav-tab <?php echo $active_tab === 'pending' ? 'nav-tab-active' : ''; ?>">
                     📋 Pedidos sin Documento
@@ -554,6 +554,7 @@ class WBI_Documents_Module {
 
         echo '<p style="color:#555;">Total: <strong>' . intval( $total ) . '</strong> pedidos sin documento.</p>';
         ?>
+        <div class="wbi-table-responsive">
         <table class="widefat striped wbi-sortable">
             <thead>
                 <tr>
@@ -598,6 +599,7 @@ class WBI_Documents_Module {
             <?php endif; ?>
             </tbody>
         </table>
+        </div>
 
         <?php
         if ( $total_pages > 1 ) {
@@ -672,6 +674,7 @@ class WBI_Documents_Module {
 
         <p style="color:#555;">Total: <strong><?php echo intval( $total_rows ); ?></strong> facturas en el período.</p>
 
+        <div class="wbi-table-responsive">
         <table class="widefat fixed striped wbi-sortable">
             <thead>
                 <tr>
@@ -719,6 +722,7 @@ class WBI_Documents_Module {
             <?php endif; ?>
             </tbody>
         </table>
+        </div>
 
         <?php
         if ( $total_rows > $per_page ) {
@@ -773,6 +777,7 @@ class WBI_Documents_Module {
         echo '<p style="color:#555;">Total: <strong>' . intval( $total ) . '</strong> remitos &nbsp;';
         echo '<a href="' . esc_url( $export_url ) . '" class="button">Exportar CSV</a></p>';
         ?>
+        <div class="wbi-table-responsive">
         <table class="widefat striped wbi-sortable">
             <thead>
                 <tr>
@@ -813,6 +818,7 @@ class WBI_Documents_Module {
             <?php endif; ?>
             </tbody>
         </table>
+        </div>
 
         <?php
         if ( $total_pages > 1 ) {
@@ -1278,6 +1284,7 @@ function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pesta�
 
         echo '<p style="color:#555;">Total: <strong>' . intval( $total ) . '</strong> pedidos para despachar.</p>';
         ?>
+        <div class="wbi-table-responsive">
         <table class="widefat striped wbi-sortable">
             <thead>
                 <tr>
@@ -1323,6 +1330,7 @@ function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pesta�
             <?php endif; ?>
             </tbody>
         </table>
+        </div>
 
         <?php
         if ( $total_pages > 1 ) {

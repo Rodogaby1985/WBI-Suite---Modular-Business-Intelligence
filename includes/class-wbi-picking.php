@@ -177,6 +177,7 @@ class WBI_Picking_Module {
         $to   = min( $offset + $per_page, $total_count );
         echo '<p style="margin-bottom:8px;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total_count ) . ' pedidos</p>';
 
+        echo '<div class="wbi-table-responsive">';
         echo '<table class="widefat striped wbi-sortable"><thead><tr>
             <th>#Pedido</th><th>Fecha</th><th>Cliente</th><th>Items</th><th>Total</th><th>Acción</th>
         </tr></thead><tbody>';
@@ -196,6 +197,7 @@ class WBI_Picking_Module {
         }
 
         echo '</tbody></table>';
+        echo '</div>';
 
         $total_pages = (int) ceil( $total_count / $per_page );
         if ( $total_pages > 1 ) {
@@ -253,6 +255,7 @@ class WBI_Picking_Module {
         $to     = min( $offset + $per_page, $total_count );
         echo '<p style="margin-bottom:8px;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total_count ) . ' pedidos</p>';
 
+        echo '<div class="wbi-table-responsive">';
         echo '<table class="widefat striped wbi-sortable"><thead><tr>
             <th>#Pedido</th><th>Fecha</th><th>Cliente</th><th>Progreso</th><th>Operador</th><th>Acción</th>
         </tr></thead><tbody>';
@@ -284,6 +287,7 @@ class WBI_Picking_Module {
         }
 
         echo '</tbody></table>';
+        echo '</div>';
 
         $total_pages = (int) ceil( $total_count / $per_page );
         if ( $total_pages > 1 ) {
@@ -380,6 +384,7 @@ class WBI_Picking_Module {
         $to     = min( $offset + $per_page, $total_count );
         echo '<p style="margin-bottom:8px;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total_count ) . ' pedidos</p>';
 
+        echo '<div class="wbi-table-responsive">';
         echo '<table class="widefat striped wbi-sortable"><thead><tr>
             <th>#Pedido</th><th>Fecha</th><th>Cliente</th><th>Items</th>
             <th>Tiempo de Armado</th><th>Operador</th><th>Estado</th>
@@ -419,6 +424,7 @@ class WBI_Picking_Module {
         }
 
         echo '</tbody></table>';
+        echo '</div>';
 
         $total_pages = (int) ceil( $total_count / $per_page );
         if ( $total_pages > 1 ) {
@@ -523,6 +529,7 @@ class WBI_Picking_Module {
             <!-- Items table -->
             <div style="background:#fff;border:1px solid #ccd0d4;padding:15px 20px;margin-bottom:16px;">
                 <h3 style="margin-top:0;">Items del Pedido</h3>
+                <div class="wbi-table-responsive">
                 <table class="widefat striped" id="wbi-items-table">
                     <thead>
                         <tr>
@@ -626,6 +633,7 @@ class WBI_Picking_Module {
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+                </div>
             </div>
 
             <!-- Order notes -->
@@ -1339,6 +1347,7 @@ class WBI_Picking_Module {
                 $to     = min( $offset + $per_page, $total );
                 echo '<p style="color:#50575e;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total ) . ' pedidos.</p>';
             ?>
+                <div class="wbi-table-responsive">
                 <table class="widefat striped" style="margin-top:16px;">
                     <thead>
                         <tr>
@@ -1383,6 +1392,7 @@ class WBI_Picking_Module {
                         <tr class="wbi-armador-detail" id="wbi-detail-<?php echo intval( $order_id ); ?>" style="display:none;">
                             <td colspan="7" style="padding:0;">
                                 <div style="padding:12px 20px;background:#f9f9f9;border-top:1px solid #e0e0e0;">
+                                    <div class="wbi-table-responsive">
                                     <table class="widefat striped" style="margin:0;">
                                         <thead>
                                             <tr>
@@ -1424,6 +1434,7 @@ class WBI_Picking_Module {
                                         <?php endforeach; ?>
                                         </tbody>
                                     </table>
+                                    </div>
                                 </div>
                             </td>
                         </tr>
@@ -1431,6 +1442,7 @@ class WBI_Picking_Module {
                     <?php endforeach; ?>
                     </tbody>
                 </table>
+                </div>
 
                 <script>
                 (function() {
