@@ -192,6 +192,13 @@ class WBI_Documents_Module {
             echo '<p style="color:#888;">Sin documentos generados.</p>';
         }
 
+        $orden_url = wp_nonce_url(
+            admin_url( 'admin-post.php?action=wbi_view_document&type=orden&order_id=' . $order_id ),
+            'wbi_view_document_' . $order_id
+        );
+        echo '<hr style="margin:8px 0;">';
+        echo '<a href="' . esc_url( $orden_url ) . '" target="_blank" class="button button-small" style="width:100%;text-align:center;">📦 Orden de Pedido</a>';
+
         echo '<p style="margin-top:6px;"><a href="' . esc_url( $docs_url ) . '" class="button button-small">🗂 Ir a Documentos →</a></p>';
         echo '</div>';
     }
@@ -238,6 +245,8 @@ class WBI_Documents_Module {
             $this->generate_invoice( $order );
         } elseif ( $doc_type === 'remito' ) {
             $this->generate_remito( $order );
+        } elseif ( $doc_type === 'orden' ) {
+            $this->generate_orden( $order );
         } else {
             wp_die( 'Tipo de documento inválido.' );
         }
@@ -322,6 +331,16 @@ class WBI_Documents_Module {
         exit;
     }
 
+    private function generate_orden( $order ) {
+        $order_id = $order->get_id();
+        $redirect = admin_url(
+            'admin-post.php?action=wbi_view_document&type=orden&order_id=' . $order_id .
+            '&_wpnonce=' . wp_create_nonce( 'wbi_view_document_' . $order_id )
+        );
+        wp_redirect( $redirect );
+        exit;
+    }
+
     // =========================================================================
     // ADMIN-POST: VIEW DOCUMENT PDF
     // =========================================================================
@@ -351,6 +370,10 @@ class WBI_Documents_Module {
             if ( ob_get_length() ) ob_end_clean();
             header( 'Content-Type: text/html; charset=utf-8' );
             $this->render_remito_pdf( $order );
+        } elseif ( $doc_type === 'orden' ) {
+            if ( ob_get_length() ) ob_end_clean();
+            header( 'Content-Type: text/html; charset=utf-8' );
+            $this->render_orden_pdf( $order );
         } else {
             wp_die( 'Tipo de documento inválido.' );
         }
@@ -476,6 +499,10 @@ class WBI_Documents_Module {
                    class="nav-tab <?php echo $active_tab === 'remitos' ? 'nav-tab-active' : ''; ?>">
                     📄 Remitos Generados
                 </a>
+                <a href="<?php echo esc_url( $base_url . '&tab=ordenes' ); ?>"
+                   class="nav-tab <?php echo $active_tab === 'ordenes' ? 'nav-tab-active' : ''; ?>">
+                    📦 Órdenes de Pedido
+                </a>
             </nav>
 
             <?php
@@ -485,6 +512,8 @@ class WBI_Documents_Module {
                 $this->render_tab_invoices();
             } elseif ( $active_tab === 'remitos' ) {
                 $this->render_tab_remitos();
+            } elseif ( $active_tab === 'ordenes' ) {
+                $this->render_tab_ordenes();
             }
             ?>
         </div>
@@ -550,6 +579,7 @@ class WBI_Documents_Module {
                     $total       = wc_price( $order->get_total() );
                     $inv_url     = esc_url( admin_url( 'admin.php?page=wbi-documents&generate=invoice&order_id=' . $order_id ) );
                     $rem_url     = esc_url( admin_url( 'admin.php?page=wbi-documents&generate=remito&order_id=' . $order_id ) );
+                    $orden_url   = esc_url( admin_url( 'admin.php?page=wbi-documents&generate=orden&order_id=' . $order_id ) );
                     $edit_url    = esc_url( $order->get_edit_order_url() );
                 ?>
                 <tr>
@@ -561,6 +591,7 @@ class WBI_Documents_Module {
                     <td>
                         <a href="<?php echo $inv_url; ?>" class="button button-small button-primary">📑 Generar Factura</a>
                         <a href="<?php echo $rem_url; ?>" class="button button-small" style="margin-left:4px;">📄 Generar Remito</a>
+                        <a href="<?php echo $orden_url; ?>" class="button button-small" style="margin-left:4px;">📦 Orden de Pedido</a>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -849,7 +880,7 @@ class WBI_Documents_Module {
 
                 <div style="background:#fff;border:1px solid #c3c4c7;padding:20px;border-radius:6px;">
                     <h3 style="margin-top:0;">📑 Datos Fiscales</h3>
-                    <form method="post" action="<?php echo $action_url; ?>">
+                    <form method="post" action="<?php echo $action_url; ?>" target="_blank">
                         <?php wp_nonce_field( 'wbi_generate_document', '_wbi_doc_nonce' ); ?>
                         <input type="hidden" name="action" value="wbi_generate_document">
                         <input type="hidden" name="doc_type" value="invoice">
@@ -923,7 +954,7 @@ class WBI_Documents_Module {
                     <tr><th>Total</th><td><?php echo wc_price( $order->get_total() ); ?></td></tr>
                 </table>
 
-                <form method="post" action="<?php echo $action_url; ?>">
+                <form method="post" action="<?php echo $action_url; ?>" target="_blank">
                     <?php wp_nonce_field( 'wbi_generate_document', '_wbi_doc_nonce' ); ?>
                     <input type="hidden" name="action" value="wbi_generate_document">
                     <input type="hidden" name="doc_type" value="remito">
@@ -939,7 +970,40 @@ class WBI_Documents_Module {
         </div>
         <?php
         else :
-            echo '<div class="notice notice-error"><p>Tipo de generación inválido.</p></div>';
+            if ( $generate_type === 'orden' ) :
+            ?>
+        <div class="wrap">
+            <h1>📦 Orden de Pedido — Pedido #<?php echo intval( $order_id ); ?></h1>
+            <p><a href="<?php echo $back_url; ?>">&larr; Volver a la lista</a></p>
+
+            <div style="max-width:600px;background:#fff;border:1px solid #c3c4c7;padding:20px;border-radius:6px;">
+                <h3 style="margin-top:0;">📋 Resumen del Pedido</h3>
+                <table class="widefat striped" style="margin-bottom:16px;">
+                    <tr><th>Pedido</th><td>#<?php echo intval( $order_id ); ?></td></tr>
+                    <tr><th>Cliente</th><td><?php echo esc_html( $client_name ); ?></td></tr>
+                    <tr><th>Dirección</th><td><?php echo esc_html( $order->get_billing_address_1() . ', ' . $order->get_billing_city() ); ?></td></tr>
+                    <tr><th>Total</th><td><?php echo wc_price( $order->get_total() ); ?></td></tr>
+                    <tr><th>Estado</th><td><?php echo esc_html( wc_get_order_status_name( $order->get_status() ) ); ?></td></tr>
+                </table>
+
+                <form method="post" action="<?php echo $action_url; ?>" target="_blank">
+                    <?php wp_nonce_field( 'wbi_generate_document', '_wbi_doc_nonce' ); ?>
+                    <input type="hidden" name="action" value="wbi_generate_document">
+                    <input type="hidden" name="doc_type" value="orden">
+                    <input type="hidden" name="order_id" value="<?php echo intval( $order_id ); ?>">
+
+                    <p class="submit">
+                        <button type="submit" class="button button-primary button-large">
+                            📦 Generar Orden de Pedido
+                        </button>
+                    </p>
+                </form>
+            </div>
+        </div>
+            <?php
+            else :
+                echo '<div class="notice notice-error"><p>Tipo de generación inválido.</p></div>';
+            endif;
         endif;
     }
 
@@ -980,11 +1044,14 @@ th { background:#f0f0f0; }
     .no-print { display:none; }
 }
 </style>
+<script>
+function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pestaña manualmente.'); } }
+</script>
 </head>
 <body>
 <div class="no-print" style="margin-bottom:15px;">
     <button onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
-    <button onclick="window.close()" style="margin-left:10px;">✕ Cerrar</button>
+    <button onclick="wbiClosePdf()" style="margin-left:10px;">← Cerrar pestaña</button>
 </div>
 
 <div class="header-grid">
@@ -1108,11 +1175,14 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
     .no-print { display: none !important; }
 }
 </style>
+<script>
+function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pestaña manualmente.'); } }
+</script>
 </head>
 <body>
 <div class="no-print" style="margin-bottom:15px;">
     <button onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
-    <button onclick="window.close()" style="margin-left:10px;">✕ Cerrar</button>
+    <button onclick="wbiClosePdf()" style="margin-left:10px;">← Cerrar pestaña</button>
 </div>
 <div class="remito-wrapper">
 
@@ -1175,6 +1245,289 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
 
     <div class="footer-bar">
         Documento generado por WBI Suite — <?php echo $company_name; ?>
+    </div>
+
+</div>
+</body>
+</html>
+        <?php
+    }
+
+    // =========================================================================
+    // TAB: ÓRDENES DE PEDIDO
+    // =========================================================================
+
+    private function render_tab_ordenes() {
+        $per_page = 20;
+        $paged    = max( 1, absint( $_GET['paged'] ?? 1 ) );
+        $offset   = ( $paged - 1 ) * $per_page;
+
+        $all_ids = wc_get_orders( array(
+            'status'  => array( 'wc-processing', 'wc-on-hold' ),
+            'limit'   => -1,
+            'return'  => 'ids',
+            'orderby' => 'date',
+            'order'   => 'DESC',
+        ) );
+
+        $total       = count( $all_ids );
+        $total_pages = $total > 0 ? (int) ceil( $total / $per_page ) : 1;
+        $paged_ids   = array_slice( $all_ids, $offset, $per_page );
+
+        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=ordenes' );
+
+        echo '<p style="color:#555;">Total: <strong>' . intval( $total ) . '</strong> pedidos para despachar.</p>';
+        ?>
+        <table class="widefat striped wbi-sortable">
+            <thead>
+                <tr>
+                    <th>#Pedido</th>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Método de Envío</th>
+                    <th>Total</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php if ( empty( $paged_ids ) ) : ?>
+                <tr><td colspan="6" style="text-align:center;color:#888;">No hay pedidos para despachar.</td></tr>
+            <?php else : ?>
+                <?php foreach ( $paged_ids as $order_id ) :
+                    $order = wc_get_order( $order_id );
+                    if ( ! $order ) continue;
+                    $date_obj     = $order->get_date_created();
+                    $date_fmt     = $date_obj ? $date_obj->date_i18n( 'd/m/Y' ) : '—';
+                    $client_name  = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ) ?: '—';
+                    $edit_url     = esc_url( $order->get_edit_order_url() );
+                    $shipping_methods = $order->get_shipping_methods();
+                    $shipping_name = '—';
+                    foreach ( $shipping_methods as $method ) {
+                        $shipping_name = esc_html( $method->get_name() );
+                        break;
+                    }
+                    $view_url = wp_nonce_url(
+                        admin_url( 'admin-post.php?action=wbi_view_document&type=orden&order_id=' . $order_id ),
+                        'wbi_view_document_' . $order_id
+                    );
+                ?>
+                <tr>
+                    <td><a href="<?php echo $edit_url; ?>">#<?php echo intval( $order_id ); ?></a></td>
+                    <td><?php echo esc_html( $date_fmt ); ?></td>
+                    <td><?php echo esc_html( $client_name ); ?></td>
+                    <td><?php echo $shipping_name; ?></td>
+                    <td><?php echo wc_price( $order->get_total() ); ?></td>
+                    <td><a href="<?php echo esc_url( $view_url ); ?>" target="_blank" class="button button-small">📦 Ver Orden</a></td>
+                </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+            </tbody>
+        </table>
+
+        <?php
+        if ( $total_pages > 1 ) {
+            echo '<div class="tablenav"><div class="tablenav-pages">';
+            echo paginate_links( array(
+                'base'      => add_query_arg( 'paged', '%#%', $base_url ),
+                'format'    => '',
+                'current'   => $paged,
+                'total'     => $total_pages,
+                'prev_text' => '&laquo;',
+                'next_text' => '&raquo;',
+            ) );
+            echo '</div></div>';
+        }
+    }
+
+    // =========================================================================
+    // PDF: ORDEN DE PEDIDO
+    // =========================================================================
+
+    private function render_orden_pdf( $order ) {
+        $order_id = $order->get_id();
+        $opts     = get_option( 'wbi_invoice_settings', array() );
+
+        $company_name = ! empty( $opts['razon_social'] ) ? $opts['razon_social'] : get_bloginfo( 'name' );
+        $company_cuit = ! empty( $opts['cuit'] ) ? $opts['cuit'] : '';
+        $company_addr = ! empty( $opts['address'] ) ? $opts['address'] : '';
+
+        $date_obj   = $order->get_date_created();
+        $date_fmt   = $date_obj ? $date_obj->date_i18n( 'd/m/Y' ) : date_i18n( 'd/m/Y' );
+        $status_lbl = wc_get_order_status_name( $order->get_status() );
+
+        // Customer data
+        $customer_name  = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
+        $customer_phone = $order->get_billing_phone();
+        $customer_email = $order->get_billing_email();
+        $customer_dni   = $order->get_meta( '_billing_dni', true ) ?: $order->get_meta( '_wbi_customer_cuit', true );
+
+        // Shipping address (fallback to billing)
+        $ship_addr1   = $order->get_shipping_address_1() ?: $order->get_billing_address_1();
+        $ship_addr2   = $order->get_shipping_address_2() ?: $order->get_billing_address_2();
+        $ship_city    = $order->get_shipping_city() ?: $order->get_billing_city();
+        $ship_postcode = $order->get_shipping_postcode() ?: $order->get_billing_postcode();
+        $ship_country = $order->get_shipping_country() ?: $order->get_billing_country();
+
+        $ship_state_code = $order->get_shipping_state() ?: $order->get_billing_state();
+        $ship_state_name = $ship_state_code;
+        if ( $ship_country && function_exists( 'WC' ) && WC()->countries ) {
+            $states = WC()->countries->get_states( $ship_country );
+            if ( is_array( $states ) && isset( $states[ $ship_state_code ] ) ) {
+                $ship_state_name = $states[ $ship_state_code ];
+            }
+        }
+
+        // Shipping method
+        $shipping_methods = $order->get_shipping_methods();
+        $shipping_name    = '—';
+        foreach ( $shipping_methods as $method ) {
+            $shipping_name = $method->get_name();
+            break;
+        }
+
+        $customer_note = $order->get_customer_note();
+
+        // Items
+        $items = $order->get_items();
+        ?>
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="UTF-8">
+<title>Orden de Pedido #<?php echo intval( $order_id ); ?></title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #000; padding: 20px; }
+.orden-wrapper { max-width: 800px; margin: 0 auto; }
+.orden-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #000; padding-bottom: 12px; margin-bottom: 16px; }
+.company-info h2 { font-size: 18px; font-weight: bold; }
+.company-info p { margin-top: 3px; color: #333; }
+.orden-meta { text-align: right; }
+.orden-meta .orden-title { font-size: 20px; font-weight: bold; color: #000; text-transform: uppercase; letter-spacing: 1px; }
+.orden-meta .orden-number { font-size: 16px; margin-top: 4px; }
+.section-title { font-weight: bold; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #555; background: #f5f5f5; padding: 4px 8px; margin: 12px 0 6px; }
+.info-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+.info-table th { width: 35%; text-align: left; padding: 5px 8px; font-weight: bold; background: #fafafa; border: 1px solid #ddd; }
+.info-table td { padding: 5px 8px; border: 1px solid #ddd; }
+table.items { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+table.items th { background: #f0f0f0; border-bottom: 2px solid #000; padding: 6px 8px; text-align: left; font-size: 11px; text-transform: uppercase; }
+table.items td { border-bottom: 1px solid #ddd; padding: 6px 8px; }
+table.items tr:last-child td { border-bottom: 2px solid #000; }
+.totals-table { width: 280px; margin-left: auto; border-collapse: collapse; margin-bottom: 16px; }
+.totals-table td { padding: 4px 8px; border: 1px solid #ddd; }
+.totals-table .label { font-weight: bold; background: #fafafa; }
+.totals-table .grand-total td { font-size: 14px; font-weight: bold; }
+.signature-block { margin-top: 30px; border-top: 1px dashed #999; padding-top: 12px; font-size: 11px; color: #555; }
+.footer-bar { margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 8px; font-size: 10px; color: #888; text-align: center; }
+@media print {
+    body { padding: 0; }
+    .no-print { display: none !important; }
+}
+</style>
+<script>
+function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pestaña manualmente.'); } }
+</script>
+</head>
+<body>
+<div class="no-print" style="margin-bottom:15px;">
+    <button onclick="window.print()">🖨️ Imprimir</button>
+    <button onclick="wbiClosePdf()" style="margin-left:10px;">← Cerrar pestaña</button>
+</div>
+<div class="orden-wrapper">
+
+    <div class="orden-header">
+        <div class="company-info">
+            <h2><?php echo esc_html( $company_name ); ?></h2>
+            <?php if ( $company_cuit ) : ?><p>CUIT: <?php echo esc_html( $company_cuit ); ?></p><?php endif; ?>
+            <?php if ( $company_addr ) : ?><p><?php echo esc_html( $company_addr ); ?></p><?php endif; ?>
+        </div>
+        <div class="orden-meta">
+            <div class="orden-title">Orden de Pedido</div>
+            <div class="orden-number">Pedido #<?php echo intval( $order_id ); ?></div>
+            <div style="margin-top:4px; font-size:12px;">Fecha: <strong><?php echo esc_html( $date_fmt ); ?></strong></div>
+            <div style="margin-top:2px; font-size:11px; color:#555;">Estado: <?php echo esc_html( $status_lbl ); ?></div>
+        </div>
+    </div>
+
+    <div class="section-title">Datos del Cliente</div>
+    <table class="info-table">
+        <tr><th>Nombre completo</th><td><?php echo esc_html( $customer_name ); ?></td></tr>
+        <tr><th>Teléfono</th><td><?php echo esc_html( $customer_phone ); ?></td></tr>
+        <tr><th>Email</th><td><?php echo esc_html( $customer_email ); ?></td></tr>
+        <tr><th>DNI / CUIT</th><td><?php echo esc_html( $customer_dni ); ?></td></tr>
+    </table>
+
+    <div class="section-title">Dirección de Envío</div>
+    <table class="info-table">
+        <tr><th>Dirección</th><td><?php echo esc_html( $ship_addr1 ); ?></td></tr>
+        <?php if ( $ship_addr2 ) : ?>
+        <tr><th>Dirección 2</th><td><?php echo esc_html( $ship_addr2 ); ?></td></tr>
+        <?php endif; ?>
+        <tr><th>Localidad</th><td><?php echo esc_html( $ship_city ); ?></td></tr>
+        <tr><th>Provincia</th><td><?php echo esc_html( $ship_state_name ); ?></td></tr>
+        <tr><th>Código Postal</th><td><?php echo esc_html( $ship_postcode ); ?></td></tr>
+        <tr><th>País</th><td><?php echo esc_html( $ship_country ); ?></td></tr>
+    </table>
+
+    <div class="section-title">Datos del Envío</div>
+    <table class="info-table">
+        <tr><th>Método de envío</th><td><?php echo esc_html( $shipping_name ); ?></td></tr>
+        <?php if ( $customer_note ) : ?>
+        <tr><th>Notas del cliente</th><td><?php echo esc_html( $customer_note ); ?></td></tr>
+        <?php endif; ?>
+    </table>
+
+    <div class="section-title">Detalle de Productos</div>
+    <table class="items">
+        <thead>
+            <tr>
+                <th style="width:35%;">Producto</th>
+                <th style="width:15%;">SKU</th>
+                <th style="width:15%;">Cód. Barra</th>
+                <th style="width:10%; text-align:center;">Cant.</th>
+                <th style="width:10%; text-align:center;">Peso</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php foreach ( $items as $item ) :
+            $product  = $item->get_product();
+            $sku      = $product ? $product->get_sku() : '';
+            $weight   = '';
+            $barcode  = '';
+            if ( $product ) {
+                $weight  = $product->get_weight();
+            $lookup_id = $product->get_id();
+                $barcode = get_post_meta( $lookup_id, '_wbi_barcode', true );
+            }
+        ?>
+            <tr>
+                <td><?php echo esc_html( $item->get_name() ); ?></td>
+                <td><?php echo esc_html( $sku ); ?></td>
+                <td><?php echo esc_html( $barcode ); ?></td>
+                <td style="text-align:center;"><?php echo intval( $item->get_quantity() ); ?></td>
+                <td style="text-align:center;"><?php echo $weight ? esc_html( $weight ) . ' kg' : '—'; ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+
+    <div class="section-title">Resumen</div>
+    <table class="totals-table">
+        <tr><td class="label">Subtotal</td><td><?php echo wc_price( $order->get_subtotal() ); ?></td></tr>
+        <tr><td class="label">Envío</td><td><?php echo wc_price( $order->get_shipping_total() ); ?></td></tr>
+        <tr class="grand-total"><td class="label">Total</td><td><?php echo wc_price( $order->get_total() ); ?></td></tr>
+        <tr><td class="label">Método de pago</td><td><?php echo esc_html( $order->get_payment_method_title() ); ?></td></tr>
+        <tr><td class="label">Bultos</td><td>________</td></tr>
+    </table>
+
+    <div class="signature-block">
+        Preparado por: _________________________ &nbsp;&nbsp;
+        Despachado por: _________________________ &nbsp;&nbsp;
+        Fecha despacho: _________________________
+    </div>
+
+    <div class="footer-bar">
+        Documento generado por WBI Suite
     </div>
 
 </div>
