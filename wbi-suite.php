@@ -2,7 +2,7 @@
 /**
  * Plugin Name: wooErp — Suite de Gestión para WooCommerce
  * Description: Suite modular de gestión integral: B2B, BI, Stock, Facturación, Picking y más.
- * Version: 7.1.0
+ * Version: 7.2.0
  * Author: Rodrigo Castañera
  */
 
@@ -502,17 +502,21 @@ class WBI_Suite_Loader {
         add_settings_section( 'wbi_permissions_section', 'Permisos por Módulo', array( $this, 'permissions_section_desc' ), 'wbi-settings' );
 
         $module_slugs = array(
-            'wbi_enable_b2b'        => 'Modo Mayorista B2B',
-            'wbi_enable_dashboard'  => 'Dashboard BI Suite',
-            'wbi_enable_barcode'    => 'Códigos de Barra',
-            'wbi_enable_picking'    => 'Picking & Armado',
-            'wbi_enable_costs'      => 'Costos y Márgenes',
-            'wbi_enable_suppliers'  => 'Proveedores',
-            'wbi_enable_scoring'    => 'Scoring Clientes',
-            'wbi_enable_remitos'    => 'Remitos',
-            'wbi_enable_pricelists' => 'Listas de Precios',
-            'wbi_enable_invoice'    => 'Facturación',
-            'wbi_enable_cashflow'   => 'Flujo de Caja',
+            'wbi_enable_b2b'           => 'Modo Mayorista B2B',
+            'wbi_enable_dashboard'     => 'Dashboard BI Suite',
+            'wbi_enable_barcode'       => 'Códigos de Barra',
+            'wbi_enable_picking'       => 'Picking & Armado',
+            'wbi_enable_costs'         => 'Costos y Márgenes',
+            'wbi_enable_suppliers'     => 'Proveedores',
+            'wbi_enable_scoring'       => 'Scoring de Clientes',
+            'wbi_enable_pricelists'    => 'Listas de Precios',
+            'wbi_enable_cashflow'      => 'Flujo de Caja',
+            'wbi_enable_taxes'         => 'Impuestos Avanzado',
+            'wbi_enable_whatsapp'      => 'WhatsApp',
+            'wbi_enable_notifications' => 'Notificaciones',
+            'wbi_enable_api'           => 'API REST',
+            // Virtual key for the unified documents module (invoice + remitos merged)
+            'wbi_enable_documents'     => 'Documentos',
         );
 
         foreach ( $module_slugs as $module_key => $module_name ) {
@@ -587,7 +591,7 @@ class WBI_Suite_Loader {
         }
 
         $license_active = class_exists( 'WBI_License_Manager' ) && WBI_License_Manager::is_active();
-        $version        = '7.1.0';
+        $version        = '7.2.0';
 
         // Module definitions: key, icon, name, description, page_slug, group
         $modules = array(
@@ -713,6 +717,100 @@ class WBI_Suite_Loader {
                     <?php endforeach; ?>
                     </div>
                 <?php endforeach; ?>
+
+                <?php
+                // ── Permissions per Module ─────────────────────────────────
+                $roles = wp_roles()->roles;
+
+                // All modules with their enable key and permission key
+                $perm_module_map = array(
+                    array( 'enable_key' => 'wbi_enable_b2b',           'perm_key' => 'wbi_permissions_b2b',           'name' => 'Modo Mayorista B2B' ),
+                    array( 'enable_key' => 'wbi_enable_dashboard',     'perm_key' => 'wbi_permissions_dashboard',     'name' => 'Dashboard BI Suite' ),
+                    array( 'enable_key' => 'wbi_enable_barcode',       'perm_key' => 'wbi_permissions_barcode',       'name' => 'Códigos de Barra' ),
+                    array( 'enable_key' => 'wbi_enable_picking',       'perm_key' => 'wbi_permissions_picking',       'name' => 'Picking & Armado' ),
+                    array( 'enable_key' => 'wbi_enable_costs',         'perm_key' => 'wbi_permissions_costs',         'name' => 'Costos y Márgenes' ),
+                    array( 'enable_key' => 'wbi_enable_suppliers',     'perm_key' => 'wbi_permissions_suppliers',     'name' => 'Proveedores' ),
+                    array( 'enable_key' => 'wbi_enable_scoring',       'perm_key' => 'wbi_permissions_scoring',       'name' => 'Scoring de Clientes' ),
+                    array( 'enable_key' => 'wbi_enable_pricelists',    'perm_key' => 'wbi_permissions_pricelists',    'name' => 'Listas de Precios' ),
+                    array( 'enable_key' => 'wbi_enable_cashflow',      'perm_key' => 'wbi_permissions_cashflow',      'name' => 'Flujo de Caja' ),
+                    array( 'enable_key' => 'wbi_enable_taxes',         'perm_key' => 'wbi_permissions_taxes',         'name' => 'Impuestos Avanzado' ),
+                    array( 'enable_key' => 'wbi_enable_whatsapp',      'perm_key' => 'wbi_permissions_whatsapp',      'name' => 'WhatsApp' ),
+                    array( 'enable_key' => 'wbi_enable_notifications', 'perm_key' => 'wbi_permissions_notifications', 'name' => 'Notificaciones' ),
+                    array( 'enable_key' => 'wbi_enable_api',           'perm_key' => 'wbi_permissions_api',           'name' => 'API REST' ),
+                );
+                // Unified documents module: show when invoice or remitos is active
+                if ( ! empty( $opts['wbi_enable_invoice'] ) || ! empty( $opts['wbi_enable_remitos'] ) ) {
+                    $perm_module_map[] = array( 'enable_key' => null, 'perm_key' => 'wbi_permissions_documents', 'name' => 'Documentos' );
+                }
+
+                // Keep only currently enabled modules
+                $active_perm_modules = array();
+                foreach ( $perm_module_map as $pm ) {
+                    if ( null === $pm['enable_key'] || ! empty( $opts[ $pm['enable_key'] ] ) ) {
+                        $active_perm_modules[] = $pm;
+                    }
+                }
+                ?>
+
+                <?php if ( ! empty( $active_perm_modules ) ) : ?>
+                <style>
+                .wbi-perm-details { margin-top:24px; background:#fff; border:1px solid #c3c4c7; border-radius:6px; overflow:hidden; }
+                .wbi-perm-details summary { cursor:pointer; padding:16px 20px; font-size:15px; font-weight:bold; color:#1d2327; list-style:none; display:flex; align-items:center; gap:8px; }
+                .wbi-perm-details summary::-webkit-details-marker { display:none; }
+                .wbi-perm-details summary::after { content:'▸'; font-size:12px; color:#50575e; margin-left:auto; }
+                .wbi-perm-details[open] summary::after { content:'▾'; }
+                .wbi-perm-details[open] summary { border-bottom:1px solid #e0e0e0; }
+                .wbi-perm-body { padding:16px 20px 20px; }
+                .wbi-perm-body > p { color:#50575e; font-size:13px; margin:0 0 16px; }
+                .wbi-perm-table-wrap { overflow-x:auto; }
+                .wbi-perm-table { border-collapse:collapse; width:100%; font-size:12px; min-width:400px; }
+                .wbi-perm-table th, .wbi-perm-table td { border:1px solid #e0e0e0; padding:8px 10px; }
+                .wbi-perm-table thead th { background:#f6f7f7; font-weight:600; white-space:nowrap; }
+                .wbi-perm-table thead th:first-child { text-align:left; min-width:150px; }
+                .wbi-perm-table thead th:not(:first-child) { text-align:center; min-width:80px; }
+                .wbi-perm-table tbody td:first-child { font-weight:500; white-space:nowrap; }
+                .wbi-perm-table tbody td:not(:first-child) { text-align:center; }
+                .wbi-perm-table tbody tr:nth-child(even) { background:#f9f9f9; }
+                </style>
+                <details class="wbi-perm-details">
+                    <summary>🔐 Permisos por Módulo <span style="color:#50575e; font-size:12px; font-weight:normal;">— clic para expandir</span></summary>
+                    <div class="wbi-perm-body">
+                        <p>Seleccioná qué roles de WordPress pueden acceder a cada módulo. Por defecto, solo Administrador.</p>
+                        <div class="wbi-perm-table-wrap">
+                            <table class="wbi-perm-table">
+                                <thead>
+                                    <tr>
+                                        <th>Módulo</th>
+                                        <?php foreach ( $roles as $role_slug => $role_data ) : ?>
+                                            <th><?php echo esc_html( $role_data['name'] ); ?></th>
+                                        <?php endforeach; ?>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ( $active_perm_modules as $pm ) :
+                                        $perm_key = $pm['perm_key'];
+                                        $saved    = ( isset( $opts[ $perm_key ] ) && ! empty( $opts[ $perm_key ] ) )
+                                                    ? (array) $opts[ $perm_key ]
+                                                    : array( 'administrator' );
+                                    ?>
+                                    <tr>
+                                        <td><?php echo esc_html( $pm['name'] ); ?></td>
+                                        <?php foreach ( $roles as $role_slug => $role_data ) : ?>
+                                            <td>
+                                                <input type="checkbox"
+                                                       name="wbi_modules_settings[<?php echo esc_attr( $perm_key ); ?>][]"
+                                                       value="<?php echo esc_attr( $role_slug ); ?>"
+                                                       <?php checked( in_array( $role_slug, $saved, true ), true ); ?>>
+                                            </td>
+                                        <?php endforeach; ?>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </details>
+                <?php endif; ?>
 
                 <p style="margin-top:24px;">
                     <?php submit_button( 'Guardar configuración', 'primary', 'submit', false ); ?>
