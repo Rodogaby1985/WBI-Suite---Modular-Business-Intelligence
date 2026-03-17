@@ -134,7 +134,7 @@ class WBI_Documents_Module {
         foreach ( array_unique( $screens ) as $screen ) {
             add_meta_box(
                 'wbi_documents_metabox',
-                '<span class="dashicons dashicons-media-spreadsheet" style="vertical-align:middle;margin-right:4px;"></span> Documentos WBI',
+                '<span class="dashicons dashicons-media-spreadsheet" style="vertical-align:middle;margin-right:4px;"></span> Documentos wooErp',
                 array( $this, 'render_meta_box' ),
                 $screen,
                 'side',
@@ -1112,7 +1112,7 @@ function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pesta�
 <div class="cae-box">
     <strong>CAE:</strong> <?php echo esc_html( $inv['cae'] ?: '___________________' ); ?> &nbsp;&nbsp;
     <strong>Vto. CAE:</strong> <?php echo esc_html( $inv['cae_vto'] ?: '___________________' ); ?><br>
-    <small>Comprobante generado por WBI Suite. CAE pendiente de validación con AFIP.</small>
+    <small>Comprobante generado por wooErp. CAE pendiente de validación con AFIP.</small>
 </div>
 </body>
 </html>
@@ -1244,7 +1244,7 @@ function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pesta�
     </div>
 
     <div class="footer-bar">
-        Documento generado por WBI Suite — <?php echo $company_name; ?>
+        Documento generado por wooErp — <?php echo $company_name; ?>
     </div>
 
 </div>
@@ -1527,7 +1527,7 @@ function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pesta�
     </div>
 
     <div class="footer-bar">
-        Documento generado por WBI Suite
+        Documento generado por wooErp
     </div>
 
 </div>

@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: WBI Suite - Modular Business Intelligence
- * Description: Suite modular para B2B, Estadísticas y Gestión de Stock.
- * Version: 7.0.0
+ * Plugin Name: wooErp — Suite de Gestión para WooCommerce
+ * Description: Suite modular de gestión integral: B2B, BI, Stock, Facturación, Picking y más.
+ * Version: 7.1.0
  * Author: Rodrigo Castañera
  */
 
@@ -205,8 +205,8 @@ class WBI_Suite_Loader {
     public function add_settings_page() {
         // License page — always visible
         add_menu_page(
-            'WBI Suite',
-            'WBI Suite',
+            'wooErp',
+            'wooErp',
             'manage_options',
             'wbi-license',
             array( $this, 'render_license_page' ),
@@ -218,8 +218,8 @@ class WBI_Suite_Loader {
         if ( WBI_License_Manager::is_active() ) {
             add_submenu_page(
                 'woocommerce',
-                'WBI Config',
-                'WBI Config',
+                'wooErp Config',
+                'wooErp Config',
                 'manage_options',
                 'wbi-settings',
                 array( $this, 'render_settings_page' )
@@ -237,7 +237,7 @@ class WBI_Suite_Loader {
         if ( $action === 'activate' ) {
             $key = sanitize_text_field( isset( $_POST['wbi_license_key'] ) ? $_POST['wbi_license_key'] : '' );
             if ( WBI_License_Manager::activate( $key ) ) {
-                add_settings_error( 'wbi_license', 'activated', '✅ Licencia activada correctamente. ¡Bienvenido a WBI Suite!', 'success' );
+                add_settings_error( 'wbi_license', 'activated', '✅ Licencia activada correctamente. ¡Bienvenido a wooErp!', 'success' );
             } else {
                 add_settings_error( 'wbi_license', 'invalid', '❌ Clave de licencia inválida. Verificá el formato e intentá nuevamente.', 'error' );
             }
@@ -254,7 +254,7 @@ class WBI_Suite_Loader {
             if ( $plan_info['days_remaining'] > 0 && $plan_info['days_remaining'] <= 7 ) {
                 $license_url = admin_url( 'admin.php?page=wbi-license' );
                 echo '<div class="notice notice-warning is-dismissible">';
-                echo '<p><strong>⚠️ WBI Suite:</strong> Tu licencia vence en <strong>' . intval( $plan_info['days_remaining'] ) . ' días</strong>. ';
+                echo '<p><strong>⚠️ wooErp:</strong> Tu licencia vence en <strong>' . intval( $plan_info['days_remaining'] ) . ' días</strong>. ';
                 echo '<a href="' . esc_url( $license_url ) . '">Renovar aquí</a>.</p>';
                 echo '</div>';
             }
@@ -268,12 +268,12 @@ class WBI_Suite_Loader {
 
         if ( WBI_License_Manager::is_expired() ) {
             echo '<div class="notice notice-error is-dismissible">';
-            echo '<p><strong>⏰ WBI Suite:</strong> Tu licencia ha expirado. Los módulos están desactivados. ';
+            echo '<p><strong>⏰ wooErp:</strong> Tu licencia ha expirado. Los módulos están desactivados. ';
             echo '<a href="' . esc_url( $license_url ) . '">Renovar licencia</a>.</p>';
             echo '</div>';
         } else {
             echo '<div class="notice notice-warning is-dismissible">';
-            echo '<p><strong>🔒 WBI Suite:</strong> El plugin requiere una licencia válida para funcionar. ';
+            echo '<p><strong>🔒 wooErp:</strong> El plugin requiere una licencia válida para funcionar. ';
             echo '<a href="' . esc_url( $license_url ) . '">Activar licencia aquí</a>.</p>';
             echo '</div>';
         }
@@ -296,7 +296,7 @@ class WBI_Suite_Loader {
         $is_expired = WBI_License_Manager::is_expired();
         ?>
         <div class="wrap">
-            <h1>🔐 WBI Suite — Licencia</h1>
+            <h1>🔐 wooErp — Licencia</h1>
             <?php settings_errors( 'wbi_license' ); ?>
 
             <div style="background:#fff; padding:30px; border:1px solid #c3c4c7; max-width:600px; margin-top:20px;">
@@ -329,7 +329,7 @@ class WBI_Suite_Loader {
                     <hr>
 
                     <p>Todos los módulos están habilitados. Podés configurarlos desde
-                       <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-settings' ) ); ?>">WBI Config</a>.
+                       <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-settings' ) ); ?>">wooErp Config</a>.
                     </p>
 
                     <form method="post" style="margin-top:15px;">
@@ -398,7 +398,7 @@ class WBI_Suite_Loader {
                         <div style="font-size:48px; margin-bottom:10px;">🔒</div>
                         <h2 style="color:#d63638; margin:0;">Licencia Requerida</h2>
                         <p style="color:#50575e; font-size:14px;">
-                            Ingresá tu clave de licencia para activar WBI Suite y acceder a todos los módulos.
+                            Ingresá tu clave de licencia para activar wooErp y acceder a todos los módulos.
                         </p>
                     </div>
 
@@ -431,7 +431,7 @@ class WBI_Suite_Loader {
                     <hr>
                     <p style="color:#50575e; font-size:12px;">
                         ¿No tenés una licencia? Contactá al desarrollador para adquirir una.<br>
-                        <strong>WBI Suite</strong> — Suite Modular de Business Intelligence para WooCommerce.
+                        <strong>wooErp</strong> — Suite de Gestión para WooCommerce.
                     </p>
 
                 <?php endif; ?>
@@ -587,7 +587,7 @@ class WBI_Suite_Loader {
         }
 
         $license_active = class_exists( 'WBI_License_Manager' ) && WBI_License_Manager::is_active();
-        $version        = '7.0.0';
+        $version        = '7.1.0';
 
         // Module definitions: key, icon, name, description, page_slug, group
         $modules = array(
@@ -659,8 +659,8 @@ class WBI_Suite_Loader {
             <div class="wbi-config-header">
                 <span style="font-size:36px;">🧠</span>
                 <div>
-                    <h1>WBI Suite — Configuración</h1>
-                    <p style="margin:4px 0 0; color:#50575e; font-size:13px;">Suite Modular de Business Intelligence para WooCommerce</p>
+                    <h1>wooErp — Configuración</h1>
+                    <p style="margin:4px 0 0; color:#50575e; font-size:13px;">Suite de Gestión para WooCommerce</p>
                 </div>
                 <span class="wbi-version-badge">v<?php echo esc_html( $version ); ?></span>
                 <span class="wbi-license-badge <?php echo $license_active ? 'active' : 'inactive'; ?>">

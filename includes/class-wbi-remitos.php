@@ -270,7 +270,7 @@ table.items tr:last-child td { border-bottom: 2px solid #000; }
     </div>
 
     <div class="footer-bar">
-        Documento generado por WBI Suite — <?php echo $company_name; ?>
+        Documento generado por wooErp — <?php echo $company_name; ?>
     </div>
 
 </div>

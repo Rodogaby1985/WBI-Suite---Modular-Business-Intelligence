@@ -402,7 +402,7 @@ class WBI_API_Module {
         );
 
         echo '<div class="wrap">';
-        echo '<h1>📱 API REST — WBI Suite</h1>';
+        echo '<h1>📱 API REST — wooErp</h1>';
 
         if ( $regenerated ) {
             echo '<div class="notice notice-success is-dismissible"><p>✅ API key regenerada exitosamente.</p></div>';

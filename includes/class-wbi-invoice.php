@@ -339,7 +339,7 @@ th { background:#f0f0f0; }
 <div class="cae-box">
     <strong>CAE:</strong> <?php echo esc_html( $inv['cae'] ?: '___________________' ); ?> &nbsp;&nbsp;
     <strong>Vto. CAE:</strong> <?php echo esc_html( $inv['cae_vto'] ?: '___________________' ); ?><br>
-    <small>Comprobante generado por WBI Suite. CAE pendiente de validación con AFIP.</small>
+    <small>Comprobante generado por wooErp. CAE pendiente de validación con AFIP.</small>
 </div>
 </body>
 </html>
