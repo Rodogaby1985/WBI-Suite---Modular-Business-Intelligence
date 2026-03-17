@@ -14,8 +14,8 @@ class WBI_Dashboard_View {
 
     public function register_page() {
         add_menu_page( 
-            'BI Métricas', 
-            'BI Métricas', 
+            'wooErp', 
+            'wooErp', 
             'manage_options', 
             'wbi-dashboard-view', 
             array( $this, 'render' ), 
