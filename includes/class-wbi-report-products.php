@@ -6,13 +6,13 @@ class WBI_Report_Products {
     private $engine;
 
     public function __construct() {
-        $this->engine = new WBI_Metrics_Engine();
+        $this->engine = WBI_Metrics_Engine::instance();
         add_action( 'admin_menu', array( $this, 'register' ), 100 );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
     }
 
     public function register() {
-        add_submenu_page( 'wbi-dashboard-view', 'Productos & Stock', 'Productos & Stock', 'manage_options', 'wbi-products-report', array( $this, 'render' ) );
+        add_submenu_page( 'wbi-dashboard-view', 'Productos & Stock', '<span class="dashicons dashicons-archive" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Productos & Stock', 'manage_options', 'wbi-products-report', array( $this, 'render' ) );
     }
 
     public function enqueue_assets( $hook ) {

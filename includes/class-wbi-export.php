@@ -6,8 +6,7 @@ class WBI_Export_Module {
     private $engine;
 
     public function __construct() {
-        require_once plugin_dir_path( __FILE__ ) . 'class-wbi-metrics.php';
-        $this->engine = new WBI_Metrics_Engine();
+        $this->engine = WBI_Metrics_Engine::instance();
 
         // Acciones existentes
         add_action( 'admin_post_wbi_export_customers', array( $this, 'process_customer_export' ) );
@@ -143,6 +142,61 @@ class WBI_Export_Module {
                             ]);
                         }
                     }
+                }
+                break;
+
+            // --- COSTOS Y MÁRGENES ---
+            case 'costs_margins':
+                fputcsv($output, ['Producto', 'SKU', 'Precio Venta', 'Costo', 'Margen %', 'Estado']);
+                $alert_threshold = floatval( get_option( 'wbi_margin_alert_threshold', 20 ) );
+                $data = $this->engine->get_products_with_costs( 10000, 0, 0, -999, 999 );
+                foreach ( $data as $row ) {
+                    $price  = floatval( $row->price );
+                    $cost   = floatval( $row->cost );
+                    $margin = ( $cost > 0 && $price > 0 ) ? round( ( ( $price - $cost ) / $price ) * 100, 2 ) : 0;
+                    if ( $margin < 0 ) {
+                        $estado = 'Negativo';
+                    } elseif ( $margin < $alert_threshold ) {
+                        $estado = 'Bajo';
+                    } else {
+                        $estado = 'OK';
+                    }
+                    fputcsv($output, [$row->post_title, $row->sku, $row->price, $row->cost, $margin, $estado]);
+                }
+                break;
+
+            // --- SCORING DE CLIENTES ---
+            case 'scoring':
+                fputcsv($output, ['Nombre', 'Email', 'Score', 'Clase', 'Fecha Score']);
+                if ( class_exists( 'WBI_Scoring_Module' ) ) {
+                    $scored_users = WBI_Scoring_Module::get_all_scored_users_for_export();
+                    foreach ( $scored_users as $u ) {
+                        fputcsv($output, [
+                            $u->display_name,
+                            $u->user_email,
+                            $u->score,
+                            $u->class,
+                            $u->score_date ? date( 'd/m/Y', strtotime( $u->score_date ) ) : '',
+                        ]);
+                    }
+                }
+                break;
+
+            // --- IMPUESTOS ---
+            case 'taxes_summary':
+                fputcsv($output, ['Reporte', 'Resumen de Impuestos por Provincia', $start . ' al ' . $end]);
+                fputcsv($output, ['Código', 'Provincia', 'Pedidos', 'Total Facturado', 'IVA Estimado', 'Percepciones', 'IIBB']);
+                $data = $this->engine->get_tax_summary($start, $end, $statuses);
+                foreach ( $data as $r ) {
+                    fputcsv($output, [
+                        $r->province,
+                        $r->province_name,
+                        $r->orders,
+                        number_format( $r->total, 2, '.', '' ),
+                        number_format( $r->iva, 2, '.', '' ),
+                        number_format( $r->percepciones, 2, '.', '' ),
+                        number_format( $r->iibb, 2, '.', '' ),
+                    ]);
                 }
                 break;
         }

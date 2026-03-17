@@ -6,7 +6,7 @@ class WBI_Report_Sales {
     private $engine;
 
     public function __construct() {
-        $this->engine = new WBI_Metrics_Engine();
+        $this->engine = WBI_Metrics_Engine::instance();
         // CORRECCIÓN: Prioridad 100 para asegurar que el padre existe
         add_action( 'admin_menu', array( $this, 'register' ), 100 );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
@@ -16,7 +16,7 @@ class WBI_Report_Sales {
         add_submenu_page( 
             'wbi-dashboard-view', 
             'Detalle Ventas', 
-            'Análisis Ventas', 
+            '<span class="dashicons dashicons-chart-bar" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Análisis Ventas', 
             'manage_options', 
             'wbi-sales-report', 
             array( $this, 'render' ) 

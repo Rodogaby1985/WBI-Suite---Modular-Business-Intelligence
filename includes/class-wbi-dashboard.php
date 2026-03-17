@@ -6,7 +6,7 @@ class WBI_Dashboard_View {
     private $engine;
 
     public function __construct() {
-        $this->engine = new WBI_Metrics_Engine();
+        $this->engine = WBI_Metrics_Engine::instance();
         // Prioridad 99 para ser el menú padre
         add_action( 'admin_menu', array( $this, 'register_page' ), 99 );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
@@ -14,8 +14,8 @@ class WBI_Dashboard_View {
 
     public function register_page() {
         add_menu_page( 
-            'BI Métricas', 
-            'BI Métricas', 
+            'wooErp', 
+            'wooErp', 
             'manage_options', 
             'wbi-dashboard-view', 
             array( $this, 'render' ), 
@@ -140,6 +140,48 @@ class WBI_Dashboard_View {
 
         // Period data for chart
         $period_data = $this->engine->get_sales_by_period('day', $start_date, $end_date, $statuses);
+
+        // Monthly revenue trend (current year)
+        $year_start = date('Y-01-01');
+        $year_end   = date('Y-12-31');
+        $monthly_data = $this->engine->get_sales_by_period('month', $year_start, $year_end, $statuses);
+        $monthly_labels = array();
+        $monthly_totals = array();
+        foreach ( $monthly_data as $row ) {
+            $monthly_labels[] = $row->period;
+            $monthly_totals[] = (float) $row->total;
+        }
+        $monthly_labels_json = wp_json_encode( $monthly_labels );
+        $monthly_totals_json = wp_json_encode( $monthly_totals );
+
+        // Top 5 products chart data
+        $top5_names = array();
+        $top5_qtys  = array();
+        if ( ! empty( $best_sold ) ) {
+            foreach ( array_slice( $best_sold, 0, 5 ) as $p ) {
+                $top5_names[] = $p->name;
+                $top5_qtys[]  = intval( $p->qty );
+            }
+        }
+        $top5_names_json = wp_json_encode( $top5_names );
+        $top5_qtys_json  = wp_json_encode( $top5_qtys );
+
+        // Sales by source (only if data module is active)
+        $options = get_option( 'wbi_modules_settings' );
+        $has_source_module = ! empty( $options['wbi_enable_data'] );
+        $source_labels_json = wp_json_encode( array() );
+        $source_totals_json = wp_json_encode( array() );
+        if ( $has_source_module ) {
+            $source_data = $this->engine->get_sales_by_source( $start_date, $end_date, $statuses );
+            $src_labels  = array();
+            $src_totals  = array();
+            foreach ( $source_data as $row ) {
+                $src_labels[] = $row->source ?: 'Sin origen';
+                $src_totals[] = (float) $row->total;
+            }
+            $source_labels_json = wp_json_encode( $src_labels );
+            $source_totals_json = wp_json_encode( $src_totals );
+        }
 
         // Comparison data
         $prev_revenue = 0;
@@ -277,17 +319,40 @@ class WBI_Dashboard_View {
             </div>
 
             <!-- SECCIÓN 3: GRÁFICOS -->
+            <h2 class="wbi-section-title">📊 Gráficos Interactivos</h2>
             <div class="wbi-grid-2">
                 <div class="wbi-card">
-                    <h3 style="margin-top:0;">📊 Facturación por Día</h3>
+                    <h3 style="margin-top:0;">📈 Tendencia Mensual (<?php echo esc_html( date('Y') ); ?>)</h3>
                     <div class="wbi-chart-container">
-                        <canvas id="wbiRevenueChart"></canvas>
+                        <canvas id="wbiMonthlyChart"></canvas>
                     </div>
                 </div>
                 <div class="wbi-card">
                     <h3 style="margin-top:0;">🥧 Distribución de Pedidos por Estado</h3>
                     <div class="wbi-chart-container" style="max-height:260px; display:flex; justify-content:center;">
                         <canvas id="wbiStatusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="wbi-grid-2">
+                <div class="wbi-card">
+                    <h3 style="margin-top:0;">🔥 Top 5 Productos (<?php echo esc_html( date('d/m', strtotime($start_date)) . ' - ' . date('d/m', strtotime($end_date)) ); ?>)</h3>
+                    <div class="wbi-chart-container">
+                        <canvas id="wbiTopProductsChart"></canvas>
+                    </div>
+                </div>
+                <?php if ( $has_source_module ) : ?>
+                <div class="wbi-card">
+                    <h3 style="margin-top:0;">🌐 Ventas por Origen</h3>
+                    <div class="wbi-chart-container" style="max-height:260px; display:flex; justify-content:center;">
+                        <canvas id="wbiSourceChart"></canvas>
+                    </div>
+                </div>
+                <?php endif; ?>
+                <div class="wbi-card">
+                    <h3 style="margin-top:0;">📊 Facturación por Día</h3>
+                    <div class="wbi-chart-container">
+                        <canvas id="wbiRevenueChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -328,6 +393,33 @@ class WBI_Dashboard_View {
 
             <script>
             (function() {
+                // Line chart: monthly revenue trend (current year)
+                var monthlyCtx = document.getElementById('wbiMonthlyChart');
+                if (monthlyCtx) {
+                    new Chart(monthlyCtx, {
+                        type: 'line',
+                        data: {
+                            labels: <?php echo $monthly_labels_json; ?>,
+                            datasets: [{
+                                label: 'Facturación Mensual',
+                                data: <?php echo $monthly_totals_json; ?>,
+                                backgroundColor: 'rgba(34, 113, 177, 0.15)',
+                                borderColor: '#2271b1',
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.3,
+                                pointBackgroundColor: '#2271b1'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true } }
+                        }
+                    });
+                }
+
                 // Bar chart: revenue by day
                 var revenueCtx = document.getElementById('wbiRevenueChart');
                 if (revenueCtx) {
@@ -373,6 +465,55 @@ class WBI_Dashboard_View {
                         }
                     });
                 }
+
+                // Horizontal bar chart: top 5 products
+                var topProdCtx = document.getElementById('wbiTopProductsChart');
+                if (topProdCtx) {
+                    new Chart(topProdCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: <?php echo $top5_names_json; ?>,
+                            datasets: [{
+                                label: 'Unidades',
+                                data: <?php echo $top5_qtys_json; ?>,
+                                backgroundColor: 'rgba(0, 163, 42, 0.7)',
+                                borderColor: '#00a32a',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            indexAxis: 'y',
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: { legend: { display: false } },
+                            scales: { x: { beginAtZero: true } }
+                        }
+                    });
+                }
+
+                <?php if ( $has_source_module ) : ?>
+                // Pie chart: sales by source
+                var sourceCtx = document.getElementById('wbiSourceChart');
+                if (sourceCtx) {
+                    new Chart(sourceCtx, {
+                        type: 'pie',
+                        data: {
+                            labels: <?php echo $source_labels_json; ?>,
+                            datasets: [{
+                                data: <?php echo $source_totals_json; ?>,
+                                backgroundColor: ['#2271b1','#00a32a','#dba617','#d63638','#8c3130','#72aee6','#68de7c','#ffb900'],
+                                borderWidth: 2,
+                                borderColor: '#fff'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: { legend: { position: 'bottom' } }
+                        }
+                    });
+                }
+                <?php endif; ?>
             })();
             </script>
 
