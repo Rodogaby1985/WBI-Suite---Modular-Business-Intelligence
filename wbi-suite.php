@@ -479,9 +479,12 @@ class WBI_Suite_Loader {
     }
 
     public function enqueue_admin_css( $hook ) {
-        if ( strpos( $hook, 'wbi' ) === false &&
-             'toplevel_page_wbi-dashboard-view' !== $hook &&
-             strpos( $hook, 'woocommerce_page_wbi' ) === false ) {
+        // Load admin CSS only on WBI admin pages.
+        $is_wbi_page = ( 'toplevel_page_wbi-dashboard-view' === $hook )
+            || ( strpos( $hook, '_page_wbi-' ) !== false )
+            || ( strpos( $hook, 'woocommerce_page_wbi-' ) !== false );
+
+        if ( ! $is_wbi_page ) {
             return;
         }
         wp_enqueue_style(
