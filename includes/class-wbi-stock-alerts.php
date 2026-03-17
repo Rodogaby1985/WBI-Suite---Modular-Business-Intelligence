@@ -87,7 +87,7 @@ class WBI_Stock_Alerts {
         ?>
         <div class="wrap">
             <h1>Alertas de Stock Bajo</h1>
-            <p>Productos con stock ≤ <strong><?php echo esc_html( $threshold ); ?></strong> unidades. Configure el umbral en <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-settings' ) ); ?>">WBI Config</a>.</p>
+            <p>Productos con stock ≤ <strong><?php echo esc_html( $threshold ); ?></strong> unidades. Configure el umbral en <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-settings' ) ); ?>">wooErp Config</a>.</p>
 
             <p><a href="<?php echo esc_url( $export_url ); ?>" class="button">Exportar CSV</a></p>
 

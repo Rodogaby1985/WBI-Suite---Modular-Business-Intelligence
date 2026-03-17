@@ -147,7 +147,7 @@ class WBI_Email_Reports {
                 $label = 'Semana del ' . date( 'd/m', strtotime( '-7 days' ) ) . ' al ' . date( 'd/m/Y', strtotime( '-1 day' ) );
         }
 
-        $subject = '[WBI Suite] Reporte de Ventas - ' . $label;
+        $subject = '[wooErp] Reporte de Ventas - ' . $label;
         $body    = $this->build_email_body( $start, $end, $label );
 
         $headers = array( 'Content-Type: text/html; charset=UTF-8' );
@@ -231,7 +231,7 @@ class WBI_Email_Reports {
 
     <!-- Header -->
     <tr><td style="background:#2271b1; padding:25px 30px;">
-        <h1 style="color:#fff; margin:0; font-size:22px;">📊 WBI Suite - Reporte de Ventas</h1>
+        <h1 style="color:#fff; margin:0; font-size:22px;">📊 wooErp - Reporte de Ventas</h1>
         <p style="color:#c8d8e9; margin:5px 0 0; font-size:14px;"><?php echo esc_html( $site_name ); ?> · <?php echo esc_html( $label ); ?></p>
     </td></tr>
 
@@ -288,7 +288,7 @@ class WBI_Email_Reports {
 
     <!-- Footer -->
     <tr><td style="background:#f0f0f1; padding:15px 30px; text-align:center; font-size:12px; color:#646970;">
-        Generado automáticamente por WBI Suite · <?php echo esc_html( $site_name ); ?>
+        Generado automáticamente por wooErp · <?php echo esc_html( $site_name ); ?>
     </td></tr>
 
 </table>
@@ -305,7 +305,7 @@ class WBI_Email_Reports {
         if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( 'Sin permisos' );
 
         $to      = get_option( 'admin_email' );
-        $subject = '[WBI Suite] Email de Prueba';
+        $subject = '[wooErp] Email de Prueba';
         $body    = $this->build_email_body( gmdate( 'Y-m-d', strtotime( '-7 days' ) ), gmdate( 'Y-m-d', strtotime( '-1 day' ) ), 'Prueba' );
         $headers = array( 'Content-Type: text/html; charset=UTF-8' );
         $sent    = wp_mail( $to, $subject, $body, $headers );

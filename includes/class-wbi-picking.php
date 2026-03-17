@@ -1124,7 +1124,7 @@ class WBI_Picking_Module {
         foreach ( array_unique( $screens ) as $screen ) {
             add_meta_box(
                 'wbi_picking_box',
-                '📦 Estado de Armado — WBI',
+                '📦 Estado de Armado — wooErp',
                 array( $this, 'render_picking_metabox' ),
                 $screen,
                 'side',

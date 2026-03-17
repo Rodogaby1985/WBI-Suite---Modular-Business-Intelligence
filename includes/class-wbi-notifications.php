@@ -249,7 +249,7 @@ class WBI_Notifications_Module {
     public function register_dashboard_widget() {
         wp_add_dashboard_widget(
             'wbi_notifications_widget',
-            '🔔 WBI — Notificaciones',
+            '🔔 wooErp — Notificaciones',
             array( $this, 'render_dashboard_widget' )
         );
     }
