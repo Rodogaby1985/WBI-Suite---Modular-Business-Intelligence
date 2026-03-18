@@ -8,6 +8,9 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 class WBI_Picking_Module {
 
+    /** @var bool|null Cached HPOS detection result. */
+    private $hpos_enabled = null;
+
     public function __construct() {
         // Admin menu
         add_action( 'admin_menu', array( $this, 'register_pages' ), 100 );
@@ -136,14 +139,24 @@ class WBI_Picking_Module {
         $paged    = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
         $offset   = ( $paged - 1 ) * $per_page;
 
+        $hpos       = $this->is_hpos_enabled();
+        $ot         = $this->get_orders_table_name();
+        $mt         = $this->get_orders_meta_table_name();
+        $id_col     = $hpos ? 'o.id'               : 'p.ID';
+        $alias      = $hpos ? 'o'                  : 'p';
+        $type_col   = $hpos ? 'o.type'             : 'p.post_type';
+        $status_col = $hpos ? 'o.status'           : 'p.post_status';
+        $date_col   = $hpos ? 'o.date_created_gmt' : 'p.post_date';
+        $meta_fk    = $hpos ? 'order_id'           : 'post_id';
+
         // Lightweight total count (no ORDER BY, no data fetching)
         $total_count = (int) $wpdb->get_var(
-            "SELECT COUNT(DISTINCT p.ID)
-             FROM {$wpdb->posts} p
-             WHERE p.post_type = 'shop_order'
-               AND p.post_status = 'wc-processing'
-               AND p.ID NOT IN (
-                   SELECT post_id FROM {$wpdb->postmeta}
+            "SELECT COUNT(DISTINCT {$id_col})
+             FROM {$ot} {$alias}
+             WHERE {$type_col} = 'shop_order'
+               AND {$status_col} = 'wc-processing'
+               AND {$id_col} NOT IN (
+                   SELECT {$meta_fk} FROM {$mt}
                    WHERE meta_key = '_wbi_picking_status'
                      AND meta_value != ''
                )"
@@ -151,16 +164,16 @@ class WBI_Picking_Module {
 
         // Paginated query
         $order_ids = $wpdb->get_col( $wpdb->prepare(
-            "SELECT DISTINCT p.ID
-             FROM {$wpdb->posts} p
-             WHERE p.post_type = 'shop_order'
-               AND p.post_status = 'wc-processing'
-               AND p.ID NOT IN (
-                   SELECT post_id FROM {$wpdb->postmeta}
+            "SELECT DISTINCT {$id_col}
+             FROM {$ot} {$alias}
+             WHERE {$type_col} = 'shop_order'
+               AND {$status_col} = 'wc-processing'
+               AND {$id_col} NOT IN (
+                   SELECT {$meta_fk} FROM {$mt}
                    WHERE meta_key = '_wbi_picking_status'
                      AND meta_value != ''
                )
-             ORDER BY p.post_date ASC
+             ORDER BY {$date_col} ASC
              LIMIT %d OFFSET %d",
             $per_page,
             $offset
@@ -217,40 +230,54 @@ class WBI_Picking_Module {
     // ---- Tab: En Proceso ----------------------------------------------------
 
     private function render_tab_in_progress() {
+        global $wpdb;
+
         $per_page = 20;
         $paged    = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
+        $offset   = ( $paged - 1 ) * $per_page;
+
+        $hpos       = $this->is_hpos_enabled();
+        $ot         = $this->get_orders_table_name();
+        $mt         = $this->get_orders_meta_table_name();
+        $id_col     = $hpos ? 'o.id'               : 'p.ID';
+        $alias      = $hpos ? 'o'                  : 'p';
+        $type_col   = $hpos ? 'o.type'             : 'p.post_type';
+        $status_col = $hpos ? 'o.status'           : 'p.post_status';
+        $date_col   = $hpos ? 'o.date_created_gmt' : 'p.post_date';
+        $meta_fk    = $hpos ? 'order_id'           : 'post_id';
 
         // Total count for pagination
-        $count_query = new WP_Query( array(
-            'post_type'      => 'shop_order',
-            'post_status'    => array( 'wc-processing', 'wc-on-hold' ),
-            'posts_per_page' => -1,
-            'fields'         => 'ids',
-            'meta_query'     => array(
-                array( 'key' => '_wbi_picking_status', 'value' => 'picking', 'compare' => '=' ),
-            ),
-        ) );
-        $total_count = $count_query->found_posts;
+        $total_count = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT {$id_col})
+             FROM {$ot} {$alias}
+             INNER JOIN {$mt} om ON om.{$meta_fk} = {$id_col}
+             WHERE {$type_col} = 'shop_order'
+               AND {$status_col} IN ('wc-processing', 'wc-on-hold')
+               AND om.meta_key = '_wbi_picking_status'
+               AND om.meta_value = 'picking'"
+        );
 
-        $orders = get_posts( array(
-            'post_type'      => 'shop_order',
-            'post_status'    => array( 'wc-processing', 'wc-on-hold' ),
-            'posts_per_page' => $per_page,
-            'paged'          => $paged,
-            'fields'         => 'ids',
-            'meta_query'     => array(
-                array( 'key' => '_wbi_picking_status', 'value' => 'picking', 'compare' => '=' ),
-            ),
+        $orders = $wpdb->get_col( $wpdb->prepare(
+            "SELECT DISTINCT {$id_col}
+             FROM {$ot} {$alias}
+             INNER JOIN {$mt} om ON om.{$meta_fk} = {$id_col}
+             WHERE {$type_col} = 'shop_order'
+               AND {$status_col} IN ('wc-processing', 'wc-on-hold')
+               AND om.meta_key = '_wbi_picking_status'
+               AND om.meta_value = 'picking'
+             ORDER BY {$date_col} ASC
+             LIMIT %d OFFSET %d",
+            $per_page,
+            $offset
         ) );
 
         echo '<h2>🔄 Pedidos en Proceso</h2>';
 
-        if ( 0 === $total ) {
+        if ( 0 === $total_count ) {
             echo '<p>No hay pedidos en proceso de armado.</p>';
             return;
         }
 
-        $offset = ( $paged - 1 ) * $per_page;
         $from   = $offset + 1;
         $to     = min( $offset + $per_page, $total_count );
         echo '<p style="margin-bottom:8px;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total_count ) . ' pedidos</p>';
@@ -307,60 +334,48 @@ class WBI_Picking_Module {
     // ---- Tab: Completados ---------------------------------------------------
 
     private function render_tab_completed() {
+        global $wpdb;
+
         $date_from = isset( $_GET['date_from'] ) ? sanitize_text_field( wp_unslash( $_GET['date_from'] ) ) : '';
         $date_to   = isset( $_GET['date_to'] )   ? sanitize_text_field( wp_unslash( $_GET['date_to'] ) )   : '';
         $per_page  = 20;
         $paged     = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
+        $offset    = ( $paged - 1 ) * $per_page;
 
-        $per_page = 20;
-        $paged    = max( 1, intval( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
+        $hpos       = $this->is_hpos_enabled();
+        $ot         = $this->get_orders_table_name();
+        $mt         = $this->get_orders_meta_table_name();
+        $id_col     = $hpos ? 'o.id'               : 'p.ID';
+        $alias      = $hpos ? 'o'                  : 'p';
+        $type_col   = $hpos ? 'o.type'             : 'p.post_type';
+        $date_col   = $hpos ? 'o.date_created_gmt' : 'p.post_date';
+        $meta_fk    = $hpos ? 'order_id'           : 'post_id';
 
-        // Build status list for wc_get_orders(): strip the 'wc-' prefix safely from each key.
-        $all_statuses = array_map(
-            function( $s ) { return 'wc-' === substr( $s, 0, 3 ) ? substr( $s, 3 ) : $s; },
-            array_keys( wc_get_order_statuses() )
-        );
-
-        $query_args = array(
-            'status'     => $all_statuses,
-            'limit'      => -1,
-            'return'     => 'ids',
-            'meta_query' => array(
-                array(
-                    'key'     => '_wbi_picking_status',
-                    'value'   => array( 'picked', 'packed' ),
-                    'compare' => 'IN',
-                ),
-            ),
-        );
-
-        $date_query = array();
+        // Build optional date conditions (values are escaped via $wpdb->prepare individually)
+        $date_where = '';
         if ( $date_from ) {
-            $date_query[] = array( 'after' => $date_from, 'inclusive' => true );
+            $date_where .= $wpdb->prepare( " AND {$date_col} >= %s", $date_from . ' 00:00:00' );
         }
         if ( $date_to ) {
-            $date_query[] = array( 'before' => $date_to, 'inclusive' => true );
+            $date_where .= $wpdb->prepare( " AND {$date_col} <= %s", $date_to . ' 23:59:59' );
         }
 
-        // Total count for pagination
-        $count_query = new WP_Query( array(
-            'post_type'      => 'shop_order',
-            'post_status'    => 'any',
-            'posts_per_page' => -1,
-            'fields'         => 'ids',
-            'meta_query'     => $meta_query,
-            'date_query'     => $date_query,
-        ) );
-        $total_count = $count_query->found_posts;
+        $base_where = "FROM {$ot} {$alias}
+             INNER JOIN {$mt} om ON om.{$meta_fk} = {$id_col}
+             WHERE {$type_col} = 'shop_order'
+               AND om.meta_key = '_wbi_picking_status'
+               AND om.meta_value IN ('picked', 'packed'){$date_where}";
 
-        $orders = get_posts( array(
-            'post_type'      => 'shop_order',
-            'post_status'    => 'any',
-            'posts_per_page' => $per_page,
-            'paged'          => $paged,
-            'fields'         => 'ids',
-            'meta_query'     => $meta_query,
-            'date_query'     => $date_query,
+        // Total count for pagination
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        $total_count = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT {$id_col}) {$base_where}" );
+
+        // Paginated query
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        $orders = $wpdb->get_col( $wpdb->prepare(
+            "SELECT DISTINCT {$id_col} {$base_where} ORDER BY {$date_col} DESC LIMIT %d OFFSET %d",
+            $per_page,
+            $offset
         ) );
 
         echo '<h2>✅ Pedidos Completados</h2>';
@@ -374,14 +389,13 @@ class WBI_Picking_Module {
             <button type="submit" class="button">Filtrar</button>
         </form>';
 
-        if ( 0 === $total ) {
+        if ( 0 === $total_count ) {
             echo '<p>No hay pedidos completados' . ( $date_from || $date_to ? ' en el rango seleccionado' : '' ) . '.</p>';
             return;
         }
 
-        $offset = ( $paged - 1 ) * $per_page;
-        $from   = $offset + 1;
-        $to     = min( $offset + $per_page, $total_count );
+        $from = $offset + 1;
+        $to   = min( $offset + $per_page, $total_count );
         echo '<p style="margin-bottom:8px;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total_count ) . ' pedidos</p>';
 
         echo '<div class="wbi-table-responsive">';
@@ -1284,6 +1298,8 @@ class WBI_Picking_Module {
     // =========================================================================
 
     public function render_armador_panel() {
+        global $wpdb;
+
         $user = wp_get_current_user();
         $is_armador  = in_array( 'wbi_armador', (array) $user->roles, true );
         $is_manager  = current_user_can( 'manage_woocommerce' );
@@ -1295,44 +1311,36 @@ class WBI_Picking_Module {
         $per_page = 20;
         $paged    = max( 1, intval( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
 
-        // Count total (exclude fully-picked orders at DB level)
-        $total_ids = wc_get_orders( array(
-            'status'     => array( 'processing', 'on-hold' ),
-            'limit'      => -1,
-            'return'     => 'ids',
-            'meta_query' => array(
-                'relation' => 'OR',
-                array(
-                    'key'     => '_wbi_picking_status',
-                    'compare' => 'NOT EXISTS',
-                ),
-                array(
-                    'key'     => '_wbi_picking_status',
-                    'value'   => 'picked',
-                    'compare' => '!=',
-                ),
-            ),
-        ) );
-        $total = count( $total_ids );
+        // Count total and paginated display — HPOS-compatible direct $wpdb queries
+        $hpos       = $this->is_hpos_enabled();
+        $ot         = $this->get_orders_table_name();
+        $mt         = $this->get_orders_meta_table_name();
+        $id_col     = $hpos ? 'o.id'               : 'p.ID';
+        $alias      = $hpos ? 'o'                  : 'p';
+        $type_col   = $hpos ? 'o.type'             : 'p.post_type';
+        $status_col = $hpos ? 'o.status'           : 'p.post_status';
+        $date_col   = $hpos ? 'o.date_created_gmt' : 'p.post_date';
+        $meta_fk    = $hpos ? 'order_id'           : 'post_id';
+        $offset     = ( $paged - 1 ) * $per_page;
 
-        $display_orders = wc_get_orders( array(
-            'status'     => array( 'processing', 'on-hold' ),
-            'limit'      => $per_page,
-            'page'       => $paged,
-            'orderby'    => 'date',
-            'order'      => 'DESC',
-            'meta_query' => array(
-                'relation' => 'OR',
-                array(
-                    'key'     => '_wbi_picking_status',
-                    'compare' => 'NOT EXISTS',
-                ),
-                array(
-                    'key'     => '_wbi_picking_status',
-                    'value'   => 'picked',
-                    'compare' => '!=',
-                ),
-            ),
+        // Exclude orders where _wbi_picking_status = 'picked'
+        $base_where = "FROM {$ot} {$alias}
+             WHERE {$type_col} = 'shop_order'
+               AND {$status_col} IN ('wc-processing', 'wc-on-hold')
+               AND {$id_col} NOT IN (
+                   SELECT {$meta_fk} FROM {$mt}
+                   WHERE meta_key = '_wbi_picking_status'
+                     AND meta_value = 'picked'
+               )";
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        $total = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT {$id_col}) {$base_where}" );
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        $display_orders = $wpdb->get_col( $wpdb->prepare(
+            "SELECT DISTINCT {$id_col} {$base_where} ORDER BY {$date_col} DESC LIMIT %d OFFSET %d",
+            $per_page,
+            $offset
         ) );
         ?>
         <div class="wrap">
@@ -1342,9 +1350,8 @@ class WBI_Picking_Module {
             <?php if ( empty( $display_orders ) ) : ?>
                 <div class="notice notice-success inline"><p>No hay pedidos pendientes de armado.</p></div>
             <?php else :
-                $offset = ( $paged - 1 ) * $per_page;
-                $from   = $offset + 1;
-                $to     = min( $offset + $per_page, $total );
+                $from = $offset + 1;
+                $to   = min( $offset + $per_page, $total );
                 echo '<p style="color:#50575e;">Mostrando ' . intval( $from ) . '–' . intval( $to ) . ' de ' . intval( $total ) . ' pedidos.</p>';
             ?>
                 <div class="wbi-table-responsive">
@@ -1361,8 +1368,9 @@ class WBI_Picking_Module {
                         </tr>
                     </thead>
                     <tbody>
-                    <?php foreach ( $display_orders as $order ) :
-                        $order_id       = $order->get_id();
+                    <?php foreach ( $display_orders as $order_id ) :
+                        $order = wc_get_order( $order_id );
+                        if ( ! $order ) : continue; endif;
                         $picking_status = $order->get_meta( '_wbi_picking_status' );
                     ?>
                         <tr>
@@ -1529,5 +1537,28 @@ class WBI_Picking_Module {
             ? (array) $opts[ $perm_key ]
             : array( 'administrator' );
         return (bool) array_intersect( (array) $user->roles, $allowed );
+    }
+
+    // =========================================================================
+    // HPOS helpers — detect High-Performance Order Storage and return correct
+    // table names for direct $wpdb queries.
+    // =========================================================================
+
+    private function is_hpos_enabled() {
+        if ( null === $this->hpos_enabled ) {
+            $this->hpos_enabled = class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' )
+                && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+        }
+        return $this->hpos_enabled;
+    }
+
+    private function get_orders_table_name() {
+        global $wpdb;
+        return $this->is_hpos_enabled() ? $wpdb->prefix . 'wc_orders' : $wpdb->posts;
+    }
+
+    private function get_orders_meta_table_name() {
+        global $wpdb;
+        return $this->is_hpos_enabled() ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
     }
 }
