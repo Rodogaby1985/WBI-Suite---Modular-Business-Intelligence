@@ -220,7 +220,9 @@ class WBI_Report_Sales {
                             }, $data ) );
                             $prov_totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
                             $chart_height = max( 320, count( $data ) * 38 );
-                            echo '<canvas id="wbiProvinceChart" style="height:' . intval( $chart_height ) . 'px; margin-bottom:20px;"></canvas>';
+                            echo '<div style="position:relative; height:' . intval( $chart_height ) . 'px; width:100%; margin-bottom:20px;">';
+                            echo '<canvas id="wbiProvinceChart"></canvas>';
+                            echo '</div>';
                             echo '<script>
                             (function(){
                                 var ctx = document.getElementById("wbiProvinceChart");
