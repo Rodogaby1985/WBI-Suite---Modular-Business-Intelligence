@@ -219,11 +219,12 @@ class WBI_Report_Sales {
                                 return WBI_Metrics_Engine::get_province_name( $r->province ?: '' ) ?: 'Desconocida';
                             }, $data ) );
                             $prov_totals = wp_json_encode( array_map( function($r){ return (float)$r->total; }, $data ) );
-                            echo '<canvas id="wbiProvinceChart" style="max-height:320px; margin-bottom:20px;"></canvas>';
+                            $chart_height = max( 320, count( $data ) * 38 );
+                            echo '<canvas id="wbiProvinceChart" style="height:' . intval( $chart_height ) . 'px; margin-bottom:20px;"></canvas>';
                             echo '<script>
                             (function(){
                                 var ctx = document.getElementById("wbiProvinceChart");
-                                if(ctx && typeof Chart !== "undefined") new Chart(ctx, {type:"bar", data:{labels:' . $prov_labels . ', datasets:[{label:"Facturación",data:' . $prov_totals . ',backgroundColor:"rgba(34,113,177,0.7)",borderColor:"#2271b1",borderWidth:1}]}, options:{indexAxis:"y", responsive:true, maintainAspectRatio:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}}}});
+                                if(ctx && typeof Chart !== "undefined") new Chart(ctx, {type:"bar", data:{labels:' . $prov_labels . ', datasets:[{label:"Facturación",data:' . $prov_totals . ',backgroundColor:"rgba(34,113,177,0.7)",borderColor:"#2271b1",borderWidth:1}]}, options:{indexAxis:"y", responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}}}});
                             })();
                             </script>';
                         }
