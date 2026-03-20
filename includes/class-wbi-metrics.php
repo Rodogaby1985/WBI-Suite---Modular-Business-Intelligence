@@ -91,10 +91,15 @@ class WBI_Metrics_Engine {
     }
 
     /**
-     * Translate an Argentine province ISO code to its full name.
+     * Translate an Argentine province code to its full name.
+     *
+     * Supports multiple input formats:
+     *   - ISO with prefix: 'AR-S', 'AR-B', 'ar-q'
+     *   - Single letter code: 'S', 'B', 'Q'
+     *   - Full name (passthrough): 'Santa Fe', 'Buenos Aires'
      *
      * @param string $code
-     * @return string
+     * @return string  The province full name, or the original value as fallback.
      */
     public static function get_province_name( $code ) {
         $map = array(
@@ -123,8 +128,34 @@ class WBI_Metrics_Engine {
             'V' => 'Tierra del Fuego',
             'T' => 'Tucumán',
         );
-        $code = strtoupper( trim( $code ) );
-        return isset( $map[ $code ] ) ? $map[ $code ] : $code;
+
+        if ( empty( $code ) ) {
+            return '';
+        }
+
+        $code = trim( $code );
+
+        // 1. Strip 'AR-' prefix (e.g. 'AR-S' → 'S')
+        $upper = strtoupper( $code );
+        if ( substr( $upper, 0, 3 ) === 'AR-' ) {
+            $upper = substr( $upper, 3 );
+        }
+
+        // 2. Direct lookup by single-letter key
+        if ( isset( $map[ $upper ] ) ) {
+            return $map[ $upper ];
+        }
+
+        // 3. Maybe the value is already a full province name — match case-insensitively
+        $lower     = mb_strtolower( $code, 'UTF-8' );
+        $lower_map = array_map( function( $name ) { return mb_strtolower( $name, 'UTF-8' ); }, $map );
+        $key       = array_search( $lower, $lower_map, true );
+        if ( false !== $key ) {
+            return $map[ $key ];
+        }
+
+        // 4. Fallback: return the original value so the chart shows *something*
+        return $code;
     }
 
     // --- 1. GENERALES Y DASHBOARD ---
