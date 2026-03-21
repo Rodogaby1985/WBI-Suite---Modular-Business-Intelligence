@@ -200,6 +200,14 @@ class WBI_Suite_Loader {
                 new WBI_Whatsapp_Module();
             }
         }
+
+        // R. Validador de Código Postal vs Provincia (checkout)
+        if ( ! empty( $this->options['wbi_enable_cp_validation'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-postcode-validator.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-postcode-validator.php';
+                new WBI_Postcode_Validator();
+            }
+        }
     }
 
     // --- CONFIGURACIÓN EN WP-ADMIN ---
@@ -513,6 +521,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_taxes', 'Módulo de Gestión de Impuestos', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_taxes'] );
         add_settings_field( 'wbi_enable_cashflow', 'Módulo de Flujo de Caja', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_cashflow'] );
         add_settings_field( 'wbi_enable_whatsapp', 'Módulo de Notificaciones WhatsApp', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_whatsapp'] );
+        add_settings_field( 'wbi_enable_cp_validation', 'Validación CP vs Provincia', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_cp_validation'] );
         add_settings_field( 'wbi_enable_invoice', 'Módulo de Facturación AFIP', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_invoice'] );
         add_settings_field( 'wbi_enable_notifications', 'Centro de Notificaciones', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_notifications'] );
         add_settings_field( 'wbi_enable_api', 'API REST', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_api'] );
@@ -597,13 +606,14 @@ class WBI_Suite_Loader {
 
     public function render_settings_page() {
         $opts          = $this->options ?: array();
-        $total_modules = 16;
+        $total_modules = 17;
         $active_count  = 0;
         $toggle_keys   = array(
             'wbi_enable_b2b','wbi_enable_data','wbi_enable_dashboard','wbi_enable_barcode',
             'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_scoring',
             'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
             'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
+            'wbi_enable_cp_validation',
         );
         foreach ( $toggle_keys as $k ) {
             if ( ! empty( $opts[ $k ] ) ) $active_count++;
@@ -624,6 +634,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_remitos',        '📄', 'Remitos',                  'Generación de remitos PDF vinculados a pedidos',                          'wbi-documents',  'operaciones'  ),
             array( 'wbi_enable_suppliers',      '👥', 'Proveedores',              'Gestión de proveedores y vinculación con productos',                      'wbi-suppliers',  'operaciones'  ),
             array( 'wbi_enable_data',           '📁', 'Modelo de Datos Extra',    'Campos extra: origen de venta y taxonomías personalizadas',               null,             'datos'        ),
+            array( 'wbi_enable_cp_validation',  '📮', 'Validación CP/Provincia',   'Valida que el código postal coincida con la provincia en el checkout',    null,             'datos'        ),
             array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',  'finanzas'     ),
             array( 'wbi_enable_taxes',          '🏛️','Gestión de Impuestos',      'Cálculo de IVA, percepciones e impuestos internos',                       'wbi-taxes',      'finanzas'     ),
             array( 'wbi_enable_cashflow',       '💰', 'Flujo de Caja',            'Proyección de flujo de caja y análisis financiero',                       'wbi-cashflow',   'finanzas'     ),
