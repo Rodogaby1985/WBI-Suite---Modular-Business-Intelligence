@@ -785,6 +785,23 @@ class WBI_Abandoned_Carts_Module {
             gmdate( 'Y-m-d H:i:s' ),
             $cutoff
         ) );
+
+        // Limpiar cupones auto-generados y expirados
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        $expired_coupons = $wpdb->get_col(
+            $wpdb->prepare(
+                "SELECT p.ID FROM {$wpdb->posts} p
+                 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_wbi_auto_generated' AND pm.meta_value = '1'
+                 INNER JOIN {$wpdb->postmeta} pe ON p.ID = pe.post_id AND pe.meta_key = 'date_expires'
+                 WHERE p.post_type = 'shop_coupon'
+                   AND pe.meta_value != ''
+                   AND CAST(pe.meta_value AS UNSIGNED) < %d",
+                time()
+            )
+        );
+        foreach ( $expired_coupons as $coupon_id ) {
+            wp_delete_post( intval( $coupon_id ), true );
+        }
     }
 
     // =========================================================================
@@ -811,7 +828,7 @@ class WBI_Abandoned_Carts_Module {
         $default_templates = array(
             1 => '¡Hola {name}! Dejaste productos en tu carrito en {site_name}. ¿Querés completar tu compra? {recovery_url}',
             2 => '¡{name}, tus productos te están esperando! No los pierdas: {recovery_url}',
-            3 => 'Último aviso: tu carrito en {site_name} vence pronto. Aprovechá ahora: {recovery_url}',
+            3 => 'Último aviso: tu carrito en {site_name} vence pronto. Aprovechá ahora con un {coupon_discount} usando el código {coupon_code}: {recovery_url}',
         );
         $default_subjects = array(
             1 => '¡Dejaste productos en tu carrito!',
@@ -831,13 +848,15 @@ class WBI_Abandoned_Carts_Module {
         $user_name   = $this->get_user_display_name( $cart );
 
         $placeholders = array(
-            '{name}'         => $user_name,
-            '{email}'        => $cart->email,
-            '{cart_items}'   => $items_text,
-            '{cart_total}'   => strip_tags( wc_price( $cart->cart_total ) ),
-            '{recovery_url}' => $cart->recovery_url,
-            '{site_name}'    => get_bloginfo( 'name' ),
-            '{site_url}'     => home_url( '/' ),
+            '{name}'             => $user_name,
+            '{email}'            => $cart->email,
+            '{cart_items}'       => $items_text,
+            '{cart_total}'       => strip_tags( wc_price( $cart->cart_total ) ),
+            '{recovery_url}'     => $cart->recovery_url,
+            '{site_name}'        => get_bloginfo( 'name' ),
+            '{site_url}'         => home_url( '/' ),
+            '{coupon_code}'      => $this->generate_coupon( $cart, $num ),
+            '{coupon_discount}'  => $this->get_coupon_discount_text( $num ),
         );
 
         $subject = str_replace( array_keys( $placeholders ), array_values( $placeholders ), $subject_template );
@@ -859,18 +878,20 @@ class WBI_Abandoned_Carts_Module {
         $default_templates = array(
             1 => 'Hola {name}, dejaste productos en {site_name}. Completá tu compra: {recovery_url}',
             2 => '{name}, tus productos te están esperando en {site_name}: {recovery_url}',
-            3 => 'Último aviso {name}: tu carrito en {site_name} vence pronto. Aprovechá: {recovery_url}',
+            3 => 'Último aviso {name}: tu carrito en {site_name} vence pronto. Usá el código {coupon_code} para {coupon_discount}. Aprovechá: {recovery_url}',
         );
 
         $template = $this->get_setting( "reminder_{$num}_whatsapp_template", $default_templates[ $num ] );
         $user_name = $this->get_user_display_name( $cart );
 
         $placeholders = array(
-            '{name}'         => $user_name,
-            '{email}'        => $cart->email,
-            '{recovery_url}' => $cart->recovery_url,
-            '{site_name}'    => get_bloginfo( 'name' ),
-            '{site_url}'     => home_url( '/' ),
+            '{name}'             => $user_name,
+            '{email}'            => $cart->email,
+            '{recovery_url}'     => $cart->recovery_url,
+            '{site_name}'        => get_bloginfo( 'name' ),
+            '{site_url}'         => home_url( '/' ),
+            '{coupon_code}'      => $this->generate_coupon( $cart, $num ),
+            '{coupon_discount}'  => $this->get_coupon_discount_text( $num ),
         );
 
         $message  = str_replace( array_keys( $placeholders ), array_values( $placeholders ), $template );
@@ -881,6 +902,105 @@ class WBI_Abandoned_Carts_Module {
         // Para esta implementación almacenamos en un campo de notas via meta update si fuera necesario.
         // El link wa.me queda disponible en el panel de administración.
         return $wa_link;
+    }
+
+    // =========================================================================
+    // CUPONES DE DESCUENTO
+    // =========================================================================
+
+    /**
+     * Genera un cupón WooCommerce para el carrito y reminder indicados.
+     * Si ya existe un cupón para ese carrito+reminder, devuelve el código existente.
+     *
+     * @param object $cart Registro del carrito abandonado.
+     * @param int    $num  Número de reminder (1, 2 o 3).
+     * @return string Código del cupón, o '' si los cupones están desactivados para este reminder.
+     */
+    private function generate_coupon( $cart, $num ) {
+        if ( ! $this->get_setting( "reminder_{$num}_coupon_enabled", 0 ) ) {
+            return '';
+        }
+
+        // Verificar si ya existe un cupón para este carrito y reminder
+        $existing = get_posts( array(
+            'post_type'      => 'shop_coupon',
+            'posts_per_page' => 1,
+            'post_status'    => 'publish',
+            'meta_query'     => array(
+                'relation' => 'AND',
+                array(
+                    'key'   => '_wbi_abandoned_cart_id',
+                    'value' => intval( $cart->id ),
+                    'type'  => 'NUMERIC',
+                ),
+                array(
+                    'key'   => '_wbi_reminder_num',
+                    'value' => intval( $num ),
+                    'type'  => 'NUMERIC',
+                ),
+            ),
+        ) );
+
+        if ( ! empty( $existing ) ) {
+            return $existing[0]->post_title;
+        }
+
+        // Generar código único
+        $prefix = $this->get_setting( "reminder_{$num}_coupon_prefix", 'WBI-CART-' );
+        do {
+            $code = strtoupper( $prefix . wp_generate_password( 8, false ) );
+        } while ( get_page_by_title( $code, OBJECT, 'shop_coupon' ) );
+
+        $discount_type  = $this->get_setting( "reminder_{$num}_coupon_type", 'percent' );
+        $amount         = $this->get_setting( "reminder_{$num}_coupon_amount", 10 );
+        $expiry_days    = absint( $this->get_setting( "reminder_{$num}_coupon_expiry_days", 3 ) );
+        $min_amount     = $this->get_setting( "reminder_{$num}_coupon_min_amount", 0 );
+        $expiry_date    = gmdate( 'Y-m-d', time() + $expiry_days * DAY_IN_SECONDS );
+
+        $coupon_id = wp_insert_post( array(
+            'post_title'   => $code,
+            'post_type'    => 'shop_coupon',
+            'post_status'  => 'publish',
+            'post_excerpt' => sprintf(
+                'Cupón auto-generado por wooErp para carrito abandonado #%d',
+                intval( $cart->id )
+            ),
+        ) );
+
+        if ( is_wp_error( $coupon_id ) || ! $coupon_id ) {
+            return '';
+        }
+
+        update_post_meta( $coupon_id, 'discount_type',          $discount_type );
+        update_post_meta( $coupon_id, 'coupon_amount',          floatval( $amount ) );
+        update_post_meta( $coupon_id, 'minimum_amount',         floatval( $min_amount ) );
+        update_post_meta( $coupon_id, 'date_expires',           strtotime( $expiry_date ) );
+        update_post_meta( $coupon_id, 'individual_use',         'yes' );
+        update_post_meta( $coupon_id, 'usage_limit',            1 );
+        update_post_meta( $coupon_id, 'usage_limit_per_user',   1 );
+        update_post_meta( $coupon_id, '_wbi_abandoned_cart_id', intval( $cart->id ) );
+        update_post_meta( $coupon_id, '_wbi_reminder_num',      intval( $num ) );
+        update_post_meta( $coupon_id, '_wbi_auto_generated',    1 );
+
+        return $code;
+    }
+
+    /**
+     * Retorna el texto descriptivo del descuento para un reminder.
+     *
+     * @param int $num Número de reminder.
+     * @return string Ej: "10% de descuento" o "$500,00 de descuento".
+     */
+    private function get_coupon_discount_text( $num ) {
+        if ( ! $this->get_setting( "reminder_{$num}_coupon_enabled", 0 ) ) {
+            return '';
+        }
+        $type   = $this->get_setting( "reminder_{$num}_coupon_type", 'percent' );
+        $amount = $this->get_setting( "reminder_{$num}_coupon_amount", 10 );
+        if ( $type === 'percent' ) {
+            return $amount . '% de descuento';
+        }
+        return strip_tags( wc_price( $amount ) ) . ' de descuento';
     }
 
     private function build_email_html( $user_name, $items_html, $cart, $message_body ) {
@@ -1088,17 +1208,39 @@ class WBI_Abandoned_Carts_Module {
         $int_fields = array(
             'abandonment_threshold', 'expiration_days',
             'reminder_1_hours', 'reminder_2_hours', 'reminder_3_hours',
+            'reminder_1_coupon_expiry_days', 'reminder_2_coupon_expiry_days', 'reminder_3_coupon_expiry_days',
         );
         foreach ( $int_fields as $f ) {
             $clean[ $f ] = absint( $input[ $f ] ?? 0 );
         }
+
+        // Montos monetarios/porcentaje: permiten decimales
+        foreach ( array( 1, 2, 3 ) as $n ) {
+            $clean[ "reminder_{$n}_coupon_amount" ]     = abs( floatval( $input[ "reminder_{$n}_coupon_amount" ] ?? 10 ) );
+            $clean[ "reminder_{$n}_coupon_min_amount" ] = abs( floatval( $input[ "reminder_{$n}_coupon_min_amount" ] ?? 0 ) );
+        }
+
         $bool_fields = array(
             'show_add_popup', 'show_exit_popup',
             'reminder_1_enabled', 'reminder_2_enabled', 'reminder_3_enabled',
+            'reminder_1_coupon_enabled', 'reminder_2_coupon_enabled', 'reminder_3_coupon_enabled',
         );
         foreach ( $bool_fields as $f ) {
             $clean[ $f ] = ! empty( $input[ $f ] ) ? 1 : 0;
         }
+
+        // Tipo de descuento del cupón
+        $valid_types = array( 'percent', 'fixed_cart' );
+        foreach ( array( 1, 2, 3 ) as $n ) {
+            $type = sanitize_text_field( wp_unslash( $input[ "reminder_{$n}_coupon_type" ] ?? 'percent' ) );
+            $clean[ "reminder_{$n}_coupon_type" ] = in_array( $type, $valid_types, true ) ? $type : 'percent';
+        }
+
+        // Prefijo del cupón
+        foreach ( array( 1, 2, 3 ) as $n ) {
+            $clean[ "reminder_{$n}_coupon_prefix" ] = sanitize_text_field( wp_unslash( $input[ "reminder_{$n}_coupon_prefix" ] ?? 'WBI-CART-' ) );
+        }
+
         return $clean;
     }
 
@@ -1253,13 +1395,27 @@ class WBI_Abandoned_Carts_Module {
                 $wa_phone  = preg_replace( '/[^0-9]/', '', $row->phone );
                 $wa_link   = ! empty( $row->phone ) ? 'https://wa.me/' . $wa_phone : '#';
 
+                // Verificar si hay cupones asociados a este carrito
+                $has_coupons = (bool) get_posts( array(
+                    'post_type'      => 'shop_coupon',
+                    'posts_per_page' => 1,
+                    'fields'         => 'ids',
+                    'meta_query'     => array(
+                        array(
+                            'key'   => '_wbi_abandoned_cart_id',
+                            'value' => intval( $row->id ),
+                            'type'  => 'NUMERIC',
+                        ),
+                    ),
+                ) );
+
                 echo '<tr>';
                 echo '<td>' . esc_html( date_i18n( 'd/m/Y H:i', strtotime( $row->created_at ) ) ) . '</td>';
                 echo '<td>' . esc_html( $row->email ?: '—' ) . '<br><small>' . esc_html( $row->phone ?: '' ) . '</small></td>';
                 echo '<td><span style="text-transform:uppercase;font-size:11px;background:#e0e0e0;padding:2px 6px;border-radius:3px;">' . esc_html( $row->contact_channel ) . '</span></td>';
                 echo '<td>' . esc_html( $items_names ) . '</td>';
                 echo '<td>' . wp_kses_post( wc_price( $row->cart_total ) ) . '</td>';
-                echo '<td style="text-align:center;">' . intval( $row->reminder_count ) . '</td>';
+                echo '<td style="text-align:center;">' . intval( $row->reminder_count ) . ( $has_coupons ? ' <span title="Tiene cupón generado">🎟️</span>' : '' ) . '</td>';
                 echo '<td>' . esc_html( $last_reminder ) . '</td>';
                 echo '<td>';
                 echo '<button class="button button-small wbi-send-reminder" data-id="' . intval( $row->id ) . '" data-nonce="' . esc_attr( $admin_nonce ) . '" title="Enviar recordatorio">📧</button> ';
@@ -1542,32 +1698,65 @@ class WBI_Abandoned_Carts_Module {
             $reminder_defaults = array(
                 1 => array( 'hours' => 1,  'subject' => '¡Dejaste productos en tu carrito!',          'email' => '¡Hola {name}! Dejaste productos en tu carrito en {site_name}. ¿Querés completar tu compra? {recovery_url}', 'whatsapp' => 'Hola {name}, dejaste productos en {site_name}. Completá tu compra: {recovery_url}' ),
                 2 => array( 'hours' => 24, 'subject' => 'Tus productos te están esperando 🛒',         'email' => '¡{name}, tus productos te están esperando! No los pierdas: {recovery_url}',                                 'whatsapp' => '{name}, tus productos te están esperando en {site_name}: {recovery_url}' ),
-                3 => array( 'hours' => 72, 'subject' => 'Último aviso: tu carrito vence pronto ⚠️',    'email' => 'Último aviso: tu carrito en {site_name} vence pronto. Aprovechá ahora: {recovery_url}',                    'whatsapp' => 'Último aviso {name}: tu carrito en {site_name} vence pronto. Aprovechá: {recovery_url}' ),
+                3 => array( 'hours' => 72, 'subject' => 'Último aviso: tu carrito vence pronto ⚠️',    'email' => 'Último aviso: tu carrito en {site_name} vence pronto. Aprovechá ahora con un {coupon_discount} usando el código {coupon_code}: {recovery_url}', 'whatsapp' => 'Último aviso {name}: tu carrito en {site_name} vence pronto. Usá el código {coupon_code} para {coupon_discount}. Aprovechá: {recovery_url}' ),
             );
             for ( $num = 1; $num <= 3; $num++ ) :
                 $d = $reminder_defaults[ $num ];
             ?>
-            <h2>📩 Recordatorio #<?php echo $num; ?></h2>
+            <h2>📩 Recordatorio #<?php echo intval( $num ); ?></h2>
             <table class="form-table">
                 <tr>
                     <th>Activado</th>
-                    <td><label><input type="checkbox" name="wbi_ac[reminder_<?php echo $num; ?>_enabled]" value="1" <?php checked( $this->get_setting("reminder_{$num}_enabled", 1), 1 ); ?>> Activado</label></td>
+                    <td><label><input type="checkbox" name="wbi_ac[reminder_<?php echo intval( $num ); ?>_enabled]" value="1" <?php checked( $this->get_setting("reminder_{$num}_enabled", 1), 1 ); ?>> Activado</label></td>
                 </tr>
                 <tr>
                     <th>Tiempo desde abandono</th>
-                    <td><input type="number" name="wbi_ac[reminder_<?php echo $num; ?>_hours]" value="<?php echo esc_attr( $this->get_setting("reminder_{$num}_hours", $d['hours']) ); ?>" min="1" style="width:80px"> horas</td>
+                    <td><input type="number" name="wbi_ac[reminder_<?php echo intval( $num ); ?>_hours]" value="<?php echo esc_attr( $this->get_setting("reminder_{$num}_hours", $d['hours']) ); ?>" min="1" style="width:80px"> horas</td>
                 </tr>
                 <tr>
                     <th>Asunto del email</th>
-                    <td><input type="text" name="wbi_ac[reminder_<?php echo $num; ?>_subject]" value="<?php echo esc_attr( $this->get_setting("reminder_{$num}_subject", $d['subject']) ); ?>" class="regular-text"></td>
+                    <td><input type="text" name="wbi_ac[reminder_<?php echo intval( $num ); ?>_subject]" value="<?php echo esc_attr( $this->get_setting("reminder_{$num}_subject", $d['subject']) ); ?>" class="regular-text"></td>
                 </tr>
                 <tr>
                     <th>Template email</th>
-                    <td><textarea name="wbi_ac[reminder_<?php echo $num; ?>_email_template]" rows="3" class="large-text"><?php echo esc_textarea( $this->get_setting("reminder_{$num}_email_template", $d['email']) ); ?></textarea></td>
+                    <td><textarea name="wbi_ac[reminder_<?php echo intval( $num ); ?>_email_template]" rows="3" class="large-text"><?php echo esc_textarea( $this->get_setting("reminder_{$num}_email_template", $d['email']) ); ?></textarea></td>
                 </tr>
                 <tr>
                     <th>Template WhatsApp</th>
-                    <td><textarea name="wbi_ac[reminder_<?php echo $num; ?>_whatsapp_template]" rows="2" class="large-text"><?php echo esc_textarea( $this->get_setting("reminder_{$num}_whatsapp_template", $d['whatsapp']) ); ?></textarea></td>
+                    <td><textarea name="wbi_ac[reminder_<?php echo intval( $num ); ?>_whatsapp_template]" rows="2" class="large-text"><?php echo esc_textarea( $this->get_setting("reminder_{$num}_whatsapp_template", $d['whatsapp']) ); ?></textarea></td>
+                </tr>
+            </table>
+
+            <h3 style="margin-top:0;">🎟️ Cupón de descuento</h3>
+            <table class="form-table" style="margin-top:0;">
+                <tr>
+                    <th>Incluir cupón en este recordatorio</th>
+                    <td><label><input type="checkbox" name="wbi_ac[reminder_<?php echo intval( $num ); ?>_coupon_enabled]" value="1" <?php checked( $this->get_setting("reminder_{$num}_coupon_enabled", $num === 3 ? 1 : 0), 1 ); ?>> Activado</label></td>
+                </tr>
+                <tr>
+                    <th>Tipo de descuento</th>
+                    <td>
+                        <select name="wbi_ac[reminder_<?php echo intval( $num ); ?>_coupon_type]">
+                            <option value="percent" <?php selected( $this->get_setting("reminder_{$num}_coupon_type", 'percent'), 'percent' ); ?>>% Porcentaje</option>
+                            <option value="fixed_cart" <?php selected( $this->get_setting("reminder_{$num}_coupon_type", 'percent'), 'fixed_cart' ); ?>>$ Monto fijo</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <th>Valor del descuento</th>
+                    <td><input type="number" name="wbi_ac[reminder_<?php echo intval( $num ); ?>_coupon_amount]" value="<?php echo esc_attr( $this->get_setting("reminder_{$num}_coupon_amount", 10) ); ?>" min="0" step="0.01" style="width:100px"></td>
+                </tr>
+                <tr>
+                    <th>Expiración del cupón</th>
+                    <td><input type="number" name="wbi_ac[reminder_<?php echo intval( $num ); ?>_coupon_expiry_days]" value="<?php echo esc_attr( $this->get_setting("reminder_{$num}_coupon_expiry_days", 3) ); ?>" min="1" style="width:80px"> días después de enviar</td>
+                </tr>
+                <tr>
+                    <th>Monto mínimo de compra</th>
+                    <td><input type="number" name="wbi_ac[reminder_<?php echo intval( $num ); ?>_coupon_min_amount]" value="<?php echo esc_attr( $this->get_setting("reminder_{$num}_coupon_min_amount", 0) ); ?>" min="0" step="0.01" style="width:100px"> (0 = sin mínimo)</td>
+                </tr>
+                <tr>
+                    <th>Prefijo del cupón</th>
+                    <td><input type="text" name="wbi_ac[reminder_<?php echo intval( $num ); ?>_coupon_prefix]" value="<?php echo esc_attr( $this->get_setting("reminder_{$num}_coupon_prefix", 'WBI-CART-') ); ?>" class="regular-text" placeholder="WBI-CART-"></td>
                 </tr>
             </table>
             <?php endfor; ?>
@@ -1576,7 +1765,8 @@ class WBI_Abandoned_Carts_Module {
             <div style="background:#f6f7f7;border:1px solid #c3c4c7;border-radius:6px;padding:14px;margin-top:8px;">
                 <strong>Placeholders disponibles:</strong>
                 <code>{name}</code>, <code>{email}</code>, <code>{cart_items}</code>, <code>{cart_total}</code>,
-                <code>{recovery_url}</code>, <code>{site_name}</code>, <code>{site_url}</code>
+                <code>{recovery_url}</code>, <code>{site_name}</code>, <code>{site_url}</code>,
+                <code>{coupon_code}</code>, <code>{coupon_discount}</code>
             </div>
 
             <p class="submit">
