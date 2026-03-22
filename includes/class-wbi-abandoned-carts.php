@@ -12,16 +12,21 @@ class WBI_Abandoned_Carts_Module {
     /** @var string Nombre de la tabla custom */
     private $table;
 
+    /** @var string Nombre de la tabla de log de recordatorios */
+    private $log_table;
+
     /** @var array Configuración del módulo */
     private $settings;
 
     public function __construct() {
         global $wpdb;
-        $this->table    = $wpdb->prefix . 'wbi_abandoned_carts';
-        $this->settings = get_option( 'wbi_abandoned_cart_settings', array() );
+        $this->table     = $wpdb->prefix . 'wbi_abandoned_carts';
+        $this->log_table = $wpdb->prefix . 'wbi_reminder_log';
+        $this->settings  = get_option( 'wbi_abandoned_cart_settings', array() );
 
-        // Crear tabla si no existe
+        // Crear tablas si no existen
         $this->maybe_create_table();
+        $this->maybe_create_log_table();
 
         // Menú de administración
         add_action( 'admin_menu', array( $this, 'add_submenu' ), 100 );
@@ -44,6 +49,7 @@ class WBI_Abandoned_Carts_Module {
         add_action( 'wp_ajax_wbi_send_manual_reminder',   array( $this, 'ajax_send_manual_reminder' ) );
         add_action( 'wp_ajax_wbi_delete_abandoned_cart',  array( $this, 'ajax_delete_abandoned_cart' ) );
         add_action( 'wp_ajax_wbi_get_cart_detail',        array( $this, 'ajax_get_cart_detail' ) );
+        add_action( 'wp_ajax_wbi_bulk_send_reminders',    array( $this, 'ajax_bulk_send_reminders' ) );
 
         // WooCommerce hooks
         add_action( 'woocommerce_cart_updated', array( $this, 'on_cart_updated' ) );
@@ -96,6 +102,30 @@ class WBI_Abandoned_Carts_Module {
             KEY idx_status (status),
             KEY idx_created (created_at),
             KEY idx_recovery_token (recovery_token)
+        ) {$charset_collate};";
+
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        dbDelta( $sql );
+    }
+
+    private function maybe_create_log_table() {
+        global $wpdb;
+        $charset_collate = $wpdb->get_charset_collate();
+
+        $sql = "CREATE TABLE {$this->log_table} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            cart_id BIGINT UNSIGNED NOT NULL,
+            reminder_number TINYINT UNSIGNED NOT NULL,
+            channel ENUM('email','whatsapp') NOT NULL,
+            recipient VARCHAR(200) NOT NULL DEFAULT '',
+            subject VARCHAR(500) NOT NULL DEFAULT '',
+            status ENUM('sent','failed','opened','clicked') NOT NULL DEFAULT 'sent',
+            error_message TEXT DEFAULT NULL,
+            sent_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY idx_cart_id (cart_id),
+            KEY idx_sent_at (sent_at),
+            KEY idx_status (status)
         ) {$charset_collate};";
 
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -524,9 +554,35 @@ class WBI_Abandoned_Carts_Module {
             wp_send_json_error( array( 'msg' => 'Carrito no encontrado.' ) );
         }
 
-        $result = $this->send_reminder( $cart, 1, true );
+        // Determinar número de reminder a enviar según estado actual
+        $next_num = 1;
+        if ( $cart->status === 'sent_reminder_1' ) {
+            $next_num = 2;
+        } elseif ( $cart->status === 'sent_reminder_2' ) {
+            $next_num = 3;
+        }
+
+        $result = $this->send_reminder( $cart, $next_num, true );
         if ( $result ) {
-            wp_send_json_success( array( 'msg' => 'Recordatorio enviado correctamente.' ) );
+            $new_status = "sent_reminder_{$next_num}";
+            $new_count  = intval( $cart->reminder_count ) + 1;
+            $wpdb->update(
+                $this->table,
+                array(
+                    'status'           => $new_status,
+                    'reminder_count'   => $new_count,
+                    'last_reminder_at' => gmdate( 'Y-m-d H:i:s' ),
+                    'updated_at'       => gmdate( 'Y-m-d H:i:s' ),
+                ),
+                array( 'id' => intval( $cart->id ) ),
+                array( '%s', '%d', '%s', '%s' ),
+                array( '%d' )
+            );
+            wp_send_json_success( array(
+                'msg'           => "Recordatorio #{$next_num} enviado correctamente.",
+                'new_status'    => $new_status,
+                'reminder_count'=> $new_count,
+            ) );
         } else {
             wp_send_json_error( array( 'msg' => 'No se pudo enviar el recordatorio.' ) );
         }
@@ -590,6 +646,76 @@ class WBI_Abandoned_Carts_Module {
         }
         $html = ob_get_clean();
         wp_send_json_success( array( 'html' => $html ) );
+    }
+
+    public function ajax_bulk_send_reminders() {
+        check_ajax_referer( 'wbi_admin_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_send_json_error( array( 'msg' => 'Sin permiso.' ) );
+        }
+
+        $raw_ids = isset( $_POST['cart_ids'] ) ? (array) $_POST['cart_ids'] : array();
+        $ids     = array_filter( array_map( 'absint', $raw_ids ) );
+
+        if ( empty( $ids ) ) {
+            wp_send_json_error( array( 'msg' => 'No se recibieron IDs.' ) );
+        }
+
+        global $wpdb;
+        $sent    = 0;
+        $failed  = 0;
+        $skipped = 0;
+
+        foreach ( $ids as $id ) {
+            $cart = $wpdb->get_row( $wpdb->prepare(
+                "SELECT * FROM {$this->table} WHERE id = %d",
+                $id
+            ) );
+            if ( ! $cart ) {
+                $skipped++;
+                continue;
+            }
+            if ( $cart->status === 'recovered' || $cart->status === 'expired' ) {
+                $skipped++;
+                continue;
+            }
+
+            $next_num = 1;
+            if ( $cart->status === 'sent_reminder_1' ) {
+                $next_num = 2;
+            } elseif ( $cart->status === 'sent_reminder_2' ) {
+                $next_num = 3;
+            }
+
+            $result = $this->send_reminder( $cart, $next_num, true );
+            if ( $result ) {
+                $new_status = "sent_reminder_{$next_num}";
+                $wpdb->update(
+                    $this->table,
+                    array(
+                        'status'           => $new_status,
+                        'reminder_count'   => intval( $cart->reminder_count ) + 1,
+                        'last_reminder_at' => gmdate( 'Y-m-d H:i:s' ),
+                        'updated_at'       => gmdate( 'Y-m-d H:i:s' ),
+                    ),
+                    array( 'id' => intval( $cart->id ) ),
+                    array( '%s', '%d', '%s', '%s' ),
+                    array( '%d' )
+                );
+                $sent++;
+            } else {
+                $failed++;
+            }
+        }
+
+        $total = count( $ids );
+        wp_send_json_success( array(
+            'msg'     => "Enviados: {$sent} — Fallidos: {$failed} — Omitidos: {$skipped} (de {$total} seleccionados)",
+            'sent'    => $sent,
+            'failed'  => $failed,
+            'skipped' => $skipped,
+            'total'   => $total,
+        ) );
     }
 
     // =========================================================================
@@ -869,7 +995,20 @@ class WBI_Abandoned_Carts_Module {
             'From: ' . sanitize_text_field( $from_name ) . ' <' . sanitize_email( $from_email ) . '>',
         );
 
-        return wp_mail( $cart->email, $subject, $html, $headers );
+        $result = wp_mail( $cart->email, $subject, $html, $headers );
+
+        // Registrar en log
+        $this->log_reminder(
+            intval( $cart->id ),
+            $num,
+            'email',
+            $cart->email,
+            $subject,
+            $result ? 'sent' : 'failed',
+            $result ? null : 'wp_mail devolvió false'
+        );
+
+        return $result;
     }
 
     private function store_whatsapp_reminder( $cart, $num ) {
@@ -897,6 +1036,17 @@ class WBI_Abandoned_Carts_Module {
         $message  = str_replace( array_keys( $placeholders ), array_values( $placeholders ), $template );
         $wa_phone = preg_replace( '/[^0-9]/', '', $cart->phone );
         $wa_link  = 'https://wa.me/' . $wa_phone . '?text=' . rawurlencode( $message );
+
+        // Registrar en log
+        $this->log_reminder(
+            intval( $cart->id ),
+            $num,
+            'whatsapp',
+            $cart->phone,
+            mb_substr( $message, 0, 200 ),
+            'sent',
+            null
+        );
 
         // Guardamos el link en recovery_url como referencia (o podría guardarse en metadata)
         // Para esta implementación almacenamos en un campo de notas via meta update si fuera necesario.
@@ -1161,6 +1311,27 @@ class WBI_Abandoned_Carts_Module {
         return isset( $this->settings[ $key ] ) ? $this->settings[ $key ] : $default;
     }
 
+    /**
+     * Registra un envío de recordatorio en la tabla de log.
+     */
+    private function log_reminder( $cart_id, $reminder_number, $channel, $recipient, $subject, $status, $error_message = null ) {
+        global $wpdb;
+        $wpdb->insert(
+            $this->log_table,
+            array(
+                'cart_id'         => $cart_id,
+                'reminder_number' => $reminder_number,
+                'channel'         => $channel,
+                'recipient'       => $recipient,
+                'subject'         => $subject,
+                'status'          => $status,
+                'error_message'   => $error_message,
+                'sent_at'         => gmdate( 'Y-m-d H:i:s' ),
+            ),
+            array( '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s' )
+        );
+    }
+
     // =========================================================================
     // ADMIN MENU & SETTINGS
     // =========================================================================
@@ -1264,7 +1435,7 @@ class WBI_Abandoned_Carts_Module {
             echo '<div class="notice notice-success is-dismissible"><p>✅ Configuración guardada correctamente.</p></div>';
         }
 
-        $tab = isset( $_GET['tab'] ) ? sanitize_text_field( $_GET['tab'] ) : 'activos';
+        $tab = isset( $_GET['tab'] ) ? sanitize_text_field( $_GET['tab'] ) : 'analytics';
         $base_url = admin_url( 'admin.php?page=wbi-abandoned-carts' );
 
         echo '<div class="wrap">';
@@ -1272,9 +1443,9 @@ class WBI_Abandoned_Carts_Module {
 
         // Tabs
         $tabs = array(
-            'activos'       => '📋 Activos',
-            'recuperados'   => '✅ Recuperados',
-            'estadisticas'  => '📊 Estadísticas',
+            'analytics'     => '📊 Analytics',
+            'carritos'      => '🛒 Carritos',
+            'log'           => '📋 Log de Envíos',
             'configuracion' => '⚙️ Configuración',
         );
         echo '<nav class="nav-tab-wrapper" style="margin-bottom:16px;">';
@@ -1285,14 +1456,14 @@ class WBI_Abandoned_Carts_Module {
         echo '</nav>';
 
         switch ( $tab ) {
-            case 'activos':
-                $this->render_tab_activos();
+            case 'analytics':
+                $this->render_tab_analytics();
                 break;
-            case 'recuperados':
-                $this->render_tab_recuperados();
+            case 'carritos':
+                $this->render_tab_carritos();
                 break;
-            case 'estadisticas':
-                $this->render_tab_estadisticas();
+            case 'log':
+                $this->render_tab_log();
                 break;
             case 'configuracion':
                 $this->render_tab_configuracion();
@@ -1306,119 +1477,382 @@ class WBI_Abandoned_Carts_Module {
     }
 
     // -------------------------------------------------------------------------
-    // TAB: ACTIVOS
+    // TAB: ANALYTICS
     // -------------------------------------------------------------------------
 
-    private function render_tab_activos() {
+    private function render_tab_analytics() {
         global $wpdb;
 
-        $per_page    = 20;
+        // Período filtrable
+        $period    = isset( $_GET['period'] ) ? sanitize_text_field( $_GET['period'] ) : '30';
+        $date_from = isset( $_GET['date_from'] ) ? sanitize_text_field( $_GET['date_from'] ) : '';
+        $date_to   = isset( $_GET['date_to'] ) ? sanitize_text_field( $_GET['date_to'] ) : '';
+
+        if ( $date_from || $date_to ) {
+            $period = 'custom';
+        }
+
+        $today = gmdate( 'Y-m-d' );
+        if ( $period === 'custom' ) {
+            $from = $date_from ?: gmdate( 'Y-m-d', strtotime( '-30 days' ) );
+            $to   = $date_to ?: $today;
+        } else {
+            $days = max( 1, (int) $period );
+            $from = gmdate( 'Y-m-d', strtotime( "-{$days} days" ) );
+            $to   = $today;
+        }
+
+        $base_url = admin_url( 'admin.php?page=wbi-abandoned-carts&tab=analytics' );
+
+        // Botones de período rápido
+        echo '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:20px;">';
+        foreach ( array( '1' => 'Hoy', '7' => '7 días', '30' => '30 días', '90' => '90 días' ) as $p => $l ) {
+            $active = ( $period === $p ) ? 'button-primary' : 'button-secondary';
+            echo '<a href="' . esc_url( $base_url . '&period=' . $p ) . '" class="button ' . esc_attr( $active ) . '">' . esc_html( $l ) . '</a>';
+        }
+        echo '<form method="get" style="display:flex;gap:6px;align-items:center;">';
+        echo '<input type="hidden" name="page" value="wbi-abandoned-carts">';
+        echo '<input type="hidden" name="tab" value="analytics">';
+        echo '<input type="date" name="date_from" value="' . esc_attr( $period === 'custom' ? $from : '' ) . '" style="border-radius:4px;border:1px solid #c3c4c7;padding:4px 8px;">';
+        echo '<span>—</span>';
+        echo '<input type="date" name="date_to" value="' . esc_attr( $period === 'custom' ? $to : '' ) . '" style="border-radius:4px;border:1px solid #c3c4c7;padding:4px 8px;">';
+        echo '<button type="submit" class="button ' . ( $period === 'custom' ? 'button-primary' : '' ) . '">Aplicar</button>';
+        echo '</form>';
+        echo '</div>';
+
+        // KPI queries con rango de fechas
+        $where_period = $wpdb->prepare( ' AND DATE(created_at) BETWEEN %s AND %s', $from, $to );
+
+        $total_abandoned    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table} WHERE status != 'expired'" . $where_period );
+        $revenue_potencial  = (float) $wpdb->get_var( "SELECT SUM(cart_total) FROM {$this->table} WHERE status != 'expired'" . $where_period );
+        $total_recovered    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table} WHERE status = 'recovered'" . $where_period );
+        $revenue_recuperado = (float) $wpdb->get_var( "SELECT SUM(cart_total) FROM {$this->table} WHERE status = 'recovered'" . $where_period );
+        $tasa_recuperacion  = $total_abandoned > 0 ? round( $total_recovered / $total_abandoned * 100, 1 ) : 0;
+        $reminders_enviados = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$this->log_table} WHERE DATE(sent_at) BETWEEN %s AND %s",
+            $from, $to
+        ) );
+
+        // KPI Cards
+        echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:28px;">';
+        $this->render_kpi_card( '🛒 Carritos Abandonados', $total_abandoned );
+        $this->render_kpi_card( '💰 Revenue Potencial', wc_price( $revenue_potencial ) );
+        $this->render_kpi_card( '✅ Carritos Recuperados', $total_recovered );
+        $this->render_kpi_card( '💵 Revenue Recuperado', wc_price( $revenue_recuperado ) );
+        $this->render_kpi_card( '📈 Tasa de Recuperación', $tasa_recuperacion . '%' );
+        $this->render_kpi_card( '📧 Recordatorios Enviados', $reminders_enviados );
+        echo '</div>';
+
+        // Datos para gráfico de línea (hasta 30 días)
+        $days_chart = array();
+        if ( $period === 'custom' ) {
+            $range_days = (int) ( ( strtotime( $to ) - strtotime( $from ) ) / 86400 + 1 );
+        } else {
+            $range_days = (int) $period;
+        }
+        $chart_min  = 7;
+        $chart_max  = 30;
+        $chart_days = max( $chart_min, min( $chart_max, $range_days ) );
+        for ( $i = $chart_days - 1; $i >= 0; $i-- ) {
+            $day   = gmdate( 'Y-m-d', strtotime( "-{$i} days", strtotime( $to ) ) );
+            $label = date_i18n( 'd/m', strtotime( $day ) );
+            $aband = (int) $wpdb->get_var( $wpdb->prepare(
+                "SELECT COUNT(*) FROM {$this->table} WHERE DATE(created_at) = %s AND status != 'expired'",
+                $day
+            ) );
+            $recov = (int) $wpdb->get_var( $wpdb->prepare(
+                "SELECT COUNT(*) FROM {$this->table} WHERE DATE(recovered_at) = %s AND status = 'recovered'",
+                $day
+            ) );
+            $days_chart[] = array( 'label' => $label, 'abandoned' => $aband, 'recovered' => $recov );
+        }
+
+        // Distribución por canal
+        $by_channel     = $wpdb->get_results( "SELECT contact_channel, COUNT(*) as cnt FROM {$this->table} WHERE status != 'expired'" . $where_period . " GROUP BY contact_channel" );
+        $channel_labels = array();
+        $channel_values = array();
+        foreach ( $by_channel as $row ) {
+            $channel_labels[] = ucfirst( $row->contact_channel );
+            $channel_values[] = intval( $row->cnt );
+        }
+
+        // Efectividad por reminder (carritos recuperados según reminder_count)
+        $eff_labels = array( 'Reminder #1', 'Reminder #2', 'Reminder #3' );
+        $eff_values = array();
+        for ( $n = 1; $n <= 3; $n++ ) {
+            $eff_values[] = (int) $wpdb->get_var( $wpdb->prepare(
+                "SELECT COUNT(*) FROM {$this->table} WHERE status = 'recovered' AND reminder_count = %d" . $where_period,
+                $n
+            ) );
+        }
+
+        // Enqueue Chart.js con SRI
+        wp_enqueue_script( 'chartjs', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js', array(), null, true );
+        add_filter( 'script_loader_tag', function( $tag, $handle ) {
+            if ( 'chartjs' === $handle ) {
+                $tag = str_replace( '<script ', '<script integrity="sha256-oFRLExpPzLU3sFSPMiGQNIPw8JdObYMnQlOkPYnSOsE=" crossorigin="anonymous" ', $tag );
+            }
+            return $tag;
+        }, 10, 2 );
+        ?>
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:24px;margin-bottom:24px;">
+          <div style="background:#fff;border:1px solid #c3c4c7;border-radius:8px;padding:20px;">
+            <h3 style="margin-top:0;">Abandonados vs Recuperados (últimos <?php echo intval( $chart_days ); ?> días)</h3>
+            <div style="position:relative;height:280px;">
+              <canvas id="wbiLineChart"></canvas>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid #c3c4c7;border-radius:8px;padding:20px;">
+            <h3 style="margin-top:0;">Distribución por canal</h3>
+            <div style="position:relative;height:280px;">
+              <canvas id="wbiPieChart"></canvas>
+            </div>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #c3c4c7;border-radius:8px;padding:20px;max-width:600px;">
+          <h3 style="margin-top:0;">Efectividad por Reminder</h3>
+          <div style="position:relative;height:220px;">
+            <canvas id="wbiBarChart"></canvas>
+          </div>
+        </div>
+        <script>
+        document.addEventListener("DOMContentLoaded", function(){
+            var lineData    = <?php echo wp_json_encode( $days_chart ); ?>;
+            var lineLabels  = lineData.map(function(d){ return d.label; });
+            var lineAband   = lineData.map(function(d){ return d.abandoned; });
+            var lineRecov   = lineData.map(function(d){ return d.recovered; });
+
+            new Chart(document.getElementById("wbiLineChart"), {
+                type: "line",
+                data: {
+                    labels: lineLabels,
+                    datasets: [
+                        { label:"Abandonados", data:lineAband, borderColor:"#dc3545", backgroundColor:"rgba(220,53,69,.1)", tension:.3, fill:true },
+                        { label:"Recuperados", data:lineRecov, borderColor:"#28a745", backgroundColor:"rgba(40,167,69,.1)", tension:.3, fill:true }
+                    ]
+                },
+                options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:"top" } } }
+            });
+
+            new Chart(document.getElementById("wbiPieChart"), {
+                type: "pie",
+                data: {
+                    labels: <?php echo wp_json_encode( $channel_labels ); ?>,
+                    datasets:[{ data: <?php echo wp_json_encode( $channel_values ); ?>, backgroundColor:["#2271b1","#25ae88","#f0b849"] }]
+                },
+                options:{ responsive:true, maintainAspectRatio:false }
+            });
+
+            new Chart(document.getElementById("wbiBarChart"), {
+                type: "bar",
+                data: {
+                    labels: <?php echo wp_json_encode( $eff_labels ); ?>,
+                    datasets:[{ label:"Recuperados", data: <?php echo wp_json_encode( $eff_values ); ?>, backgroundColor:["#2271b1","#17a2b8","#6f42c1"] }]
+                },
+                options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+            });
+        });
+        </script>
+        <?php
+    }
+
+    // -------------------------------------------------------------------------
+    // TAB: CARRITOS
+    // -------------------------------------------------------------------------
+
+    private function render_tab_carritos() {
+        global $wpdb;
+
+        $per_page     = 20;
         $current_page = max( 1, absint( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
-        $offset      = ( $current_page - 1 ) * $per_page;
+        $offset       = ( $current_page - 1 ) * $per_page;
 
         // Filtros
+        $filter_status  = isset( $_GET['status'] ) ? sanitize_text_field( $_GET['status'] ) : '';
         $filter_channel = isset( $_GET['channel'] ) ? sanitize_text_field( $_GET['channel'] ) : '';
+        $filter_search  = isset( $_GET['search'] ) ? sanitize_text_field( $_GET['search'] ) : '';
         $filter_from    = isset( $_GET['date_from'] ) ? sanitize_text_field( $_GET['date_from'] ) : '';
         $filter_to      = isset( $_GET['date_to'] ) ? sanitize_text_field( $_GET['date_to'] ) : '';
+        $orderby        = in_array( isset( $_GET['orderby'] ) ? $_GET['orderby'] : '', array( 'created_at', 'cart_total', 'status', 'reminder_count' ), true ) ? sanitize_text_field( $_GET['orderby'] ) : 'created_at';
+        $order          = isset( $_GET['order'] ) && strtoupper( $_GET['order'] ) === 'ASC' ? 'ASC' : 'DESC';
 
-        $where   = " WHERE status IN ('abandoned','sent_reminder_1','sent_reminder_2','sent_reminder_3') ";
-        $params  = array();
+        $where  = ' WHERE 1=1 ';
+        $params = array();
+
+        if ( $filter_status ) {
+            $where   .= ' AND status = %s ';
+            $params[] = $filter_status;
+        }
         if ( $filter_channel ) {
-            $where  .= ' AND contact_channel = %s ';
+            $where   .= ' AND contact_channel = %s ';
             $params[] = $filter_channel;
         }
+        if ( $filter_search ) {
+            $where   .= ' AND (email LIKE %s OR phone LIKE %s) ';
+            $params[] = '%' . $wpdb->esc_like( $filter_search ) . '%';
+            $params[] = '%' . $wpdb->esc_like( $filter_search ) . '%';
+        }
         if ( $filter_from ) {
-            $where  .= ' AND DATE(created_at) >= %s ';
+            $where   .= ' AND DATE(created_at) >= %s ';
             $params[] = $filter_from;
         }
         if ( $filter_to ) {
-            $where  .= ' AND DATE(created_at) <= %s ';
+            $where   .= ' AND DATE(created_at) <= %s ';
             $params[] = $filter_to;
         }
+
+        $order_sql = " ORDER BY `{$orderby}` {$order} ";
 
         if ( ! empty( $params ) ) {
             $total = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$this->table}" . $where, $params ) );
             $items = $wpdb->get_results( $wpdb->prepare(
-                "SELECT * FROM {$this->table}" . $where . " ORDER BY created_at DESC LIMIT %d OFFSET %d",
+                "SELECT * FROM {$this->table}" . $where . $order_sql . " LIMIT %d OFFSET %d",
                 array_merge( $params, array( $per_page, $offset ) )
             ) );
         } else {
             $total = $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table}" . $where );
-            $items = $wpdb->get_results(
-                $wpdb->prepare( "SELECT * FROM {$this->table}" . $where . " ORDER BY created_at DESC LIMIT %d OFFSET %d", $per_page, $offset )
-            );
+            $items = $wpdb->get_results( $wpdb->prepare(
+                "SELECT * FROM {$this->table}" . $where . $order_sql . " LIMIT %d OFFSET %d",
+                $per_page, $offset
+            ) );
         }
 
         $admin_nonce = wp_create_nonce( 'wbi_admin_nonce' );
-        $base_url    = admin_url( 'admin.php?page=wbi-abandoned-carts&tab=activos' );
+        $base_url    = admin_url( 'admin.php?page=wbi-abandoned-carts&tab=carritos' );
 
-        // Filtros UI
+        // --- Filtros UI ---
         echo '<form method="get" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">';
         echo '<input type="hidden" name="page" value="wbi-abandoned-carts">';
-        echo '<input type="hidden" name="tab" value="activos">';
-        echo '<label>Desde: <input type="date" name="date_from" value="' . esc_attr( $filter_from ) . '"></label>';
-        echo '<label>Hasta: <input type="date" name="date_to" value="' . esc_attr( $filter_to ) . '"></label>';
-        echo '<label>Canal: <select name="channel"><option value="">Todos</option>';
+        echo '<input type="hidden" name="tab" value="carritos">';
+
+        // Búsqueda
+        echo '<input type="text" name="search" value="' . esc_attr( $filter_search ) . '" placeholder="Email o teléfono…" style="border-radius:4px;border:1px solid #c3c4c7;padding:4px 8px;width:180px;">';
+
+        // Estado
+        echo '<select name="status"><option value="">Todos los estados</option>';
+        $statuses = array(
+            'abandoned'        => 'Abandonado',
+            'sent_reminder_1'  => 'Reminder 1',
+            'sent_reminder_2'  => 'Reminder 2',
+            'sent_reminder_3'  => 'Reminder 3',
+            'recovered'        => 'Recuperado',
+            'expired'          => 'Expirado',
+        );
+        foreach ( $statuses as $v => $l ) {
+            echo '<option value="' . esc_attr( $v ) . '"' . selected( $filter_status, $v, false ) . '>' . esc_html( $l ) . '</option>';
+        }
+        echo '</select>';
+
+        // Canal
+        echo '<select name="channel"><option value="">Todos los canales</option>';
         foreach ( array( 'email' => 'Email', 'whatsapp' => 'WhatsApp', 'both' => 'Ambos' ) as $v => $l ) {
             echo '<option value="' . esc_attr( $v ) . '"' . selected( $filter_channel, $v, false ) . '>' . esc_html( $l ) . '</option>';
         }
-        echo '</select></label>';
+        echo '</select>';
+
+        echo '<label>Desde: <input type="date" name="date_from" value="' . esc_attr( $filter_from ) . '"></label>';
+        echo '<label>Hasta: <input type="date" name="date_to" value="' . esc_attr( $filter_to ) . '"></label>';
         echo '<button type="submit" class="button">Filtrar</button>';
-        if ( $filter_channel || $filter_from || $filter_to ) {
+        if ( $filter_status || $filter_channel || $filter_from || $filter_to || $filter_search ) {
             echo '<a href="' . esc_url( $base_url ) . '" class="button">Limpiar</a>';
         }
         echo '</form>';
 
+        // --- Bulk action bar ---
+        echo '<div id="wbi-bulk-bar" style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">';
+        echo '<button id="wbi-bulk-send" class="button button-primary" disabled>📧 Enviar Recordatorio a Seleccionados</button>';
+        echo '<span id="wbi-bulk-count" style="color:#787c82;font-size:13px;"></span>';
+        echo '<span id="wbi-bulk-result" style="font-weight:600;"></span>';
+        echo '</div>';
+
+        // Columnas ordenables
+        $col_url = function( $col, $label ) use ( $base_url, $orderby, $order, $filter_status, $filter_channel, $filter_search, $filter_from, $filter_to ) {
+            $new_order = ( $orderby === $col && $order === 'DESC' ) ? 'ASC' : 'DESC';
+            $arrow     = ( $orderby === $col ) ? ( $order === 'DESC' ? ' ▼' : ' ▲' ) : '';
+            $url = add_query_arg( array(
+                'orderby'   => $col,
+                'order'     => $new_order,
+                'status'    => $filter_status,
+                'channel'   => $filter_channel,
+                'search'    => $filter_search,
+                'date_from' => $filter_from,
+                'date_to'   => $filter_to,
+            ), $base_url );
+            return '<a href="' . esc_url( $url ) . '" style="text-decoration:none;color:inherit;">' . esc_html( $label . $arrow ) . '</a>';
+        };
+
         echo '<table class="widefat striped">';
-        echo '<thead><tr>
-            <th>Fecha</th><th>Email / Teléfono</th><th>Canal</th><th>Productos</th>
-            <th>Total</th><th>Recordatorios</th><th>Último envío</th><th>Acciones</th>
-        </tr></thead><tbody>';
+        echo '<thead><tr>';
+        echo '<th style="width:28px;"><input type="checkbox" id="wbi-select-all" title="Seleccionar todos"></th>';
+        echo '<th>' . $col_url( 'created_at', 'Fecha' ) . '</th>';
+        echo '<th>Email / Teléfono</th>';
+        echo '<th>Canal</th>';
+        echo '<th>Productos</th>';
+        echo '<th>' . $col_url( 'cart_total', 'Total' ) . '</th>';
+        echo '<th>' . $col_url( 'status', 'Estado' ) . '</th>';
+        echo '<th>' . $col_url( 'reminder_count', 'Recordatorios' ) . '</th>';
+        echo '<th>Último envío</th>';
+        echo '<th>Acciones</th>';
+        echo '</tr></thead><tbody>';
+
+        $status_labels = array(
+            'abandoned'       => array( 'label' => 'Abandonado',  'color' => '#e65100' ),
+            'sent_reminder_1' => array( 'label' => 'Reminder 1',  'color' => '#1565c0' ),
+            'sent_reminder_2' => array( 'label' => 'Reminder 2',  'color' => '#6a1b9a' ),
+            'sent_reminder_3' => array( 'label' => 'Reminder 3',  'color' => '#283593' ),
+            'recovered'       => array( 'label' => 'Recuperado',  'color' => '#2e7d32' ),
+            'expired'         => array( 'label' => 'Expirado',    'color' => '#757575' ),
+        );
 
         if ( empty( $items ) ) {
-            echo '<tr><td colspan="8" style="text-align:center;padding:24px;color:#787c82;">No hay carritos abandonados.</td></tr>';
+            echo '<tr><td colspan="10" style="text-align:center;padding:24px;color:#787c82;">No hay carritos para mostrar.</td></tr>';
         } else {
             foreach ( $items as $row ) {
-                $items_json   = json_decode( $row->cart_contents, true );
-                $items_count  = is_array( $items_json ) ? count( $items_json ) : 0;
+                $items_json  = json_decode( $row->cart_contents, true );
+                $items_count = is_array( $items_json ) ? count( $items_json ) : 0;
                 if ( is_array( $items_json ) ) {
-                    $sliced      = array_slice( $items_json, 0, 2 );
-                    $item_names  = array_map( function( $i ) { return esc_html( $i['name'] ?? '' ); }, $sliced );
-                    $items_names = implode( ', ', $item_names );
+                    $sliced     = array_slice( $items_json, 0, 2 );
+                    $item_names = implode( ', ', array_map( function( $i ) { return esc_html( $i['name'] ?? '' ); }, $sliced ) );
                 } else {
-                    $items_names = '—';
+                    $item_names = '—';
                 }
-                if ( $items_count > 2 ) $items_names .= ' + ' . ( $items_count - 2 ) . ' más';
+                if ( $items_count > 2 ) $item_names .= ' + ' . ( $items_count - 2 ) . ' más';
+
                 $last_reminder = $row->last_reminder_at
                     ? esc_html( date_i18n( 'd/m/Y H:i', strtotime( $row->last_reminder_at ) ) )
                     : '—';
-                $wa_phone  = preg_replace( '/[^0-9]/', '', $row->phone );
-                $wa_link   = ! empty( $row->phone ) ? 'https://wa.me/' . $wa_phone : '#';
 
-                // Verificar si hay cupones asociados a este carrito
-                $has_coupons = (bool) get_posts( array(
-                    'post_type'      => 'shop_coupon',
-                    'posts_per_page' => 1,
-                    'fields'         => 'ids',
-                    'meta_query'     => array(
-                        array(
-                            'key'   => '_wbi_abandoned_cart_id',
-                            'value' => intval( $row->id ),
-                            'type'  => 'NUMERIC',
-                        ),
-                    ),
-                ) );
+                $wa_phone = preg_replace( '/[^0-9]/', '', $row->phone );
+                $wa_link  = ! empty( $row->phone ) ? 'https://wa.me/' . $wa_phone : '#';
 
-                echo '<tr>';
+                // Determinar próximo reminder para el indicador
+                $next_reminder = 1;
+                if ( $row->status === 'sent_reminder_1' ) $next_reminder = 2;
+                elseif ( $row->status === 'sent_reminder_2' ) $next_reminder = 3;
+
+                // Badge de estado
+                $st_info = isset( $status_labels[ $row->status ] ) ? $status_labels[ $row->status ] : array( 'label' => $row->status, 'color' => '#757575' );
+                $st_badge = '<span style="font-size:11px;background:' . esc_attr( $st_info['color'] ) . ';color:#fff;padding:2px 7px;border-radius:10px;">' . esc_html( $st_info['label'] ) . '</span>';
+
+                $is_actionable = ! in_array( $row->status, array( 'recovered', 'expired' ), true );
+                $checkbox_html = $is_actionable
+                    ? '<input type="checkbox" class="wbi-cart-check" value="' . intval( $row->id ) . '">'
+                    : '';
+
+                echo '<tr data-id="' . intval( $row->id ) . '">';
+                echo '<td>' . $checkbox_html . '</td>';
                 echo '<td>' . esc_html( date_i18n( 'd/m/Y H:i', strtotime( $row->created_at ) ) ) . '</td>';
                 echo '<td>' . esc_html( $row->email ?: '—' ) . '<br><small>' . esc_html( $row->phone ?: '' ) . '</small></td>';
                 echo '<td><span style="text-transform:uppercase;font-size:11px;background:#e0e0e0;padding:2px 6px;border-radius:3px;">' . esc_html( $row->contact_channel ) . '</span></td>';
-                echo '<td>' . esc_html( $items_names ) . '</td>';
+                echo '<td>' . esc_html( $item_names ) . '</td>';
                 echo '<td>' . wp_kses_post( wc_price( $row->cart_total ) ) . '</td>';
-                echo '<td style="text-align:center;">' . intval( $row->reminder_count ) . ( $has_coupons ? ' <span title="Tiene cupón generado">🎟️</span>' : '' ) . '</td>';
+                echo '<td class="wbi-status-cell">' . $st_badge . '</td>';
+                echo '<td class="wbi-reminder-count-cell" style="text-align:center;">' . intval( $row->reminder_count ) . '</td>';
                 echo '<td>' . esc_html( $last_reminder ) . '</td>';
                 echo '<td>';
-                echo '<button class="button button-small wbi-send-reminder" data-id="' . intval( $row->id ) . '" data-nonce="' . esc_attr( $admin_nonce ) . '" title="Enviar recordatorio">📧</button> ';
+                if ( $is_actionable ) {
+                    echo '<button class="button button-small wbi-send-reminder" data-id="' . intval( $row->id ) . '" data-nonce="' . esc_attr( $admin_nonce ) . '" title="Enviar Reminder #' . intval( $next_reminder ) . '">📧 #' . intval( $next_reminder ) . '</button> ';
+                }
                 if ( $row->phone ) {
                     echo '<a href="' . esc_url( $wa_link ) . '" target="_blank" class="button button-small" title="Enviar WhatsApp">📱</a> ';
                 }
@@ -1434,200 +1868,151 @@ class WBI_Abandoned_Carts_Module {
         // Paginación
         $total_pages = ceil( intval( $total ) / $per_page );
         if ( $total_pages > 1 ) {
-            $paginate_args = array(
-                'base'      => $base_url . '&paged=%#%',
+            echo '<div style="margin-top:16px;">' . paginate_links( array(
+                'base'      => add_query_arg( array(
+                    'orderby'   => $orderby,
+                    'order'     => $order,
+                    'status'    => $filter_status,
+                    'channel'   => $filter_channel,
+                    'search'    => $filter_search,
+                    'date_from' => $filter_from,
+                    'date_to'   => $filter_to,
+                    'paged'     => '%#%',
+                ), $base_url ),
                 'format'    => '',
                 'current'   => $current_page,
                 'total'     => $total_pages,
                 'prev_text' => '«',
                 'next_text' => '»',
-            );
-            echo '<div style="margin-top:16px;">' . paginate_links( $paginate_args ) . '</div>';
+            ) ) . '</div>';
         }
 
-        // JS para acciones de tabla
+        // JS para acciones de tabla + bulk
         $this->enqueue_admin_js( $admin_nonce );
     }
 
     // -------------------------------------------------------------------------
-    // TAB: RECUPERADOS
+    // TAB: LOG DE ENVÍOS
     // -------------------------------------------------------------------------
 
-    private function render_tab_recuperados() {
+    private function render_tab_log() {
         global $wpdb;
-
-        $total_recovered = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table} WHERE status = 'recovered'" );
-        $total_amount    = (float) $wpdb->get_var( "SELECT SUM(cart_total) FROM {$this->table} WHERE status = 'recovered'" );
-        $total_abandoned = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table} WHERE status != 'expired'" );
-        $recovery_rate   = $total_abandoned > 0 ? round( $total_recovered / $total_abandoned * 100, 1 ) : 0;
-
-        // KPI cards
-        echo '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px;">';
-        $this->render_kpi_card( '✅ Total recuperados', $total_recovered );
-        $this->render_kpi_card( '💰 Monto recuperado', wc_price( $total_amount ) );
-        $this->render_kpi_card( '📈 Tasa de recuperación', $recovery_rate . '%' );
-        echo '</div>';
 
         $per_page     = 20;
         $current_page = max( 1, absint( isset( $_GET['paged'] ) ? $_GET['paged'] : 1 ) );
         $offset       = ( $current_page - 1 ) * $per_page;
-        $total        = $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table} WHERE status = 'recovered'" );
-        $items        = $wpdb->get_results( $wpdb->prepare(
-            "SELECT * FROM {$this->table} WHERE status = 'recovered' ORDER BY recovered_at DESC LIMIT %d OFFSET %d",
-            $per_page, $offset
-        ) );
+
+        $filter_channel = isset( $_GET['channel'] ) ? sanitize_text_field( $_GET['channel'] ) : '';
+        $filter_status  = isset( $_GET['status'] ) ? sanitize_text_field( $_GET['status'] ) : '';
+        $filter_from    = isset( $_GET['date_from'] ) ? sanitize_text_field( $_GET['date_from'] ) : '';
+        $filter_to      = isset( $_GET['date_to'] ) ? sanitize_text_field( $_GET['date_to'] ) : '';
+
+        $where  = ' WHERE 1=1 ';
+        $params = array();
+        if ( $filter_channel ) {
+            $where   .= ' AND channel = %s ';
+            $params[] = $filter_channel;
+        }
+        if ( $filter_status ) {
+            $where   .= ' AND status = %s ';
+            $params[] = $filter_status;
+        }
+        if ( $filter_from ) {
+            $where   .= ' AND DATE(sent_at) >= %s ';
+            $params[] = $filter_from;
+        }
+        if ( $filter_to ) {
+            $where   .= ' AND DATE(sent_at) <= %s ';
+            $params[] = $filter_to;
+        }
+
+        if ( ! empty( $params ) ) {
+            $total = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$this->log_table}" . $where, $params ) );
+            $items = $wpdb->get_results( $wpdb->prepare(
+                "SELECT * FROM {$this->log_table}" . $where . " ORDER BY sent_at DESC LIMIT %d OFFSET %d",
+                array_merge( $params, array( $per_page, $offset ) )
+            ) );
+        } else {
+            $total = $wpdb->get_var( "SELECT COUNT(*) FROM {$this->log_table}" . $where );
+            $items = $wpdb->get_results( $wpdb->prepare(
+                "SELECT * FROM {$this->log_table}" . $where . " ORDER BY sent_at DESC LIMIT %d OFFSET %d",
+                $per_page, $offset
+            ) );
+        }
+
+        $base_url = admin_url( 'admin.php?page=wbi-abandoned-carts&tab=log' );
+
+        // Filtros UI
+        echo '<form method="get" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">';
+        echo '<input type="hidden" name="page" value="wbi-abandoned-carts">';
+        echo '<input type="hidden" name="tab" value="log">';
+        echo '<label>Canal: <select name="channel"><option value="">Todos</option>';
+        foreach ( array( 'email' => 'Email', 'whatsapp' => 'WhatsApp' ) as $v => $l ) {
+            echo '<option value="' . esc_attr( $v ) . '"' . selected( $filter_channel, $v, false ) . '>' . esc_html( $l ) . '</option>';
+        }
+        echo '</select></label>';
+        echo '<label>Estado: <select name="status"><option value="">Todos</option>';
+        foreach ( array( 'sent' => 'Enviado', 'failed' => 'Fallido', 'opened' => 'Abierto', 'clicked' => 'Clic' ) as $v => $l ) {
+            echo '<option value="' . esc_attr( $v ) . '"' . selected( $filter_status, $v, false ) . '>' . esc_html( $l ) . '</option>';
+        }
+        echo '</select></label>';
+        echo '<label>Desde: <input type="date" name="date_from" value="' . esc_attr( $filter_from ) . '"></label>';
+        echo '<label>Hasta: <input type="date" name="date_to" value="' . esc_attr( $filter_to ) . '"></label>';
+        echo '<button type="submit" class="button">Filtrar</button>';
+        if ( $filter_channel || $filter_status || $filter_from || $filter_to ) {
+            echo '<a href="' . esc_url( $base_url ) . '" class="button">Limpiar</a>';
+        }
+        echo '</form>';
 
         echo '<table class="widefat striped">';
-        echo '<thead><tr><th>Fecha abandono</th><th>Fecha recuperación</th><th>Email</th><th>Total carrito</th></tr></thead><tbody>';
+        echo '<thead><tr>
+            <th>#</th><th>Carrito</th><th>Reminder</th><th>Canal</th>
+            <th>Destinatario</th><th>Asunto / Mensaje</th><th>Estado</th><th>Fecha</th><th>Error</th>
+        </tr></thead><tbody>';
 
         if ( empty( $items ) ) {
-            echo '<tr><td colspan="4" style="text-align:center;padding:24px;color:#787c82;">No hay carritos recuperados aún.</td></tr>';
+            echo '<tr><td colspan="9" style="text-align:center;padding:24px;color:#787c82;">No hay registros en el log.</td></tr>';
         } else {
+            $status_colors = array(
+                'sent'    => '#2e7d32',
+                'failed'  => '#c62828',
+                'opened'  => '#1565c0',
+                'clicked' => '#6a1b9a',
+            );
             foreach ( $items as $row ) {
+                $st_color = isset( $status_colors[ $row->status ] ) ? $status_colors[ $row->status ] : '#757575';
+                $st_badge = '<span style="font-size:11px;background:' . esc_attr( $st_color ) . ';color:#fff;padding:2px 7px;border-radius:10px;">' . esc_html( ucfirst( $row->status ) ) . '</span>';
                 echo '<tr>';
-                echo '<td>' . esc_html( date_i18n( 'd/m/Y H:i', strtotime( $row->created_at ) ) ) . '</td>';
-                echo '<td>' . esc_html( $row->recovered_at ? date_i18n( 'd/m/Y H:i', strtotime( $row->recovered_at ) ) : '—' ) . '</td>';
-                echo '<td>' . esc_html( $row->email ?: '—' ) . '</td>';
-                echo '<td>' . wp_kses_post( wc_price( $row->cart_total ) ) . '</td>';
+                echo '<td>' . intval( $row->id ) . '</td>';
+                echo '<td><a href="' . esc_url( admin_url( 'admin.php?page=wbi-abandoned-carts&tab=carritos' ) ) . '">#' . intval( $row->cart_id ) . '</a></td>';
+                echo '<td style="text-align:center;">#' . intval( $row->reminder_number ) . '</td>';
+                echo '<td><span style="text-transform:uppercase;font-size:11px;background:#e0e0e0;padding:2px 6px;border-radius:3px;">' . esc_html( $row->channel ) . '</span></td>';
+                echo '<td>' . esc_html( $row->recipient ) . '</td>';
+                echo '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' . esc_attr( $row->subject ) . '">' . esc_html( $row->subject ) . '</td>';
+                echo '<td>' . $st_badge . '</td>';
+                echo '<td>' . esc_html( date_i18n( 'd/m/Y H:i', strtotime( $row->sent_at ) ) ) . '</td>';
+                echo '<td style="color:#c62828;font-size:12px;">' . esc_html( $row->error_message ?: '' ) . '</td>';
                 echo '</tr>';
             }
         }
+
         echo '</tbody></table>';
 
         $total_pages = ceil( intval( $total ) / $per_page );
         if ( $total_pages > 1 ) {
-            $base_url = admin_url( 'admin.php?page=wbi-abandoned-carts&tab=recuperados' );
             echo '<div style="margin-top:16px;">' . paginate_links( array(
-                'base'    => $base_url . '&paged=%#%',
+                'base'    => add_query_arg( array(
+                    'channel'   => $filter_channel,
+                    'status'    => $filter_status,
+                    'date_from' => $filter_from,
+                    'date_to'   => $filter_to,
+                    'paged'     => '%#%',
+                ), $base_url ),
                 'format'  => '',
                 'current' => $current_page,
                 'total'   => $total_pages,
             ) ) . '</div>';
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // TAB: ESTADÍSTICAS
-    // -------------------------------------------------------------------------
-
-    private function render_tab_estadisticas() {
-        global $wpdb;
-
-        $total_abandoned  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table} WHERE status NOT IN ('expired')" );
-        $total_recovered  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table} WHERE status = 'recovered'" );
-        $recovery_rate    = $total_abandoned > 0 ? round( $total_recovered / $total_abandoned * 100, 1 ) : 0;
-        $avg_cart         = (float) $wpdb->get_var( "SELECT AVG(cart_total) FROM {$this->table} WHERE status NOT IN ('expired')" );
-        $total_rev        = (float) $wpdb->get_var( "SELECT SUM(cart_total) FROM {$this->table} WHERE status = 'recovered'" );
-        $by_channel       = $wpdb->get_results( "SELECT contact_channel, COUNT(*) as cnt FROM {$this->table} GROUP BY contact_channel" );
-
-        echo '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px;">';
-        $this->render_kpi_card( '🛒 Total abandonados', $total_abandoned );
-        $this->render_kpi_card( '✅ Total recuperados', $total_recovered );
-        $this->render_kpi_card( '📈 Tasa recuperación', $recovery_rate . '%' );
-        $this->render_kpi_card( '💰 Ticket promedio', wc_price( $avg_cart ) );
-        $this->render_kpi_card( '💵 Monto recuperado', wc_price( $total_rev ) );
-        echo '</div>';
-
-        // Datos para charts (últimas 8 semanas)
-        $weeks_data = array();
-        // Find the most recent Monday relative to today
-        $today      = new DateTime( 'now', new DateTimeZone( 'UTC' ) );
-        $day_of_week = (int) $today->format( 'N' ); // 1=Mon, 7=Sun
-        $days_since_monday = $day_of_week - 1;
-        $current_monday = clone $today;
-        $current_monday->modify( "-{$days_since_monday} days" );
-
-        for ( $i = 7; $i >= 0; $i-- ) {
-            $week_monday = clone $current_monday;
-            $week_monday->modify( "-{$i} weeks" );
-            $week_sunday = clone $week_monday;
-            $week_sunday->modify( '+6 days' );
-
-            $start = $week_monday->format( 'Y-m-d' );
-            $end   = $week_sunday->format( 'Y-m-d' );
-            $label = date_i18n( 'd/m', $week_monday->getTimestamp() );
-
-            $aband    = (int) $wpdb->get_var( $wpdb->prepare(
-                "SELECT COUNT(*) FROM {$this->table} WHERE DATE(created_at) BETWEEN %s AND %s AND status != 'expired'",
-                $start, $end
-            ) );
-            $recov    = (int) $wpdb->get_var( $wpdb->prepare(
-                "SELECT COUNT(*) FROM {$this->table} WHERE DATE(created_at) BETWEEN %s AND %s AND status = 'recovered'",
-                $start, $end
-            ) );
-            $weeks_data[] = array( 'label' => $label, 'abandoned' => $aband, 'recovered' => $recov );
-        }
-
-        $channel_labels = array();
-        $channel_values = array();
-        foreach ( $by_channel as $row ) {
-            $channel_labels[] = ucfirst( $row->contact_channel );
-            $channel_values[] = intval( $row->cnt );
-        }
-
-        // Enqueue Chart.js with Subresource Integrity for security
-        wp_enqueue_script(
-            'chartjs',
-            'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
-            array(),
-            null,
-            true
-        );
-        add_filter( 'script_loader_tag', function( $tag, $handle ) {
-            if ( 'chartjs' === $handle ) {
-                $tag = str_replace(
-                    '<script ',
-                    '<script integrity="sha256-oFRLExpPzLU3sFSPMiGQNIPw8JdObYMnQlOkPYnSOsE=" crossorigin="anonymous" ',
-                    $tag
-                );
-            }
-            return $tag;
-        }, 10, 2 );
-        ?>
-        <div style="display:grid;grid-template-columns:2fr 1fr;gap:24px;margin-top:16px;">
-          <div style="background:#fff;border:1px solid #c3c4c7;border-radius:8px;padding:20px;">
-            <h3 style="margin-top:0;">Abandonados vs Recuperados (últimas 8 semanas)</h3>
-            <div style="position:relative;height:300px;">
-              <canvas id="wbiAbandonedWeekly"></canvas>
-            </div>
-          </div>
-          <div style="background:#fff;border:1px solid #c3c4c7;border-radius:8px;padding:20px;">
-            <h3 style="margin-top:0;">Distribución por canal</h3>
-            <div style="position:relative;height:300px;">
-              <canvas id="wbiAbandonedChannel"></canvas>
-            </div>
-          </div>
-        </div>
-        <script>
-        document.addEventListener("DOMContentLoaded", function(){
-            var weeklyData = <?php echo wp_json_encode( $weeks_data ); ?>;
-            var weekLabels    = weeklyData.map(function(d){ return d.label; });
-            var weekAbandoned = weeklyData.map(function(d){ return d.abandoned; });
-            var weekRecovered = weeklyData.map(function(d){ return d.recovered; });
-
-            new Chart(document.getElementById("wbiAbandonedWeekly"), {
-                type: "bar",
-                data: {
-                    labels: weekLabels,
-                    datasets: [
-                        { label: "Abandonados", data: weekAbandoned, backgroundColor: "rgba(220,53,69,.7)" },
-                        { label: "Recuperados", data: weekRecovered, backgroundColor: "rgba(40,167,69,.7)" }
-                    ]
-                },
-                options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:"top" } } }
-            });
-
-            new Chart(document.getElementById("wbiAbandonedChannel"), {
-                type: "pie",
-                data: {
-                    labels: <?php echo wp_json_encode( $channel_labels ); ?>,
-                    datasets: [{ data: <?php echo wp_json_encode( $channel_values ); ?>, backgroundColor: ["#2271b1","#25ae88","#f0b849"] }]
-                },
-                options: { responsive:true, maintainAspectRatio:false }
-            });
-        });
-        </script>
-        <?php
     }
 
     // -------------------------------------------------------------------------
@@ -1807,19 +2192,39 @@ class WBI_Abandoned_Carts_Module {
             var ajaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
             var nonce   = <?php echo wp_json_encode( $nonce ); ?>;
 
-            // Enviar recordatorio
+            // Enviar recordatorio individual
             $(document).on("click", ".wbi-send-reminder", function(){
-                var id = $(this).data("id");
+                var $btn = $(this);
+                var id   = $btn.data("id");
                 if ( !confirm("¿Enviar recordatorio a este carrito?") ) return;
+                $btn.prop("disabled", true).text("Enviando…");
                 $.post(ajaxUrl, { action:"wbi_send_manual_reminder", nonce:nonce, cart_id:id }, function(res){
-                    if ( res.success ) { alert( res.data.msg ); }
-                    else { alert( "Error: " + (res.data ? res.data.msg : "desconocido") ); }
+                    if ( res.success ) {
+                        alert( res.data.msg );
+                        // Actualizar badge de estado en la fila
+                        var $row = $btn.closest("tr");
+                        if ( res.data.new_status ) {
+                            var statusMap = {
+                                sent_reminder_1:"Reminder 1",sent_reminder_2:"Reminder 2",sent_reminder_3:"Reminder 3"
+                            };
+                            $row.find(".wbi-status-cell span").text( statusMap[res.data.new_status] || res.data.new_status );
+                        }
+                        if ( res.data.reminder_count !== undefined ) {
+                            $row.find(".wbi-reminder-count-cell").text( res.data.reminder_count );
+                        }
+                        // Actualizar indicador del botón
+                        var next = res.data.new_status === "sent_reminder_1" ? 2 : res.data.new_status === "sent_reminder_2" ? 3 : 1;
+                        $btn.text("📧 #" + next).prop("disabled", false);
+                    } else {
+                        alert( "Error: " + (res.data ? res.data.msg : "desconocido") );
+                        $btn.prop("disabled", false).text($btn.data("original-text") || "📧");
+                    }
                 });
             });
 
             // Eliminar carrito
             $(document).on("click", ".wbi-delete-cart", function(){
-                var id = $(this).data("id");
+                var id   = $(this).data("id");
                 var $row = $(this).closest("tr");
                 if ( !confirm("¿Eliminar este registro? Esta acción no se puede deshacer.") ) return;
                 $.post(ajaxUrl, { action:"wbi_delete_abandoned_cart", nonce:nonce, cart_id:id }, function(res){
@@ -1830,7 +2235,7 @@ class WBI_Abandoned_Carts_Module {
 
             // Ver detalle
             $(document).on("click", ".wbi-view-detail", function(){
-                var id = $(this).data("id");
+                var id     = $(this).data("id");
                 var $modal = $("#wbi-cart-detail-modal");
                 $("#wbi-modal-content").html("Cargando...");
                 $modal.css("display","flex");
@@ -1845,6 +2250,50 @@ class WBI_Abandoned_Carts_Module {
                 if ( $(e.target).is("#wbi-cart-detail-modal") || $(e.target).is("#wbi-modal-close") ) {
                     $("#wbi-cart-detail-modal").hide();
                 }
+            });
+
+            // ---- Bulk actions ----
+
+            // Seleccionar todos
+            $(document).on("change", "#wbi-select-all", function(){
+                $(".wbi-cart-check").prop("checked", $(this).is(":checked"));
+                updateBulkBar();
+            });
+
+            $(document).on("change", ".wbi-cart-check", function(){
+                var total   = $(".wbi-cart-check").length;
+                var checked = $(".wbi-cart-check:checked").length;
+                $("#wbi-select-all").prop("indeterminate", checked > 0 && checked < total)
+                                    .prop("checked", checked === total && total > 0);
+                updateBulkBar();
+            });
+
+            function updateBulkBar() {
+                var checked = $(".wbi-cart-check:checked").length;
+                $("#wbi-bulk-send").prop("disabled", checked === 0);
+                $("#wbi-bulk-count").text( checked > 0 ? checked + " seleccionado(s)" : "" );
+            }
+
+            // Envío bulk
+            $(document).on("click", "#wbi-bulk-send", function(){
+                var ids = $(".wbi-cart-check:checked").map(function(){ return $(this).val(); }).get();
+                if ( ids.length === 0 ) return;
+                if ( !confirm("¿Enviar recordatorio a " + ids.length + " carritos seleccionados?") ) return;
+
+                var $btn = $(this).prop("disabled", true).text("Enviando " + ids.length + " recordatorios…");
+                $("#wbi-bulk-result").text("").css("color","");
+
+                $.post(ajaxUrl, { action:"wbi_bulk_send_reminders", nonce:nonce, cart_ids:ids }, function(res){
+                    $btn.prop("disabled", false).text("📧 Enviar Recordatorio a Seleccionados");
+                    if ( res.success ) {
+                        $("#wbi-bulk-result").text( res.data.msg ).css("color","#2e7d32");
+                        // Deseleccionar
+                        $(".wbi-cart-check, #wbi-select-all").prop("checked", false);
+                        updateBulkBar();
+                    } else {
+                        $("#wbi-bulk-result").text( "Error: " + (res.data ? res.data.msg : "desconocido") ).css("color","#c62828");
+                    }
+                });
             });
 
         })(jQuery);
