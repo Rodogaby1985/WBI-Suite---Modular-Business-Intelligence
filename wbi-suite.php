@@ -200,6 +200,14 @@ class WBI_Suite_Loader {
                 new WBI_Whatsapp_Module();
             }
         }
+
+        // S. Módulo de Carritos Abandonados
+        if ( ! empty( $this->options['wbi_enable_abandoned_carts'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-abandoned-carts.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-abandoned-carts.php';
+                new WBI_Abandoned_Carts_Module();
+            }
+        }
     }
 
     // --- CONFIGURACIÓN EN WP-ADMIN ---
@@ -516,6 +524,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_invoice', 'Módulo de Facturación AFIP', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_invoice'] );
         add_settings_field( 'wbi_enable_notifications', 'Centro de Notificaciones', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_notifications'] );
         add_settings_field( 'wbi_enable_api', 'API REST', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_api'] );
+        add_settings_field( 'wbi_enable_abandoned_carts', 'Carritos Abandonados', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_abandoned_carts'] );
 
         // Permissions section
         add_settings_section( 'wbi_permissions_section', 'Permisos por Módulo', array( $this, 'permissions_section_desc' ), 'wbi-settings' );
@@ -597,13 +606,14 @@ class WBI_Suite_Loader {
 
     public function render_settings_page() {
         $opts          = $this->options ?: array();
-        $total_modules = 16;
+        $total_modules = 17;
         $active_count  = 0;
         $toggle_keys   = array(
             'wbi_enable_b2b','wbi_enable_data','wbi_enable_dashboard','wbi_enable_barcode',
             'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_scoring',
             'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
             'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
+            'wbi_enable_abandoned_carts',
         );
         foreach ( $toggle_keys as $k ) {
             if ( ! empty( $opts[ $k ] ) ) $active_count++;
@@ -617,6 +627,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_b2b',           '🏢', 'Modo Mayorista B2B',       'Roles mayoristas, precios ocultos y aprobación de clientes',              null,             'comercial'    ),
             array( 'wbi_enable_pricelists',     '💲', 'Listas de Precios',        'Listas de precios por cliente, rol o grupo',                              'wbi-pricelists', 'comercial'    ),
             array( 'wbi_enable_costs',          '💰', 'Costos y Márgenes',        'Costo de adquisición y cálculo de márgenes por producto',                 'wbi-costs',      'comercial'    ),
+            array( 'wbi_enable_abandoned_carts','🛒', 'Carritos Abandonados',     'Recuperación de ventas perdidas con seguimiento por email y WhatsApp',    'wbi-abandoned-carts', 'comercial' ),
             array( 'wbi_enable_dashboard',      '📊', 'Dashboard BI Suite',       'Dashboard ejecutivo, reportes y alertas de stock',                        'wbi-dashboard-view', 'inteligencia' ),
             array( 'wbi_enable_scoring',        '⭐', 'Scoring de Clientes',      'Scoring RFM de clientes con recálculo automático diario',                 'wbi-scoring',    'inteligencia' ),
             array( 'wbi_enable_barcode',        '📊', 'Códigos de Barra',         'Gestión de códigos de barra EAN/UPC para productos',                      'wbi-barcode',    'operaciones'  ),
@@ -724,6 +735,7 @@ class WBI_Suite_Loader {
                     array( 'enable_key' => 'wbi_enable_whatsapp',      'perm_key' => 'wbi_permissions_whatsapp',      'name' => 'WhatsApp' ),
                     array( 'enable_key' => 'wbi_enable_notifications', 'perm_key' => 'wbi_permissions_notifications', 'name' => 'Notificaciones' ),
                     array( 'enable_key' => 'wbi_enable_api',           'perm_key' => 'wbi_permissions_api',           'name' => 'API REST' ),
+                    array( 'enable_key' => 'wbi_enable_abandoned_carts','perm_key' => 'wbi_permissions_abandoned_carts','name' => 'Carritos Abandonados' ),
                 );
                 // Unified documents module: show when invoice or remitos is active
                 if ( ! empty( $opts['wbi_enable_invoice'] ) || ! empty( $opts['wbi_enable_remitos'] ) ) {
