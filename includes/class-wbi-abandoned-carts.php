@@ -143,7 +143,32 @@ class WBI_Abandoned_Carts_Module {
 
     public function enqueue_frontend_assets() {
         if ( ! function_exists( 'is_woocommerce' ) ) return;
-        if ( ! ( is_cart() || is_checkout() || is_product() || is_shop() ) ) return;
+        // Load on core WooCommerce pages and any WooCommerce taxonomy/tag pages
+        $load = is_cart() || is_checkout() || is_product() || is_shop() || is_woocommerce();
+        // Also load on the front page (may have product shortcodes/blocks)
+        if ( ! $load ) {
+            $load = is_front_page();
+        }
+        // Also load on any page that contains WooCommerce shortcodes or blocks
+        if ( ! $load ) {
+            global $post;
+            if ( $post && (
+                has_shortcode( $post->post_content, 'products' )
+                || has_shortcode( $post->post_content, 'sale_products' )
+                || has_shortcode( $post->post_content, 'best_selling_products' )
+                || has_shortcode( $post->post_content, 'recent_products' )
+                || has_shortcode( $post->post_content, 'featured_products' )
+                || has_block( 'woocommerce/all-products', $post )
+                || has_block( 'woocommerce/handpicked-products', $post )
+                || has_block( 'woocommerce/product-best-sellers', $post )
+                || has_block( 'woocommerce/product-new', $post )
+                || has_block( 'woocommerce/product-on-sale', $post )
+                || has_block( 'woocommerce/product-top-rated', $post )
+            ) ) {
+                $load = true;
+            }
+        }
+        if ( ! $load ) return;
 
         $popup_title_add  = $this->get_setting( 'popup_title_add',  '🛒 ¡Guardamos tu carrito!' );
         $popup_title_exit = $this->get_setting( 'popup_title_exit', '⚠️ ¡Esperá! Tenés productos en tu carrito' );
@@ -291,9 +316,24 @@ class WBI_Abandoned_Carts_Module {
 
     // --- Agregar al carrito ---
     if ( WBI.showAddPopup ) {
+        // AJAX add-to-cart (catalog/shop pages)
         $(document.body).on("added_to_cart", function(){
             if ( getCookie("wbi_cart_contact_captured") !== "1" ) {
                 setTimeout(function(){ openPopup("add"); }, 600);
+            }
+        });
+        // Page-reload add-to-cart (single product page — form submit with redirect)
+        var urlParams = new URLSearchParams(window.location.search);
+        if ( urlParams.has("add-to-cart") && getCookie("wbi_cart_contact_captured") !== "1" ) {
+            $(function(){ setTimeout(function(){ openPopup("add"); }, 800); });
+        }
+        // Fragment refresh signals (mini-cart update after AJAX add-to-cart)
+        $(document.body).on("wc_fragments_refreshed wc_fragments_loaded", function(){
+            if ( getCookie("wbi_cart_contact_captured") !== "1" ) {
+                var $badge = $(".cart-contents .count, .mini-cart-count, .cart-count");
+                if ( $badge.length && parseInt($badge.text()) > 0 ) {
+                    setTimeout(function(){ openPopup("add"); }, 600);
+                }
             }
         });
     }
@@ -307,7 +347,13 @@ class WBI_Abandoned_Carts_Module {
         });
         document.addEventListener("visibilitychange", function(){
             if ( document.visibilityState === "hidden" && !sessionStorage.getItem("wbi_exit_shown") && getCookie("wbi_cart_contact_captured") !== "1" ) {
+                // Mark intent to show popup when user returns to the page
+                sessionStorage.setItem("wbi_exit_pending","1");
                 sessionStorage.setItem("wbi_exit_shown","1");
+            }
+            if ( document.visibilityState === "visible" && sessionStorage.getItem("wbi_exit_pending") === "1" ) {
+                sessionStorage.removeItem("wbi_exit_pending");
+                openPopup("exit");
             }
         });
     }
