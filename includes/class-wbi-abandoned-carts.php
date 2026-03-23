@@ -34,6 +34,9 @@ class WBI_Abandoned_Carts_Module {
         // Settings del módulo
         add_action( 'admin_init', array( $this, 'register_module_settings' ) );
 
+        // Admin: encolar assets (Chart.js) en la página del módulo
+        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
+
         // Frontend: encolar JS/CSS solo en páginas relevantes
         add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend_assets' ) );
 
@@ -170,6 +173,11 @@ class WBI_Abandoned_Carts_Module {
     // =========================================================================
     // FRONTEND: CSS / JS INLINE
     // =========================================================================
+
+    public function enqueue_admin_assets( $hook ) {
+        if ( strpos( $hook, 'wbi-abandoned-carts' ) === false ) return;
+        wp_enqueue_script( 'wbi-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '4.4.0', false );
+    }
 
     public function enqueue_frontend_assets() {
         if ( ! function_exists( 'is_woocommerce' ) ) return;
@@ -1586,14 +1594,6 @@ class WBI_Abandoned_Carts_Module {
             ) );
         }
 
-        // Enqueue Chart.js con SRI
-        wp_enqueue_script( 'chartjs', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js', array(), null, true );
-        add_filter( 'script_loader_tag', function( $tag, $handle ) {
-            if ( 'chartjs' === $handle ) {
-                $tag = str_replace( '<script ', '<script integrity="sha256-oFRLExpPzLU3sFSPMiGQNIPw8JdObYMnQlOkPYnSOsE=" crossorigin="anonymous" ', $tag );
-            }
-            return $tag;
-        }, 10, 2 );
         ?>
         <div style="display:grid;grid-template-columns:2fr 1fr;gap:24px;margin-bottom:24px;">
           <div style="background:#fff;border:1px solid #c3c4c7;border-radius:8px;padding:20px;">
