@@ -9,6 +9,12 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class WBI_Abandoned_Carts_Module {
 
+    /** @var string Current database schema version — bump when altering table structure */
+    const DB_VERSION = '1.0';
+
+    /** @var string Frontend asset version — bump when CSS/JS files change to bust browser cache */
+    const ASSETS_VERSION = '1.0.0';
+
     /** @var string Nombre de la tabla custom */
     private $table;
 
@@ -24,9 +30,12 @@ class WBI_Abandoned_Carts_Module {
         $this->log_table = $wpdb->prefix . 'wbi_reminder_log';
         $this->settings  = get_option( 'wbi_abandoned_cart_settings', array() );
 
-        // Crear tablas si no existen
-        $this->maybe_create_table();
-        $this->maybe_create_log_table();
+        // Crear tablas solo cuando la versión del schema haya cambiado
+        if ( get_option( 'wbi_abandoned_carts_db_version' ) !== self::DB_VERSION ) {
+            $this->maybe_create_table();
+            $this->maybe_create_log_table();
+            update_option( 'wbi_abandoned_carts_db_version', self::DB_VERSION );
+        }
 
         // Menú de administración
         add_action( 'admin_menu', array( $this, 'add_submenu' ), 100 );
@@ -64,6 +73,9 @@ class WBI_Abandoned_Carts_Module {
 
         // Recovery URL
         add_action( 'init', array( $this, 'handle_recovery_url' ), 5 );
+
+        // Unsubscribe URL (?wbi_unsub=1&wbi_token=…)
+        add_action( 'init', array( $this, 'handle_unsubscribe' ), 4 );
 
         // WP-Cron
         add_action( 'wbi_mark_abandoned_carts',   array( $this, 'cron_mark_abandoned' ) );
@@ -144,6 +156,10 @@ class WBI_Abandoned_Carts_Module {
     // =========================================================================
 
     private function schedule_crons() {
+        // Registrar el intervalo de 15 minutos ANTES de llamar wp_schedule_event()
+        // para que el intervalo custom esté disponible desde la primera ejecución.
+        add_filter( 'cron_schedules', array( $this, 'add_cron_interval' ) );
+
         if ( ! wp_next_scheduled( 'wbi_mark_abandoned_carts' ) ) {
             wp_schedule_event( time(), 'wbi_15min', 'wbi_mark_abandoned_carts' );
         }
@@ -153,9 +169,6 @@ class WBI_Abandoned_Carts_Module {
         if ( ! wp_next_scheduled( 'wbi_cleanup_expired_carts' ) ) {
             wp_schedule_event( time(), 'daily', 'wbi_cleanup_expired_carts' );
         }
-
-        // Registrar intervalo de 15 minutos si no existe
-        add_filter( 'cron_schedules', array( $this, 'add_cron_interval' ) );
     }
 
     public function add_cron_interval( $schedules ) {
@@ -196,75 +209,25 @@ class WBI_Abandoned_Carts_Module {
         $show_add_popup   = $this->get_setting( 'show_add_popup',   1 );
         $show_exit_popup  = $this->get_setting( 'show_exit_popup',  1 );
 
-        // CSS inline
-        $css = '
-        #wbi-cart-popup-overlay {
-            display:none; position:fixed; top:0; left:0; width:100%; height:100%;
-            background:rgba(0,0,0,.55); z-index:99999; align-items:center; justify-content:center;
-        }
-        #wbi-cart-popup-overlay.wbi-show { display:flex; }
-        #wbi-cart-popup {
-            background:#fff; border-radius:12px; padding:32px 28px 24px;
-            max-width:420px; width:90%; box-shadow:0 8px 40px rgba(0,0,0,.22);
-            position:relative; animation:wbiSlideIn .25s ease;
-        }
-        @keyframes wbiSlideIn {
-            from { opacity:0; transform:translateY(-24px); }
-            to   { opacity:1; transform:translateY(0); }
-        }
-        #wbi-cart-popup h3 { margin:0 0 8px; font-size:18px; color:#1d2327; }
-        #wbi-cart-popup p  { margin:0 0 20px; color:#50575e; font-size:14px; line-height:1.55; }
-        .wbi-popup-field   { position:relative; margin-bottom:14px; }
-        .wbi-popup-field span { position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:16px; }
-        .wbi-popup-field input {
-            width:100%; padding:10px 12px 10px 36px; border:1px solid #c3c4c7;
-            border-radius:6px; font-size:14px; box-sizing:border-box;
-            transition:border-color .15s;
-        }
-        .wbi-popup-field input:focus { border-color:#2271b1; outline:none; box-shadow:0 0 0 2px rgba(34,113,177,.15); }
-        #wbi-popup-save {
-            width:100%; padding:12px; background:#2271b1; color:#fff; border:none;
-            border-radius:6px; font-size:15px; font-weight:600; cursor:pointer;
-            transition:background .15s;
-        }
-        #wbi-popup-save:hover { background:#135e96; }
-        #wbi-popup-skip {
-            display:block; text-align:center; margin-top:14px; color:#787c82;
-            font-size:12px; cursor:pointer; text-decoration:underline;
-        }
-        #wbi-popup-skip:hover { color:#1d2327; }
-        #wbi-popup-close {
-            position:absolute; top:12px; right:14px; background:none; border:none;
-            font-size:22px; cursor:pointer; color:#787c82; line-height:1;
-        }
-        .wbi-popup-divider { text-align:center; color:#c3c4c7; font-size:12px; margin:12px 0 0; }
-        ';
-        wp_register_style( 'wbi-abandoned-carts', false );
-        wp_enqueue_style( 'wbi-abandoned-carts' );
-        wp_add_inline_style( 'wbi-abandoned-carts', $css );
+        // Determine asset URLs using the proper WordPress API (this file is inside includes/)
+        $plugin_root_url = trailingslashit( plugins_url( '/', dirname( __FILE__ ) ) );
 
-        // JS inline
-        wp_register_script( 'wbi-abandoned-carts', false, array( 'jquery' ), null, true );
-        wp_enqueue_script( 'wbi-abandoned-carts' );
-
-        $js_vars = array(
-            'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
-            'nonce'            => wp_create_nonce( 'wbi_cart_nonce' ),
-            'showAddPopup'     => (bool) $show_add_popup,
-            'showExitPopup'    => (bool) $show_exit_popup,
-            'titleAdd'         => esc_js( $popup_title_add ),
-            'titleExit'        => esc_js( $popup_title_exit ),
-            'bodyAdd'          => esc_js( $popup_body_add ),
-            'bodyExit'         => esc_js( $popup_body_exit ),
-            'isHttps'          => is_ssl(),
+        // CSS — loaded from file for browser caching
+        wp_enqueue_style(
+            'wbi-abandoned-carts',
+            $plugin_root_url . 'assets/css/wbi-abandoned-carts.css',
+            array(),
+            self::ASSETS_VERSION
         );
 
+        // Popup HTML (static markup; title/body set dynamically by JS)
         $popup_html = '
 <div id="wbi-cart-popup-overlay">
   <div id="wbi-cart-popup">
     <button id="wbi-popup-close" aria-label="Cerrar">&times;</button>
     <h3 id="wbi-popup-title"></h3>
     <p id="wbi-popup-body"></p>
+    <div id="wbi-popup-error" style="color:#c62828;font-size:13px;margin-bottom:10px;display:none;"></div>
     <div class="wbi-popup-field"><span>📧</span><input type="email" id="wbi-popup-email" placeholder="Email"></div>
     <div class="wbi-popup-field"><span>📱</span><input type="tel" id="wbi-popup-phone" placeholder="WhatsApp (ej: 1150001234)"></div>
     <button id="wbi-popup-save">Guardar ✓</button>
@@ -273,209 +236,26 @@ class WBI_Abandoned_Carts_Module {
   </div>
 </div>';
 
-        $js = '
-(function($){
-    var WBI = ' . wp_json_encode( $js_vars ) . ';
-    var $overlay, captured = false, exitShown = false;
-
-    function getCookie(name) {
-        var v = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
-        return v ? v.pop() : "";
-    }
-    function setCookie(name, val, days) {
-        var d = new Date(); d.setTime(d.getTime() + days*86400000);
-        var secure = WBI.isHttps ? ";Secure" : "";
-        document.cookie = name + "=" + val + ";expires=" + d.toUTCString() + ";path=/;SameSite=Lax" + secure;
-    }
-
-    function buildPopup() {
-        if ( $("#wbi-cart-popup-overlay").length ) return;
-        $("body").append(' . wp_json_encode( $popup_html ) . ');
-        $overlay = $("#wbi-cart-popup-overlay");
-
-        $overlay.on("click", function(e){ if($(e.target).is($overlay)) closePopup(); });
-        $("#wbi-popup-close, #wbi-popup-skip").on("click", closePopup);
-        $("#wbi-popup-save").on("click", saveContact);
-    }
-
-    function openPopup(type) {
-        if ( getCookie("wbi_cart_contact_captured") === "1" ) return;
-        buildPopup();
-        var title = type === "exit" ? WBI.titleExit : WBI.titleAdd;
-        var body  = type === "exit" ? WBI.bodyExit  : WBI.bodyAdd;
-        $("#wbi-popup-title").text(title);
-        $("#wbi-popup-body").text(body);
-        $overlay.addClass("wbi-show");
-        if ( type === "exit" ) {
-            sessionStorage.setItem("wbi_exit_shown","1");
-        }
-    }
-
-    function closePopup() {
-        if ( $overlay ) $overlay.removeClass("wbi-show");
-    }
-
-    function refreshNonce(callback) {
-        $.get(WBI.ajaxUrl, { action: "wbi_refresh_nonce" }, function(res){
-            if ( res && res.success && res.data && res.data.nonce ) {
-                WBI.nonce = res.data.nonce;
-                if ( callback ) callback();
-            }
-        });
-    }
-
-    function saveContact() {
-        var email = $.trim($("#wbi-popup-email").val());
-        var phone = $.trim($("#wbi-popup-phone").val());
-        if ( !email && !phone ) { alert("Por favor ingresá al menos un email o WhatsApp."); return; }
-        $.post(WBI.ajaxUrl, {
-            action: "wbi_capture_cart_contact",
-            nonce:  WBI.nonce,
-            email:  email,
-            phone:  phone
-        }, function(res){
-            if ( res && res.success ) {
-                setCookie("wbi_cart_contact_captured","1",30);
-                captured = true;
-                closePopup();
-            }
-        }).fail(function(xhr){
-            if ( xhr.status === 403 ) {
-                // Nonce inválido (frecuente en incógnito sin cookies previas): refrescar y reintentar
-                refreshNonce(function(){
-                    $.post(WBI.ajaxUrl, {
-                        action: "wbi_capture_cart_contact",
-                        nonce:  WBI.nonce,
-                        email:  email,
-                        phone:  phone
-                    }, function(res){
-                        if ( res && res.success ) {
-                            setCookie("wbi_cart_contact_captured","1",30);
-                            captured = true;
-                        } else {
-                            setCookie("wbi_cart_contact_captured","1",1);
-                        }
-                        closePopup();
-                    }).fail(function(){
-                        setCookie("wbi_cart_contact_captured","1",1);
-                        closePopup();
-                    });
-                });
-            } else {
-                // Cualquier otro error: marcar cookie de corta duración para no molestar
-                setCookie("wbi_cart_contact_captured","1",1);
-                closePopup();
-            }
-        });
-    }
-
-    // --- Agregar al carrito ---
-    if ( WBI.showAddPopup ) {
-
-        // 1. MÉTODO PRINCIPAL: interceptar CUALQUIER AJAX exitoso de add-to-cart
-        $(document).ajaxComplete(function(event, xhr, settings){
-            if ( getCookie("wbi_cart_contact_captured") === "1" ) return;
-            if ( !settings || !settings.url ) return;
-
-            var url = settings.url || "";
-            var data = settings.data || "";
-            var isAddToCart = (
-                url.indexOf("wc-ajax=add_to_cart") !== -1
-                || (typeof data === "string" && data.indexOf("add-to-cart") !== -1)
-                || url.indexOf("add_to_cart") !== -1
-            );
-
-            if ( isAddToCart && xhr.status === 200 ) {
-                setTimeout(function(){ openPopup("add"); }, 600);
-            }
-        });
-
-        // 2. FALLBACK: evento nativo de WooCommerce (funciona en catálogo con AJAX)
-        $(document.body).on("added_to_cart", function(){
-            if ( getCookie("wbi_cart_contact_captured") !== "1" ) {
-                setTimeout(function(){ openPopup("add"); }, 600);
-            }
-        });
-
-        // 3. REDIRECT add-to-cart: interceptar el form submit y marcar sessionStorage
-        $(document).on("submit", "form.cart", function(){
-            if ( getCookie("wbi_cart_contact_captured") !== "1" ) {
-                sessionStorage.setItem("wbi_show_add_popup", "1");
-            }
-        });
-
-        // 4. Al cargar cualquier página, verificar si venimos de un redirect de add-to-cart
-        $(function(){
-            if ( sessionStorage.getItem("wbi_show_add_popup") === "1" ) {
-                sessionStorage.removeItem("wbi_show_add_popup");
-                setTimeout(function(){ openPopup("add"); }, 800);
-                return;
-            }
-            var urlParams = new URLSearchParams(window.location.search);
-            if ( urlParams.has("add-to-cart") && getCookie("wbi_cart_contact_captured") !== "1" ) {
-                setTimeout(function(){ openPopup("add"); }, 800);
-                return;
-            }
-        });
-
-        // 5. Interceptar botones .add_to_cart_button que hacen redirect (no-AJAX)
-        $(document).on("click", "a.add_to_cart_button[href*='add-to-cart']", function(){
-            if ( getCookie("wbi_cart_contact_captured") !== "1" ) {
-                sessionStorage.setItem("wbi_show_add_popup", "1");
-            }
-        });
-    }
-
-    // --- Exit intent ---
-    if ( WBI.showExitPopup ) {
-        document.addEventListener("mouseleave", function(e){
-            if ( e.clientY <= 0 && !sessionStorage.getItem("wbi_exit_shown") && getCookie("wbi_cart_contact_captured") !== "1" ) {
-                openPopup("exit");
-            }
-        });
-        document.addEventListener("visibilitychange", function(){
-            if ( document.visibilityState === "hidden" && !sessionStorage.getItem("wbi_exit_shown") && getCookie("wbi_cart_contact_captured") !== "1" ) {
-                // Mark intent to show popup when user returns to the page
-                sessionStorage.setItem("wbi_exit_pending","1");
-                sessionStorage.setItem("wbi_exit_shown","1");
-            }
-            if ( document.visibilityState === "visible" && sessionStorage.getItem("wbi_exit_pending") === "1" ) {
-                sessionStorage.removeItem("wbi_exit_pending");
-                openPopup("exit");
-            }
-        });
-        // beforeunload: registrar abandono vía sendBeacon (no podemos mostrar popup custom aquí)
-        window.addEventListener("beforeunload", function(){
-            if ( !sessionStorage.getItem("wbi_exit_shown") && getCookie("wbi_cart_contact_captured") !== "1" ) {
-                if ( navigator.sendBeacon ) {
-                    var fd = new FormData();
-                    fd.append("action", "wbi_update_cart_data");
-                    fd.append("nonce", WBI.nonce);
-                    navigator.sendBeacon(WBI.ajaxUrl, fd);
-                }
-            }
-        });
-    }
-
-    // --- Captura email de checkout con debounce ---
-    var billingDebounce;
-    $(document).on("change blur keyup", "#billing_email", function(){
-        clearTimeout(billingDebounce);
-        var val = $.trim($(this).val());
-        if ( !val ) return;
-        billingDebounce = setTimeout(function(){
-            $.post(WBI.ajaxUrl, {
-                action: "wbi_capture_cart_contact",
-                nonce:  WBI.nonce,
-                email:  val,
-                phone:  ""
-            });
-        }, 2000);
-    });
-
-})(jQuery);
-';
-        wp_add_inline_script( 'wbi-abandoned-carts', $js );
+        // JS — loaded from file for browser caching; PHP vars passed via wp_localize_script
+        wp_enqueue_script(
+            'wbi-abandoned-carts',
+            $plugin_root_url . 'assets/js/wbi-abandoned-carts.js',
+            array( 'jquery' ),
+            self::ASSETS_VERSION,
+            true
+        );
+        wp_localize_script( 'wbi-abandoned-carts', 'WBI', array(
+            'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
+            'nonce'         => wp_create_nonce( 'wbi_cart_nonce' ),
+            'showAddPopup'  => (bool) $show_add_popup,
+            'showExitPopup' => (bool) $show_exit_popup,
+            'titleAdd'      => $popup_title_add,
+            'titleExit'     => $popup_title_exit,
+            'bodyAdd'       => $popup_body_add,
+            'bodyExit'      => $popup_body_exit,
+            'isHttps'       => is_ssl(),
+            'popupHtml'     => $popup_html,
+        ) );
     }
 
     // =========================================================================
@@ -875,7 +655,7 @@ class WBI_Abandoned_Carts_Module {
 
         global $wpdb;
         $cart = $wpdb->get_row( $wpdb->prepare(
-            "SELECT * FROM {$this->table} WHERE recovery_token = %s LIMIT 1",
+            "SELECT * FROM {$this->table} WHERE recovery_token = %s AND status NOT IN ('recovered','expired') LIMIT 1",
             $token
         ) );
 
@@ -915,6 +695,39 @@ class WBI_Abandoned_Carts_Module {
     }
 
     // =========================================================================
+    // UNSUBSCRIBE HANDLER
+    // =========================================================================
+
+    public function handle_unsubscribe() {
+        $unsub = sanitize_text_field( isset( $_GET['wbi_unsub'] ) ? wp_unslash( $_GET['wbi_unsub'] ) : '' );
+        $token = sanitize_text_field( isset( $_GET['wbi_token'] ) ? wp_unslash( $_GET['wbi_token'] ) : '' );
+
+        if ( '1' !== $unsub || empty( $token ) ) return;
+
+        global $wpdb;
+        $cart = $wpdb->get_row( $wpdb->prepare(
+            "SELECT id FROM {$this->table} WHERE recovery_token = %s AND status NOT IN ('recovered','expired') LIMIT 1",
+            $token
+        ) );
+
+        if ( ! $cart ) return;
+
+        $wpdb->update(
+            $this->table,
+            array(
+                'status'     => 'expired',
+                'updated_at' => gmdate( 'Y-m-d H:i:s' ),
+            ),
+            array( 'id' => intval( $cart->id ) ),
+            array( '%s', '%s' ),
+            array( '%d' )
+        );
+
+        wp_safe_redirect( add_query_arg( 'wbi_unsub_done', '1', home_url( '/' ) ) );
+        exit;
+    }
+
+    // =========================================================================
     // WP-CRON JOBS
     // =========================================================================
 
@@ -931,6 +744,7 @@ class WBI_Abandoned_Carts_Module {
              SET status = 'abandoned'
              WHERE status = 'active'
                AND updated_at <= %s
+               AND ( email != '' OR phone != '' )
                AND cart_contents != '[]'
                AND cart_contents != ''",
             $cutoff
@@ -1537,7 +1351,7 @@ class WBI_Abandoned_Carts_Module {
             if ( ! isset( $_POST['_wbi_cart_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wbi_cart_nonce'] ) ), 'wbi_cart_settings_save' ) ) {
                 wp_die( 'Nonce inválido.' );
             }
-            $data = isset( $_POST['wbi_ac'] ) ? $_POST['wbi_ac'] : array();
+            $data = isset( $_POST['wbi_ac'] ) ? wp_unslash( $_POST['wbi_ac'] ) : array();
             $this->settings = $this->sanitize_module_settings( $data );
             update_option( 'wbi_abandoned_cart_settings', $this->settings );
             echo '<div class="notice notice-success is-dismissible"><p>✅ Configuración guardada correctamente.</p></div>';
@@ -1860,6 +1674,7 @@ class WBI_Abandoned_Carts_Module {
         echo '</form>';
 
         // --- Bulk action bar ---
+        echo '<div id="wbi-ac-notice" class="notice is-dismissible" style="display:none;margin:10px 0 14px;"></div>';
         echo '<div id="wbi-bulk-bar" style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">';
         echo '<button id="wbi-bulk-send" class="button button-primary" disabled>📧 Enviar Recordatorio a Seleccionados</button>';
         echo '<span id="wbi-bulk-count" style="color:#787c82;font-size:13px;"></span>';
@@ -2298,6 +2113,15 @@ class WBI_Abandoned_Carts_Module {
             var ajaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
             var nonce   = <?php echo wp_json_encode( $nonce ); ?>;
 
+            function showNotice( msg, type ) {
+                var $n = $("#wbi-ac-notice");
+                $n.removeClass("notice-success notice-error")
+                  .addClass( type === "error" ? "notice-error" : "notice-success" )
+                  .html("<p>" + msg + "</p>")
+                  .show();
+                setTimeout(function(){ $n.fadeOut(400, function(){ $n.hide().removeClass("notice-success notice-error"); }); }, 5000);
+            }
+
             // Enviar recordatorio individual
             $(document).on("click", ".wbi-send-reminder", function(){
                 var $btn = $(this);
@@ -2306,7 +2130,7 @@ class WBI_Abandoned_Carts_Module {
                 $btn.prop("disabled", true).text("Enviando…");
                 $.post(ajaxUrl, { action:"wbi_send_manual_reminder", nonce:nonce, cart_id:id }, function(res){
                     if ( res.success ) {
-                        alert( res.data.msg );
+                        showNotice( res.data.msg, "success" );
                         // Actualizar badge de estado en la fila
                         var $row = $btn.closest("tr");
                         if ( res.data.new_status ) {
@@ -2322,7 +2146,7 @@ class WBI_Abandoned_Carts_Module {
                         var next = res.data.new_status === "sent_reminder_1" ? 2 : res.data.new_status === "sent_reminder_2" ? 3 : 1;
                         $btn.text("📧 #" + next).prop("disabled", false);
                     } else {
-                        alert( "Error: " + (res.data ? res.data.msg : "desconocido") );
+                        showNotice( "Error: " + (res.data ? res.data.msg : "desconocido"), "error" );
                         $btn.prop("disabled", false).text($btn.data("original-text") || "📧");
                     }
                 });
@@ -2335,7 +2159,7 @@ class WBI_Abandoned_Carts_Module {
                 if ( !confirm("¿Eliminar este registro? Esta acción no se puede deshacer.") ) return;
                 $.post(ajaxUrl, { action:"wbi_delete_abandoned_cart", nonce:nonce, cart_id:id }, function(res){
                     if ( res.success ) { $row.fadeOut(300, function(){ $(this).remove(); }); }
-                    else { alert( "Error al eliminar." ); }
+                    else { showNotice( "Error al eliminar.", "error" ); }
                 });
             });
 
