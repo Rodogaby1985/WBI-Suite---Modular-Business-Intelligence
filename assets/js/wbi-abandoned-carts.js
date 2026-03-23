@@ -68,6 +68,11 @@
                 setCookie('wbi_cart_contact_captured','1',30);
                 captured = true;
                 closePopup();
+            } else {
+                // Cart was empty or error — close popup and set a short cookie so
+                // the popup doesn't reappear immediately on this visit.
+                setCookie('wbi_cart_contact_captured','1',1);
+                closePopup();
             }
         }).fail(function(xhr){
             if ( xhr.status === 403 ) {
