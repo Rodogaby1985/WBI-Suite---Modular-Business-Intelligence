@@ -302,6 +302,13 @@ class WBI_Abandoned_Carts_Module {
         $cart_contents = $this->serialize_cart();
         $cart_total    = function_exists( 'WC' ) && WC()->cart ? (float) WC()->cart->get_total( '' ) : 0.0;
         $currency      = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : '';
+
+        // Do not save empty carts — they are useless for recovery.
+        $decoded = json_decode( $cart_contents, true );
+        if ( empty( $decoded ) || ! is_array( $decoded ) ) {
+            wp_send_json_error( array( 'msg' => 'El carrito está vacío.' ) );
+        }
+
         $token         = bin2hex( random_bytes( 32 ) );
         $recovery_url  = add_query_arg( 'wbi_recover_cart', $token, home_url( '/' ) );
 
@@ -369,6 +376,12 @@ class WBI_Abandoned_Carts_Module {
         $cart_contents = $this->serialize_cart();
         $cart_total    = function_exists( 'WC' ) && WC()->cart ? (float) WC()->cart->get_total( '' ) : 0.0;
         $currency      = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : '';
+
+        // Do not update with empty cart data — nothing to recover.
+        $decoded = json_decode( $cart_contents, true );
+        if ( empty( $decoded ) || ! is_array( $decoded ) ) {
+            wp_send_json_error( array( 'msg' => 'El carrito está vacío.' ) );
+        }
 
         $wpdb->update(
             $this->table,
@@ -814,6 +827,11 @@ class WBI_Abandoned_Carts_Module {
             gmdate( 'Y-m-d H:i:s' ),
             $cutoff
         ) );
+
+        // Remove empty cart records (no products, $0 total) — garbage records that
+        // were captured before the empty-cart guard was added, or by edge cases.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        $wpdb->query( "DELETE FROM {$this->table} WHERE cart_contents IN ('[]', '', 'null') AND cart_total = 0" );
 
         // Limpiar cupones auto-generados y expirados
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -1590,7 +1608,7 @@ class WBI_Abandoned_Carts_Module {
         $orderby        = in_array( isset( $_GET['orderby'] ) ? $_GET['orderby'] : '', array( 'created_at', 'cart_total', 'status', 'reminder_count' ), true ) ? sanitize_text_field( $_GET['orderby'] ) : 'created_at';
         $order          = isset( $_GET['order'] ) && strtoupper( $_GET['order'] ) === 'ASC' ? 'ASC' : 'DESC';
 
-        $where  = ' WHERE 1=1 ';
+        $where  = " WHERE cart_contents NOT IN ('[]', '', 'null') AND cart_total > 0 ";
         $params = array();
 
         if ( $filter_status ) {
