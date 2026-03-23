@@ -371,58 +371,59 @@ class WBI_Abandoned_Carts_Module {
 
     // --- Agregar al carrito ---
     if ( WBI.showAddPopup ) {
-        // AJAX add-to-cart (catalog/shop pages)
+
+        // 1. MÉTODO PRINCIPAL: interceptar CUALQUIER AJAX exitoso de add-to-cart
+        $(document).ajaxComplete(function(event, xhr, settings){
+            if ( getCookie("wbi_cart_contact_captured") === "1" ) return;
+            if ( !settings || !settings.url ) return;
+
+            var url = settings.url || "";
+            var data = settings.data || "";
+            var isAddToCart = (
+                url.indexOf("wc-ajax=add_to_cart") !== -1
+                || (typeof data === "string" && data.indexOf("add-to-cart") !== -1)
+                || url.indexOf("add_to_cart") !== -1
+            );
+
+            if ( isAddToCart && xhr.status === 200 ) {
+                setTimeout(function(){ openPopup("add"); }, 600);
+            }
+        });
+
+        // 2. FALLBACK: evento nativo de WooCommerce (funciona en catálogo con AJAX)
         $(document.body).on("added_to_cart", function(){
             if ( getCookie("wbi_cart_contact_captured") !== "1" ) {
                 setTimeout(function(){ openPopup("add"); }, 600);
             }
         });
-        // Page-reload add-to-cart (single product page — form submit with redirect)
-        var urlParams = new URLSearchParams(window.location.search);
-        if ( urlParams.has("add-to-cart") && getCookie("wbi_cart_contact_captured") !== "1" ) {
-            $(function(){ setTimeout(function(){ openPopup("add"); }, 800); });
-        }
-        // Fragment refresh signals (mini-cart update after AJAX add-to-cart)
-        $(document.body).on("wc_fragments_refreshed wc_fragments_loaded", function(){
-            if ( getCookie("wbi_cart_contact_captured") !== "1" ) {
-                var $badge = $(".cart-contents .count, .mini-cart-count, .cart-count");
-                if ( $badge.length && parseInt($badge.text()) > 0 ) {
-                    setTimeout(function(){ openPopup("add"); }, 600);
-                }
-            }
-        });
-        // Interceptar form submit en página de producto (no-AJAX add-to-cart → redirect)
+
+        // 3. REDIRECT add-to-cart: interceptar el form submit y marcar sessionStorage
         $(document).on("submit", "form.cart", function(){
             if ( getCookie("wbi_cart_contact_captured") !== "1" ) {
-                sessionStorage.setItem("wbi_show_add_popup","1");
+                sessionStorage.setItem("wbi_show_add_popup", "1");
             }
         });
-        // Al cargar la página, verificar si viene de un add-to-cart con redirect
+
+        // 4. Al cargar cualquier página, verificar si venimos de un redirect de add-to-cart
         $(function(){
             if ( sessionStorage.getItem("wbi_show_add_popup") === "1" ) {
                 sessionStorage.removeItem("wbi_show_add_popup");
                 setTimeout(function(){ openPopup("add"); }, 800);
+                return;
+            }
+            var urlParams = new URLSearchParams(window.location.search);
+            if ( urlParams.has("add-to-cart") && getCookie("wbi_cart_contact_captured") !== "1" ) {
+                setTimeout(function(){ openPopup("add"); }, 800);
+                return;
             }
         });
-        // MutationObserver como fallback: detectar cambios en el DOM del mini-cart
-        if ( typeof MutationObserver !== "undefined" ) {
-            var _cartObserved = false;
-            var _cartObserver = new MutationObserver(function(){
-                if ( getCookie("wbi_cart_contact_captured") !== "1" && !_cartObserved ) {
-                    _cartObserved = true;
-                    setTimeout(function(){ _cartObserved = false; }, 3000);
-                    setTimeout(function(){ openPopup("add"); }, 600);
-                }
-            });
-            $(function(){
-                var $miniCart = $(".widget_shopping_cart_content, .woocommerce-mini-cart, .cart-contents");
-                if ( $miniCart.length ) {
-                    $miniCart.each(function(){
-                        _cartObserver.observe(this, { childList: true, subtree: true, characterData: true });
-                    });
-                }
-            });
-        }
+
+        // 5. Interceptar botones .add_to_cart_button que hacen redirect (no-AJAX)
+        $(document).on("click", "a.add_to_cart_button[href*='add-to-cart']", function(){
+            if ( getCookie("wbi_cart_contact_captured") !== "1" ) {
+                sessionStorage.setItem("wbi_show_add_popup", "1");
+            }
+        });
     }
 
     // --- Exit intent ---
