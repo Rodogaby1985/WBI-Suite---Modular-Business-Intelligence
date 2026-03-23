@@ -1200,7 +1200,14 @@ class WBI_Abandoned_Carts_Module {
         $prefix = $this->get_setting( "reminder_{$num}_coupon_prefix", 'WBI-CART-' );
         do {
             $code = strtoupper( $prefix . wp_generate_password( 8, false ) );
-        } while ( get_page_by_title( $code, OBJECT, 'shop_coupon' ) );
+            $existing_coupon = new WP_Query( array(
+                'post_type'      => 'shop_coupon',
+                'title'          => $code,
+                'posts_per_page' => 1,
+                'post_status'    => 'publish',
+                'fields'         => 'ids',
+            ) );
+        } while ( $existing_coupon->have_posts() );
 
         $discount_type  = $this->get_setting( "reminder_{$num}_coupon_type", 'percent' );
         $amount         = $this->get_setting( "reminder_{$num}_coupon_amount", 10 );
