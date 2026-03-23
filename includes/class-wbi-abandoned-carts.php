@@ -93,7 +93,7 @@ class WBI_Abandoned_Carts_Module {
             currency VARCHAR(10) NOT NULL DEFAULT '',
             recovery_url VARCHAR(500) NOT NULL DEFAULT '',
             recovery_token VARCHAR(64) NOT NULL DEFAULT '',
-            status ENUM('abandoned','recovered','expired','sent_reminder_1','sent_reminder_2','sent_reminder_3') NOT NULL DEFAULT 'abandoned',
+            status ENUM('active','abandoned','recovered','expired','sent_reminder_1','sent_reminder_2','sent_reminder_3') NOT NULL DEFAULT 'active',
             reminder_count TINYINT UNSIGNED NOT NULL DEFAULT 0,
             last_reminder_at DATETIME DEFAULT NULL,
             recovered_at DATETIME DEFAULT NULL,
@@ -486,7 +486,7 @@ class WBI_Abandoned_Carts_Module {
                     'currency'        => $currency,
                     'recovery_url'    => $recovery_url,
                     'recovery_token'  => $token,
-                    'status'          => 'abandoned',
+                    'status'          => 'active',
                     'reminder_count'  => 0,
                     'created_at'      => $now,
                     'updated_at'      => $now,
@@ -775,7 +775,7 @@ class WBI_Abandoned_Carts_Module {
         $cart = $wpdb->get_row( $wpdb->prepare(
             "SELECT id FROM {$this->table}
              WHERE (email = %s OR session_id = %s)
-               AND status IN ('abandoned','sent_reminder_1','sent_reminder_2','sent_reminder_3')
+               AND status IN ('active','abandoned','sent_reminder_1','sent_reminder_2','sent_reminder_3')
              ORDER BY created_at DESC LIMIT 1",
             $email,
             $session_id
@@ -854,21 +854,25 @@ class WBI_Abandoned_Carts_Module {
         $minutes = absint( $this->get_setting( 'abandonment_threshold', 30 ) );
         $cutoff  = gmdate( 'Y-m-d H:i:s', time() - $minutes * 60 );
 
+        // Transition 'active' carts (freshly captured contact info) to 'abandoned'
+        // once the abandonment threshold has passed. We do NOT update updated_at so
+        // that cron_send_reminders() can correctly measure time-since-capture.
         $wpdb->query( $wpdb->prepare(
             "UPDATE {$this->table}
-             SET status = 'abandoned', updated_at = %s
-             WHERE status = 'abandoned'
+             SET status = 'abandoned'
+             WHERE status = 'active'
                AND updated_at <= %s
                AND cart_contents != '[]'
                AND cart_contents != ''",
-            gmdate( 'Y-m-d H:i:s' ),
             $cutoff
         ) );
     }
 
     public function cron_send_reminders() {
         global $wpdb;
-        $now = time();
+        $now         = time();
+        $max_per_run = absint( $this->get_setting( 'max_emails_per_cron', 10 ) );
+        $total_sent  = 0;
 
         for ( $num = 1; $num <= 3; $num++ ) {
             $enabled = $this->get_setting( "reminder_{$num}_enabled", 1 );
@@ -880,29 +884,37 @@ class WBI_Abandoned_Carts_Module {
             $prev_status = $num === 1 ? 'abandoned' : "sent_reminder_" . ( $num - 1 );
             $new_status  = "sent_reminder_{$num}";
 
+            $remaining = $max_per_run - $total_sent;
+            if ( $remaining <= 0 ) break;
+
             $carts = $wpdb->get_results( $wpdb->prepare(
                 "SELECT * FROM {$this->table}
                  WHERE status = %s
                    AND updated_at <= %s
-                 LIMIT 50",
+                 LIMIT %d",
                 $prev_status,
-                $cutoff
+                $cutoff,
+                $remaining
             ) );
 
             foreach ( $carts as $cart ) {
-                $this->send_reminder( $cart, $num );
-                $wpdb->update(
-                    $this->table,
-                    array(
-                        'status'          => $new_status,
-                        'reminder_count'  => intval( $cart->reminder_count ) + 1,
-                        'last_reminder_at'=> gmdate( 'Y-m-d H:i:s' ),
-                        'updated_at'      => gmdate( 'Y-m-d H:i:s' ),
-                    ),
-                    array( 'id' => intval( $cart->id ) ),
-                    array( '%s', '%d', '%s', '%s' ),
-                    array( '%d' )
-                );
+                if ( $total_sent >= $max_per_run ) break;
+                $sent = $this->send_reminder( $cart, $num );
+                if ( $sent ) {
+                    $total_sent++;
+                    $wpdb->update(
+                        $this->table,
+                        array(
+                            'status'          => $new_status,
+                            'reminder_count'  => intval( $cart->reminder_count ) + 1,
+                            'last_reminder_at'=> gmdate( 'Y-m-d H:i:s' ),
+                            'updated_at'      => gmdate( 'Y-m-d H:i:s' ),
+                        ),
+                        array( 'id' => intval( $cart->id ) ),
+                        array( '%s', '%d', '%s', '%s' ),
+                        array( '%d' )
+                    );
+                }
             }
         }
     }
@@ -973,8 +985,20 @@ class WBI_Abandoned_Carts_Module {
         $message_template = $this->get_setting( "reminder_{$num}_email_template", $default_templates[ $num ] );
         $subject_template = $this->get_setting( "reminder_{$num}_subject", $default_subjects[ $num ] );
 
-        $from_name  = $this->get_setting( 'sender_name',  get_bloginfo( 'name' ) );
-        $from_email = $this->get_setting( 'sender_email', get_option( 'admin_email' ) );
+        // Validate recipient early to avoid unnecessary processing
+        if ( empty( $cart->email ) || ! is_email( $cart->email ) ) {
+            $this->log_reminder( intval( $cart->id ), $num, 'email', $cart->email ?? '', '', 'failed', 'Email inválido o vacío' );
+            return false;
+        }
+
+        $from_name  = $this->get_setting( 'sender_name',  '' );
+        if ( empty( $from_name ) ) {
+            $from_name = get_option( 'woocommerce_email_from_name', get_bloginfo( 'name' ) );
+        }
+        $from_email = $this->get_setting( 'sender_email', '' );
+        if ( empty( $from_email ) ) {
+            $from_email = get_option( 'woocommerce_email_from_address', get_option( 'admin_email' ) );
+        }
 
         $items       = json_decode( $cart->cart_contents, true );
         $items_html  = $this->build_items_html( $items );
@@ -1385,7 +1409,7 @@ class WBI_Abandoned_Carts_Module {
         }
 
         $int_fields = array(
-            'abandonment_threshold', 'expiration_days',
+            'abandonment_threshold', 'expiration_days', 'max_emails_per_cron',
             'reminder_1_hours', 'reminder_2_hours', 'reminder_3_hours',
             'reminder_1_coupon_expiry_days', 'reminder_2_coupon_expiry_days', 'reminder_3_coupon_expiry_days',
         );
@@ -1731,6 +1755,7 @@ class WBI_Abandoned_Carts_Module {
         // Estado
         echo '<select name="status"><option value="">Todos los estados</option>';
         $statuses = array(
+            'active'           => 'Activo',
             'abandoned'        => 'Abandonado',
             'sent_reminder_1'  => 'Reminder 1',
             'sent_reminder_2'  => 'Reminder 2',
@@ -1796,6 +1821,7 @@ class WBI_Abandoned_Carts_Module {
         echo '</tr></thead><tbody>';
 
         $status_labels = array(
+            'active'          => array( 'label' => 'Activo',      'color' => '#0d7a38' ),
             'abandoned'       => array( 'label' => 'Abandonado',  'color' => '#e65100' ),
             'sent_reminder_1' => array( 'label' => 'Reminder 1',  'color' => '#1565c0' ),
             'sent_reminder_2' => array( 'label' => 'Reminder 2',  'color' => '#6a1b9a' ),
@@ -2034,6 +2060,10 @@ class WBI_Abandoned_Carts_Module {
                 <tr>
                     <th>Tiempo para marcar como abandonado</th>
                     <td><input type="number" name="wbi_ac[abandonment_threshold]" value="<?php echo esc_attr( $this->get_setting('abandonment_threshold', 30) ); ?>" min="5" style="width:80px"> minutos</td>
+                </tr>
+                <tr>
+                    <th>Máx. emails por ejecución de cron</th>
+                    <td><input type="number" name="wbi_ac[max_emails_per_cron]" value="<?php echo esc_attr( $this->get_setting('max_emails_per_cron', 10) ); ?>" min="1" max="50" style="width:80px"> <span class="description">Limita el total de emails enviados por cada ejecución del cron. Recomendado: 10–15 para hosting compartido.</span></td>
                 </tr>
                 <tr>
                     <th>Expiración de carritos</th>
