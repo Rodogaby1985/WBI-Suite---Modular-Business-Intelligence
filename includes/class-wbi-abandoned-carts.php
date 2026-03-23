@@ -48,6 +48,10 @@ class WBI_Abandoned_Carts_Module {
         add_action( 'wp_ajax_wbi_update_cart_data',        array( $this, 'ajax_update_cart_data' ) );
         add_action( 'wp_ajax_nopriv_wbi_update_cart_data', array( $this, 'ajax_update_cart_data' ) );
 
+        // AJAX: refresco de nonce (con y sin login — incógnito lo necesita)
+        add_action( 'wp_ajax_wbi_refresh_nonce',        array( $this, 'ajax_refresh_nonce' ) );
+        add_action( 'wp_ajax_nopriv_wbi_refresh_nonce', array( $this, 'ajax_refresh_nonce' ) );
+
         // AJAX: acciones de admin
         add_action( 'wp_ajax_wbi_send_manual_reminder',   array( $this, 'ajax_send_manual_reminder' ) );
         add_action( 'wp_ajax_wbi_delete_abandoned_cart',  array( $this, 'ajax_delete_abandoned_cart' ) );
@@ -180,33 +184,10 @@ class WBI_Abandoned_Carts_Module {
     }
 
     public function enqueue_frontend_assets() {
-        if ( ! function_exists( 'is_woocommerce' ) ) return;
-        // Load on core WooCommerce pages and any WooCommerce taxonomy/tag pages
-        $load = is_cart() || is_checkout() || is_product() || is_shop() || is_woocommerce();
-        // Also load on the front page (may have product shortcodes/blocks)
-        if ( ! $load ) {
-            $load = is_front_page();
-        }
-        // Also load on any page that contains WooCommerce shortcodes or blocks
-        if ( ! $load ) {
-            global $post;
-            if ( $post && (
-                has_shortcode( $post->post_content, 'products' )
-                || has_shortcode( $post->post_content, 'sale_products' )
-                || has_shortcode( $post->post_content, 'best_selling_products' )
-                || has_shortcode( $post->post_content, 'recent_products' )
-                || has_shortcode( $post->post_content, 'featured_products' )
-                || has_block( 'woocommerce/all-products', $post )
-                || has_block( 'woocommerce/handpicked-products', $post )
-                || has_block( 'woocommerce/product-best-sellers', $post )
-                || has_block( 'woocommerce/product-new', $post )
-                || has_block( 'woocommerce/product-on-sale', $post )
-                || has_block( 'woocommerce/product-top-rated', $post )
-            ) ) {
-                $load = true;
-            }
-        }
-        if ( ! $load ) return;
+        // No cargar en admin
+        if ( is_admin() ) return;
+        // Solo cargar si WooCommerce está activo
+        if ( ! function_exists( 'WC' ) ) return;
 
         $popup_title_add  = $this->get_setting( 'popup_title_add',  '🛒 ¡Guardamos tu carrito!' );
         $popup_title_exit = $this->get_setting( 'popup_title_exit', '⚠️ ¡Esperá! Tenés productos en tu carrito' );
@@ -334,6 +315,15 @@ class WBI_Abandoned_Carts_Module {
         if ( $overlay ) $overlay.removeClass("wbi-show");
     }
 
+    function refreshNonce(callback) {
+        $.get(WBI.ajaxUrl, { action: "wbi_refresh_nonce" }, function(res){
+            if ( res && res.success && res.data && res.data.nonce ) {
+                WBI.nonce = res.data.nonce;
+                if ( callback ) callback();
+            }
+        });
+    }
+
     function saveContact() {
         var email = $.trim($("#wbi-popup-email").val());
         var phone = $.trim($("#wbi-popup-phone").val());
@@ -344,9 +334,36 @@ class WBI_Abandoned_Carts_Module {
             email:  email,
             phone:  phone
         }, function(res){
-            if ( res.success ) {
+            if ( res && res.success ) {
                 setCookie("wbi_cart_contact_captured","1",30);
                 captured = true;
+                closePopup();
+            }
+        }).fail(function(xhr){
+            if ( xhr.status === 403 ) {
+                // Nonce inválido (frecuente en incógnito sin cookies previas): refrescar y reintentar
+                refreshNonce(function(){
+                    $.post(WBI.ajaxUrl, {
+                        action: "wbi_capture_cart_contact",
+                        nonce:  WBI.nonce,
+                        email:  email,
+                        phone:  phone
+                    }, function(res){
+                        if ( res && res.success ) {
+                            setCookie("wbi_cart_contact_captured","1",30);
+                            captured = true;
+                        } else {
+                            setCookie("wbi_cart_contact_captured","1",1);
+                        }
+                        closePopup();
+                    }).fail(function(){
+                        setCookie("wbi_cart_contact_captured","1",1);
+                        closePopup();
+                    });
+                });
+            } else {
+                // Cualquier otro error: marcar cookie de corta duración para no molestar
+                setCookie("wbi_cart_contact_captured","1",1);
                 closePopup();
             }
         });
@@ -374,6 +391,38 @@ class WBI_Abandoned_Carts_Module {
                 }
             }
         });
+        // Interceptar form submit en página de producto (no-AJAX add-to-cart → redirect)
+        $(document).on("submit", "form.cart", function(){
+            if ( getCookie("wbi_cart_contact_captured") !== "1" ) {
+                sessionStorage.setItem("wbi_show_add_popup","1");
+            }
+        });
+        // Al cargar la página, verificar si viene de un add-to-cart con redirect
+        $(function(){
+            if ( sessionStorage.getItem("wbi_show_add_popup") === "1" ) {
+                sessionStorage.removeItem("wbi_show_add_popup");
+                setTimeout(function(){ openPopup("add"); }, 800);
+            }
+        });
+        // MutationObserver como fallback: detectar cambios en el DOM del mini-cart
+        if ( typeof MutationObserver !== "undefined" ) {
+            var _cartObserved = false;
+            var _cartObserver = new MutationObserver(function(){
+                if ( getCookie("wbi_cart_contact_captured") !== "1" && !_cartObserved ) {
+                    _cartObserved = true;
+                    setTimeout(function(){ _cartObserved = false; }, 3000);
+                    setTimeout(function(){ openPopup("add"); }, 600);
+                }
+            });
+            $(function(){
+                var $miniCart = $(".widget_shopping_cart_content, .woocommerce-mini-cart, .cart-contents");
+                if ( $miniCart.length ) {
+                    $miniCart.each(function(){
+                        _cartObserver.observe(this, { childList: true, subtree: true, characterData: true });
+                    });
+                }
+            });
+        }
     }
 
     // --- Exit intent ---
@@ -392,6 +441,17 @@ class WBI_Abandoned_Carts_Module {
             if ( document.visibilityState === "visible" && sessionStorage.getItem("wbi_exit_pending") === "1" ) {
                 sessionStorage.removeItem("wbi_exit_pending");
                 openPopup("exit");
+            }
+        });
+        // beforeunload: registrar abandono vía sendBeacon (no podemos mostrar popup custom aquí)
+        window.addEventListener("beforeunload", function(){
+            if ( !sessionStorage.getItem("wbi_exit_shown") && getCookie("wbi_cart_contact_captured") !== "1" ) {
+                if ( navigator.sendBeacon ) {
+                    var fd = new FormData();
+                    fd.append("action", "wbi_update_cart_data");
+                    fd.append("nonce", WBI.nonce);
+                    navigator.sendBeacon(WBI.ajaxUrl, fd);
+                }
             }
         });
     }
@@ -415,6 +475,14 @@ class WBI_Abandoned_Carts_Module {
 })(jQuery);
 ';
         wp_add_inline_script( 'wbi-abandoned-carts', $js );
+    }
+
+    // =========================================================================
+    // AJAX: REFRESCO DE NONCE (para sesiones incógnito sin cookies previas)
+    // =========================================================================
+
+    public function ajax_refresh_nonce() {
+        wp_send_json_success( array( 'nonce' => wp_create_nonce( 'wbi_cart_nonce' ) ) );
     }
 
     // =========================================================================
