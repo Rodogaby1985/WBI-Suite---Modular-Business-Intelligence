@@ -118,6 +118,14 @@ class WBI_Suite_Loader {
                 }
             }
 
+            // J2. Módulo de Órdenes de Compra
+            if ( ! empty( $this->options['wbi_enable_purchase'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-purchase.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-purchase.php';
+                    new WBI_Purchase_Module();
+                }
+            }
+
             // K. Módulo de Scoring de Clientes
             if ( ! empty( $this->options['wbi_enable_scoring'] ) ) {
                 if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-scoring.php' ) ) {
@@ -523,6 +531,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_picking', 'Módulo de Picking & Armado', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_picking'] );
         add_settings_field( 'wbi_enable_costs', 'Módulo de Costos y Márgenes', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_costs'] );
         add_settings_field( 'wbi_enable_suppliers', 'Módulo de Proveedores', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_suppliers'] );
+        add_settings_field( 'wbi_enable_purchase', 'Módulo de Órdenes de Compra', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_purchase'] );
         add_settings_field( 'wbi_enable_scoring', 'Módulo de Scoring de Clientes', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_scoring'] );
         add_settings_field( 'wbi_enable_remitos', 'Módulo de Remitos', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_remitos'] );
         add_settings_field( 'wbi_enable_pricelists', 'Módulo de Listas de Precios', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_pricelists'] );
@@ -545,6 +554,7 @@ class WBI_Suite_Loader {
             'wbi_enable_picking'       => 'Picking & Armado',
             'wbi_enable_costs'         => 'Costos y Márgenes',
             'wbi_enable_suppliers'     => 'Proveedores',
+            'wbi_enable_purchase'      => 'Órdenes de Compra',
             'wbi_enable_scoring'       => 'Scoring de Clientes',
             'wbi_enable_pricelists'    => 'Listas de Precios',
             'wbi_enable_cashflow'      => 'Flujo de Caja',
@@ -616,11 +626,11 @@ class WBI_Suite_Loader {
 
     public function render_settings_page() {
         $opts          = $this->options ?: array();
-        $total_modules = 18;
+        $total_modules = 19;
         $active_count  = 0;
         $toggle_keys   = array(
             'wbi_enable_b2b','wbi_enable_data','wbi_enable_dashboard','wbi_enable_barcode',
-            'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_scoring',
+            'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_purchase','wbi_enable_scoring',
             'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
             'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator',
@@ -645,6 +655,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_picking',        '📦', 'Picking & Armado',         'Armado de pedidos con escaneo de códigos de barra',                       'wbi-picking',    'operaciones'  ),
             array( 'wbi_enable_remitos',        '📄', 'Remitos',                  'Generación de remitos PDF vinculados a pedidos',                          'wbi-documents',  'operaciones'  ),
             array( 'wbi_enable_suppliers',      '👥', 'Proveedores',              'Gestión de proveedores y vinculación con productos',                      'wbi-suppliers',  'operaciones'  ),
+            array( 'wbi_enable_purchase',       '🛒', 'Órdenes de Compra',        'Gestión completa de órdenes de compra y recepción de mercadería',          'wbi-purchase',   'operaciones'  ),
             array( 'wbi_enable_data',           '📁', 'Modelo de Datos Extra',    'Campos extra: origen de venta y taxonomías personalizadas',               null,             'datos'        ),
             array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',  'finanzas'     ),
             array( 'wbi_enable_taxes',          '🏛️','Gestión de Impuestos',      'Cálculo de IVA, percepciones e impuestos internos',                       'wbi-taxes',      'finanzas'     ),
@@ -739,6 +750,7 @@ class WBI_Suite_Loader {
                     array( 'enable_key' => 'wbi_enable_picking',       'perm_key' => 'wbi_permissions_picking',       'name' => 'Picking & Armado' ),
                     array( 'enable_key' => 'wbi_enable_costs',         'perm_key' => 'wbi_permissions_costs',         'name' => 'Costos y Márgenes' ),
                     array( 'enable_key' => 'wbi_enable_suppliers',     'perm_key' => 'wbi_permissions_suppliers',     'name' => 'Proveedores' ),
+                    array( 'enable_key' => 'wbi_enable_purchase',      'perm_key' => 'wbi_permissions_purchase',      'name' => 'Órdenes de Compra' ),
                     array( 'enable_key' => 'wbi_enable_scoring',       'perm_key' => 'wbi_permissions_scoring',       'name' => 'Scoring de Clientes' ),
                     array( 'enable_key' => 'wbi_enable_pricelists',    'perm_key' => 'wbi_permissions_pricelists',    'name' => 'Listas de Precios' ),
                     array( 'enable_key' => 'wbi_enable_cashflow',      'perm_key' => 'wbi_permissions_cashflow',      'name' => 'Flujo de Caja' ),
