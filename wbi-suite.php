@@ -217,7 +217,7 @@ class WBI_Suite_Loader {
             }
         }
 
-        // 9. Módulo CRM / Pipeline de Ventas
+        // 19. Módulo CRM / Pipeline de Ventas
         if ( ! empty( $this->options['wbi_enable_crm'] ) ) {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-crm.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-crm.php';

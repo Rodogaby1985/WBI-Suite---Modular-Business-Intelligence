@@ -130,7 +130,7 @@ class WBI_CRM_Module {
 
         // Seed default stages if none exist
         $count = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_crm_stages" );
-        if ( '0' === (string) $count ) {
+        if ( 0 === (int) $count ) {
             $defaults = array(
                 array( 'Nuevo',        0, 0, '#6366f1' ),
                 array( 'Calificado',   1, 0, '#0284c7' ),
@@ -206,7 +206,8 @@ class WBI_CRM_Module {
     // =========================================================================
 
     public function render_page() {
-        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+        $cap = $this->user_can_access();
+        if ( ! current_user_can( $cap ) ) {
             wp_die( esc_html__( 'No tenés permisos para acceder a esta página.', 'wbi-suite' ) );
         }
 
@@ -676,8 +677,11 @@ class WBI_CRM_Module {
                     <?php else : ?>
                     <div class="wbi-card" style="margin-top:16px;">
                         <h3 class="wbi-section-title">Cliente WooCommerce</h3>
-                        <?php $customer_edit = get_edit_user_link( $lead->customer_id ); ?>
-                        <p>✅ Vinculado a <a href="<?php echo esc_url( $customer_edit ); ?>"><?php echo esc_html( get_user_by( 'id', $lead->customer_id )->display_name ); ?></a></p>
+                        <?php
+                        $customer_edit = get_edit_user_link( $lead->customer_id );
+                        $linked_user   = get_user_by( 'id', $lead->customer_id );
+                        ?>
+                        <p>✅ Vinculado a <a href="<?php echo esc_url( $customer_edit ); ?>"><?php echo esc_html( $linked_user ? $linked_user->display_name : '#' . $lead->customer_id ); ?></a></p>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -1180,7 +1184,8 @@ class WBI_CRM_Module {
         if ( ! check_ajax_referer( self::NONCE_ACTION, '_wpnonce', false ) ) {
             wp_send_json_error( array( 'message' => 'Nonce inválido.' ), 403 );
         }
-        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+        $cap = $this->user_can_access();
+        if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( array( 'message' => 'Sin permisos.' ), 403 );
         }
     }
@@ -1454,10 +1459,11 @@ class WBI_CRM_Module {
             ) );
         }
 
-        // Create new WP user
-        $username = sanitize_user( explode( '@', $lead->contact_email )[0], true );
-        if ( username_exists( $username ) ) {
-            $username = $username . '_' . wp_rand( 100, 999 );
+        // Create new WP user — use a random suffix to avoid predictable usernames
+        $base_username = sanitize_user( explode( '@', $lead->contact_email )[0], true );
+        $username      = $base_username . '_' . wp_rand( 1000, 9999 );
+        while ( username_exists( $username ) ) {
+            $username = $base_username . '_' . wp_rand( 1000, 9999 );
         }
 
         $password = wp_generate_password();
@@ -1615,7 +1621,9 @@ class WBI_CRM_Module {
              LEFT JOIN {$wpdb->users} u ON l.assigned_to = u.ID WHERE l.id = %d",
             $lead_id
         ) );
-        if ( ! $lead ) return '';
+        if ( ! $lead ) {
+            return '';
+        }
         ob_start();
         $this->render_kanban_card( $lead );
         return ob_get_clean();
@@ -1695,8 +1703,11 @@ class WBI_CRM_Module {
 
                     if (newStage === draggingStage) {
                         // Same column — reorder (visual only, no AJAX needed)
-                        var cards = col.querySelector('.wbi-crm-cards');
-                        if (cards) cards.insertBefore(draggingCard, e.target.closest('.wbi-crm-card'));
+                        var cards      = col.querySelector('.wbi-crm-cards');
+                        var targetCard = e.target.closest('.wbi-crm-card');
+                        if (cards) {
+                            cards.insertBefore(draggingCard, targetCard || null);
+                        }
                         return;
                     }
 
