@@ -225,7 +225,12 @@ class WBI_Suite_Loader {
             }
         }
 
-        // 19. Módulo de Reglas de Reabastecimiento
+        // R2. Módulo de Email Marketing
+        if ( ! empty( $this->options['wbi_enable_email_marketing'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-marketing.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-marketing.php';
+                new WBI_Email_Marketing_Module();
+        // 20. Módulo de Reglas de Reabastecimiento
         if ( ! empty( $this->options['wbi_enable_reorder'] ) ) {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-reorder.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-reorder.php';
@@ -556,6 +561,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_api', 'API REST', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_api'] );
         add_settings_field( 'wbi_enable_abandoned_carts', 'Carritos Abandonados', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_abandoned_carts'] );
         add_settings_field( 'wbi_enable_checkout_validator', 'Validación de Checkout (CP vs Provincia)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_checkout_validator'] );
+        add_settings_field( 'wbi_enable_email_marketing', 'Email Marketing', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_email_marketing'] );
         add_settings_field( 'wbi_enable_reorder', 'Reglas de Reabastecimiento', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_reorder'] );
         add_settings_field( 'wbi_enable_crm', 'CRM / Pipeline de Ventas', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_crm'] );
 
@@ -580,6 +586,7 @@ class WBI_Suite_Loader {
             // Virtual key for the unified documents module (invoice + remitos merged)
             'wbi_enable_documents'         => 'Documentos',
             'wbi_enable_checkout_validator'=> 'Validación de Checkout',
+            'wbi_enable_email_marketing'   => 'Email Marketing',
             'wbi_enable_reorder'           => 'Reglas de Reabastecimiento',
             'wbi_enable_crm'               => 'CRM / Pipeline de Ventas',
         );
@@ -650,6 +657,7 @@ class WBI_Suite_Loader {
             'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_purchase','wbi_enable_scoring',
             'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
             'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
+            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_email_marketing',
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_reorder',
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_crm',
         );
@@ -683,6 +691,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_whatsapp',       '💬', 'WhatsApp',                 'Notificaciones automáticas por WhatsApp al cliente',                      'wbi-whatsapp',   'integraciones'),
             array( 'wbi_enable_api',            '📱', 'API REST',                 'Endpoints REST para integración con apps externas',                       'wbi-api',        'integraciones'),
             array( 'wbi_enable_notifications',  '🔔', 'Notificaciones',           'Centro de alertas unificado con badge en admin',                          'wbi-notifications','integraciones'),
+            array( 'wbi_enable_email_marketing','📧', 'Email Marketing',          'Campañas masivas de email, templates, suscriptores y métricas',           'wbi-email-marketing','integraciones'),
         );
 
         $groups = array(
