@@ -216,6 +216,14 @@ class WBI_Suite_Loader {
                 new WBI_Checkout_Validator();
             }
         }
+
+        // 19. Módulo CRM / Pipeline de Ventas
+        if ( ! empty( $this->options['wbi_enable_crm'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-crm.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-crm.php';
+                new WBI_CRM_Module();
+            }
+        }
     }
 
     // --- CONFIGURACIÓN EN WP-ADMIN ---
@@ -534,6 +542,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_api', 'API REST', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_api'] );
         add_settings_field( 'wbi_enable_abandoned_carts', 'Carritos Abandonados', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_abandoned_carts'] );
         add_settings_field( 'wbi_enable_checkout_validator', 'Validación de Checkout (CP vs Provincia)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_checkout_validator'] );
+        add_settings_field( 'wbi_enable_crm', 'CRM / Pipeline de Ventas', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_crm'] );
 
         // Permissions section
         add_settings_section( 'wbi_permissions_section', 'Permisos por Módulo', array( $this, 'permissions_section_desc' ), 'wbi-settings' );
@@ -555,6 +564,7 @@ class WBI_Suite_Loader {
             // Virtual key for the unified documents module (invoice + remitos merged)
             'wbi_enable_documents'         => 'Documentos',
             'wbi_enable_checkout_validator'=> 'Validación de Checkout',
+            'wbi_enable_crm'               => 'CRM / Pipeline de Ventas',
         );
 
         foreach ( $module_slugs as $module_key => $module_name ) {
@@ -616,14 +626,14 @@ class WBI_Suite_Loader {
 
     public function render_settings_page() {
         $opts          = $this->options ?: array();
-        $total_modules = 18;
+        $total_modules = 19;
         $active_count  = 0;
         $toggle_keys   = array(
             'wbi_enable_b2b','wbi_enable_data','wbi_enable_dashboard','wbi_enable_barcode',
             'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_scoring',
             'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
             'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
-            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator',
+            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_crm',
         );
         foreach ( $toggle_keys as $k ) {
             if ( ! empty( $opts[ $k ] ) ) $active_count++;
@@ -639,6 +649,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_costs',          '💰', 'Costos y Márgenes',        'Costo de adquisición y cálculo de márgenes por producto',                 'wbi-costs',      'comercial'    ),
             array( 'wbi_enable_abandoned_carts','🛒', 'Carritos Abandonados',     'Recuperación de ventas perdidas con seguimiento por email y WhatsApp',    'wbi-abandoned-carts', 'comercial' ),
             array( 'wbi_enable_checkout_validator','📍', 'Validación de Checkout', 'Valida que el CP coincida con la provincia seleccionada en el checkout',   null,                  'comercial' ),
+            array( 'wbi_enable_crm',               '🎯', 'CRM / Pipeline de Ventas', 'Pipeline de ventas tipo Kanban, leads, actividades y conversión a clientes', 'wbi-crm',             'comercial' ),
             array( 'wbi_enable_dashboard',      '📊', 'Dashboard BI Suite',       'Dashboard ejecutivo, reportes y alertas de stock',                        'wbi-dashboard-view', 'inteligencia' ),
             array( 'wbi_enable_scoring',        '⭐', 'Scoring de Clientes',      'Scoring RFM de clientes con recálculo automático diario',                 'wbi-scoring',    'inteligencia' ),
             array( 'wbi_enable_barcode',        '📊', 'Códigos de Barra',         'Gestión de códigos de barra EAN/UPC para productos',                      'wbi-barcode',    'operaciones'  ),
@@ -747,6 +758,7 @@ class WBI_Suite_Loader {
                     array( 'enable_key' => 'wbi_enable_notifications', 'perm_key' => 'wbi_permissions_notifications', 'name' => 'Notificaciones' ),
                     array( 'enable_key' => 'wbi_enable_api',           'perm_key' => 'wbi_permissions_api',           'name' => 'API REST' ),
                     array( 'enable_key' => 'wbi_enable_abandoned_carts','perm_key' => 'wbi_permissions_abandoned_carts','name' => 'Carritos Abandonados' ),
+                    array( 'enable_key' => 'wbi_enable_crm',           'perm_key' => 'wbi_permissions_crm',           'name' => 'CRM / Pipeline de Ventas' ),
                 );
                 // Unified documents module: show when invoice or remitos is active
                 if ( ! empty( $opts['wbi_enable_invoice'] ) || ! empty( $opts['wbi_enable_remitos'] ) ) {
