@@ -118,6 +118,14 @@ class WBI_Suite_Loader {
                 }
             }
 
+            // J2. Módulo de Órdenes de Compra
+            if ( ! empty( $this->options['wbi_enable_purchase'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-purchase.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-purchase.php';
+                    new WBI_Purchase_Module();
+                }
+            }
+
             // K. Módulo de Scoring de Clientes
             if ( ! empty( $this->options['wbi_enable_scoring'] ) ) {
                 if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-scoring.php' ) ) {
@@ -222,6 +230,11 @@ class WBI_Suite_Loader {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-reorder.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-reorder.php';
                 new WBI_Reorder_Module();
+        // 19. Módulo CRM / Pipeline de Ventas
+        if ( ! empty( $this->options['wbi_enable_crm'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-crm.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-crm.php';
+                new WBI_CRM_Module();
             }
         }
     }
@@ -531,6 +544,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_picking', 'Módulo de Picking & Armado', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_picking'] );
         add_settings_field( 'wbi_enable_costs', 'Módulo de Costos y Márgenes', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_costs'] );
         add_settings_field( 'wbi_enable_suppliers', 'Módulo de Proveedores', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_suppliers'] );
+        add_settings_field( 'wbi_enable_purchase', 'Módulo de Órdenes de Compra', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_purchase'] );
         add_settings_field( 'wbi_enable_scoring', 'Módulo de Scoring de Clientes', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_scoring'] );
         add_settings_field( 'wbi_enable_remitos', 'Módulo de Remitos', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_remitos'] );
         add_settings_field( 'wbi_enable_pricelists', 'Módulo de Listas de Precios', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_pricelists'] );
@@ -543,6 +557,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_abandoned_carts', 'Carritos Abandonados', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_abandoned_carts'] );
         add_settings_field( 'wbi_enable_checkout_validator', 'Validación de Checkout (CP vs Provincia)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_checkout_validator'] );
         add_settings_field( 'wbi_enable_reorder', 'Reglas de Reabastecimiento', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_reorder'] );
+        add_settings_field( 'wbi_enable_crm', 'CRM / Pipeline de Ventas', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_crm'] );
 
         // Permissions section
         add_settings_section( 'wbi_permissions_section', 'Permisos por Módulo', array( $this, 'permissions_section_desc' ), 'wbi-settings' );
@@ -554,6 +569,7 @@ class WBI_Suite_Loader {
             'wbi_enable_picking'       => 'Picking & Armado',
             'wbi_enable_costs'         => 'Costos y Márgenes',
             'wbi_enable_suppliers'     => 'Proveedores',
+            'wbi_enable_purchase'      => 'Órdenes de Compra',
             'wbi_enable_scoring'       => 'Scoring de Clientes',
             'wbi_enable_pricelists'    => 'Listas de Precios',
             'wbi_enable_cashflow'      => 'Flujo de Caja',
@@ -565,6 +581,7 @@ class WBI_Suite_Loader {
             'wbi_enable_documents'         => 'Documentos',
             'wbi_enable_checkout_validator'=> 'Validación de Checkout',
             'wbi_enable_reorder'           => 'Reglas de Reabastecimiento',
+            'wbi_enable_crm'               => 'CRM / Pipeline de Ventas',
         );
 
         foreach ( $module_slugs as $module_key => $module_name ) {
@@ -630,10 +647,11 @@ class WBI_Suite_Loader {
         $active_count  = 0;
         $toggle_keys   = array(
             'wbi_enable_b2b','wbi_enable_data','wbi_enable_dashboard','wbi_enable_barcode',
-            'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_scoring',
+            'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_purchase','wbi_enable_scoring',
             'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
             'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_reorder',
+            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_crm',
         );
         foreach ( $toggle_keys as $k ) {
             if ( ! empty( $opts[ $k ] ) ) $active_count++;
@@ -649,6 +667,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_costs',          '💰', 'Costos y Márgenes',        'Costo de adquisición y cálculo de márgenes por producto',                 'wbi-costs',      'comercial'    ),
             array( 'wbi_enable_abandoned_carts','🛒', 'Carritos Abandonados',     'Recuperación de ventas perdidas con seguimiento por email y WhatsApp',    'wbi-abandoned-carts', 'comercial' ),
             array( 'wbi_enable_checkout_validator','📍', 'Validación de Checkout', 'Valida que el CP coincida con la provincia seleccionada en el checkout',   null,                  'comercial' ),
+            array( 'wbi_enable_crm',               '🎯', 'CRM / Pipeline de Ventas', 'Pipeline de ventas tipo Kanban, leads, actividades y conversión a clientes', 'wbi-crm',             'comercial' ),
             array( 'wbi_enable_dashboard',      '📊', 'Dashboard BI Suite',       'Dashboard ejecutivo, reportes y alertas de stock',                        'wbi-dashboard-view', 'inteligencia' ),
             array( 'wbi_enable_scoring',        '⭐', 'Scoring de Clientes',      'Scoring RFM de clientes con recálculo automático diario',                 'wbi-scoring',    'inteligencia' ),
             array( 'wbi_enable_barcode',        '📊', 'Códigos de Barra',         'Gestión de códigos de barra EAN/UPC para productos',                      'wbi-barcode',    'operaciones'  ),
@@ -656,6 +675,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_remitos',        '📄', 'Remitos',                  'Generación de remitos PDF vinculados a pedidos',                          'wbi-documents',  'operaciones'  ),
             array( 'wbi_enable_suppliers',      '👥', 'Proveedores',              'Gestión de proveedores y vinculación con productos',                      'wbi-suppliers',  'operaciones'  ),
             array( 'wbi_enable_reorder',        '🔄', 'Reglas de Reabastecimiento','Punto de reorden automático con generación de órdenes de compra',          'wbi-reorder',    'operaciones'  ),
+            array( 'wbi_enable_purchase',       '🛒', 'Órdenes de Compra',        'Gestión completa de órdenes de compra y recepción de mercadería',          'wbi-purchase',   'operaciones'  ),
             array( 'wbi_enable_data',           '📁', 'Modelo de Datos Extra',    'Campos extra: origen de venta y taxonomías personalizadas',               null,             'datos'        ),
             array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',  'finanzas'     ),
             array( 'wbi_enable_taxes',          '🏛️','Gestión de Impuestos',      'Cálculo de IVA, percepciones e impuestos internos',                       'wbi-taxes',      'finanzas'     ),
@@ -750,6 +770,7 @@ class WBI_Suite_Loader {
                     array( 'enable_key' => 'wbi_enable_picking',       'perm_key' => 'wbi_permissions_picking',       'name' => 'Picking & Armado' ),
                     array( 'enable_key' => 'wbi_enable_costs',         'perm_key' => 'wbi_permissions_costs',         'name' => 'Costos y Márgenes' ),
                     array( 'enable_key' => 'wbi_enable_suppliers',     'perm_key' => 'wbi_permissions_suppliers',     'name' => 'Proveedores' ),
+                    array( 'enable_key' => 'wbi_enable_purchase',      'perm_key' => 'wbi_permissions_purchase',      'name' => 'Órdenes de Compra' ),
                     array( 'enable_key' => 'wbi_enable_scoring',       'perm_key' => 'wbi_permissions_scoring',       'name' => 'Scoring de Clientes' ),
                     array( 'enable_key' => 'wbi_enable_pricelists',    'perm_key' => 'wbi_permissions_pricelists',    'name' => 'Listas de Precios' ),
                     array( 'enable_key' => 'wbi_enable_cashflow',      'perm_key' => 'wbi_permissions_cashflow',      'name' => 'Flujo de Caja' ),
@@ -759,6 +780,7 @@ class WBI_Suite_Loader {
                     array( 'enable_key' => 'wbi_enable_api',           'perm_key' => 'wbi_permissions_api',           'name' => 'API REST' ),
                     array( 'enable_key' => 'wbi_enable_abandoned_carts','perm_key' => 'wbi_permissions_abandoned_carts','name' => 'Carritos Abandonados' ),
                     array( 'enable_key' => 'wbi_enable_reorder',        'perm_key' => 'wbi_permissions_reorder',        'name' => 'Reglas de Reabastecimiento' ),
+                    array( 'enable_key' => 'wbi_enable_crm',           'perm_key' => 'wbi_permissions_crm',           'name' => 'CRM / Pipeline de Ventas' ),
                 );
                 // Unified documents module: show when invoice or remitos is active
                 if ( ! empty( $opts['wbi_enable_invoice'] ) || ! empty( $opts['wbi_enable_remitos'] ) ) {
