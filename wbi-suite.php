@@ -160,6 +160,14 @@ class WBI_Suite_Loader {
                 }
             }
 
+            // R. Módulo de Notas de Crédito / Débito
+            if ( ! empty( $this->options['wbi_enable_credit_notes'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-credit-notes.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-credit-notes.php';
+                    new WBI_Credit_Notes_Module();
+                }
+            }
+
             // P. Centro de Notificaciones
             if ( ! empty( $this->options['wbi_enable_notifications'] ) ) {
                 if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-notifications.php' ) ) {
@@ -561,6 +569,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_api', 'API REST', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_api'] );
         add_settings_field( 'wbi_enable_abandoned_carts', 'Carritos Abandonados', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_abandoned_carts'] );
         add_settings_field( 'wbi_enable_checkout_validator', 'Validación de Checkout (CP vs Provincia)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_checkout_validator'] );
+        add_settings_field( 'wbi_enable_credit_notes', 'Notas de Crédito / Débito', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_credit_notes'] );
         add_settings_field( 'wbi_enable_email_marketing', 'Email Marketing', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_email_marketing'] );
         add_settings_field( 'wbi_enable_reorder', 'Reglas de Reabastecimiento', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_reorder'] );
         add_settings_field( 'wbi_enable_crm', 'CRM / Pipeline de Ventas', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_crm'] );
@@ -586,6 +595,7 @@ class WBI_Suite_Loader {
             // Virtual key for the unified documents module (invoice + remitos merged)
             'wbi_enable_documents'         => 'Documentos',
             'wbi_enable_checkout_validator'=> 'Validación de Checkout',
+            'wbi_enable_credit_notes'      => 'Notas de Crédito / Débito',
             'wbi_enable_email_marketing'   => 'Email Marketing',
             'wbi_enable_reorder'           => 'Reglas de Reabastecimiento',
             'wbi_enable_crm'               => 'CRM / Pipeline de Ventas',
@@ -657,6 +667,7 @@ class WBI_Suite_Loader {
             'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_purchase','wbi_enable_scoring',
             'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
             'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
+            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_credit_notes',
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_email_marketing',
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_reorder',
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_crm',
@@ -685,7 +696,8 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_reorder',        '🔄', 'Reglas de Reabastecimiento','Punto de reorden automático con generación de órdenes de compra',          'wbi-reorder',    'operaciones'  ),
             array( 'wbi_enable_purchase',       '🛒', 'Órdenes de Compra',        'Gestión completa de órdenes de compra y recepción de mercadería',          'wbi-purchase',   'operaciones'  ),
             array( 'wbi_enable_data',           '📁', 'Modelo de Datos Extra',    'Campos extra: origen de venta y taxonomías personalizadas',               null,             'datos'        ),
-            array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',  'finanzas'     ),
+            array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',    'finanzas'     ),
+            array( 'wbi_enable_credit_notes',   '💳', 'Notas de Crédito/Débito',  'Emisión de NC/ND vinculadas a facturas AFIP (tipo A/B/C)',                 'wbi-credit-notes', 'finanzas'     ),
             array( 'wbi_enable_taxes',          '🏛️','Gestión de Impuestos',      'Cálculo de IVA, percepciones e impuestos internos',                       'wbi-taxes',      'finanzas'     ),
             array( 'wbi_enable_cashflow',       '💰', 'Flujo de Caja',            'Proyección de flujo de caja y análisis financiero',                       'wbi-cashflow',   'finanzas'     ),
             array( 'wbi_enable_whatsapp',       '💬', 'WhatsApp',                 'Notificaciones automáticas por WhatsApp al cliente',                      'wbi-whatsapp',   'integraciones'),
@@ -788,6 +800,7 @@ class WBI_Suite_Loader {
                     array( 'enable_key' => 'wbi_enable_notifications', 'perm_key' => 'wbi_permissions_notifications', 'name' => 'Notificaciones' ),
                     array( 'enable_key' => 'wbi_enable_api',           'perm_key' => 'wbi_permissions_api',           'name' => 'API REST' ),
                     array( 'enable_key' => 'wbi_enable_abandoned_carts','perm_key' => 'wbi_permissions_abandoned_carts','name' => 'Carritos Abandonados' ),
+                    array( 'enable_key' => 'wbi_enable_credit_notes',   'perm_key' => 'wbi_permissions_credit_notes',   'name' => 'Notas de Crédito / Débito' ),
                     array( 'enable_key' => 'wbi_enable_reorder',        'perm_key' => 'wbi_permissions_reorder',        'name' => 'Reglas de Reabastecimiento' ),
                     array( 'enable_key' => 'wbi_enable_crm',           'perm_key' => 'wbi_permissions_crm',           'name' => 'CRM / Pipeline de Ventas' ),
                 );
