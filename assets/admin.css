@@ -795,7 +795,364 @@
 }
 
 /* =========================================================
-   22. PRINT STYLES
+   22. CRM MODULE STYLES
+   ========================================================= */
+
+/* ── Kanban board ────────────────────────────────────────── */
+.wbi-crm-board {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 16px;
+    align-items: flex-start;
+    min-height: 420px;
+}
+
+.wbi-crm-column {
+    flex: 0 0 260px;
+    min-width: 220px;
+    background: var(--wbi-bg);
+    border: 1px solid var(--wbi-border);
+    border-radius: var(--wbi-radius);
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow .2s;
+}
+
+.wbi-crm-column.drag-over {
+    box-shadow: 0 0 0 2px var(--wbi-primary);
+    background: #f0f0ff;
+}
+
+.wbi-crm-column-header {
+    padding: 12px 14px 10px;
+    border-top: 4px solid var(--wbi-primary);
+    border-radius: var(--wbi-radius) var(--wbi-radius) 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.wbi-crm-stage-name {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--wbi-text);
+    flex: 1;
+}
+
+.wbi-crm-stage-count {
+    background: var(--wbi-border);
+    border-radius: 99px;
+    padding: 1px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--wbi-muted);
+}
+
+.wbi-crm-stage-value {
+    font-size: 12px;
+    color: var(--wbi-success);
+    font-weight: 600;
+    width: 100%;
+}
+
+/* ── Lead cards ──────────────────────────────────────────── */
+.wbi-crm-cards {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 80px;
+    flex: 1;
+}
+
+.wbi-crm-card {
+    background: var(--wbi-surface);
+    border: 1px solid var(--wbi-border);
+    border-radius: var(--wbi-radius-sm);
+    padding: 10px 12px;
+    cursor: grab;
+    transition: box-shadow .15s, opacity .15s;
+    user-select: none;
+}
+
+.wbi-crm-card:hover {
+    box-shadow: var(--wbi-shadow-md);
+}
+
+.wbi-crm-card.dragging {
+    opacity: .5;
+    cursor: grabbing;
+    box-shadow: 0 8px 20px rgba(0,0,0,.15);
+}
+
+.wbi-crm-card.wbi-crm-card-won {
+    border-left: 3px solid var(--wbi-success);
+}
+
+.wbi-crm-card-header {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.wbi-crm-card-title {
+    display: block;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--wbi-text);
+    text-decoration: none;
+    margin-bottom: 4px;
+    line-height: 1.4;
+}
+
+.wbi-crm-card-title:hover { color: var(--wbi-primary); }
+
+.wbi-crm-card-contact,
+.wbi-crm-card-company {
+    font-size: 12px;
+    color: var(--wbi-muted);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wbi-crm-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--wbi-border);
+}
+
+.wbi-crm-card-value {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--wbi-success);
+}
+
+.wbi-crm-avatar img {
+    border-radius: 50%;
+    vertical-align: middle;
+}
+
+.wbi-crm-activity-dot {
+    font-size: 13px;
+    cursor: default;
+}
+
+.wbi-crm-activity-dot.overdue {
+    filter: hue-rotate(120deg);
+}
+
+.wbi-crm-drop-placeholder {
+    height: 4px;
+    border-radius: 4px;
+    background: transparent;
+}
+
+/* ── Priority badges ─────────────────────────────────────── */
+.wbi-crm-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+}
+
+.wbi-crm-priority-low    { background: #f1f5f9; color: var(--wbi-muted); }
+.wbi-crm-priority-medium { background: #dbeafe; color: var(--wbi-info); }
+.wbi-crm-priority-high   { background: #fed7aa; color: #c2410c; }
+.wbi-crm-priority-urgent { background: #fee2e2; color: var(--wbi-danger); }
+
+/* ── Modal ───────────────────────────────────────────────── */
+.wbi-crm-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 999999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.wbi-crm-modal-inner {
+    background: var(--wbi-surface);
+    border-radius: var(--wbi-radius);
+    padding: 24px;
+    width: 100%;
+    max-width: 520px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+
+.wbi-crm-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.wbi-crm-modal-header h3 { margin: 0; font-size: 17px; }
+
+.wbi-crm-modal-close {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    color: var(--wbi-muted);
+    padding: 4px 8px;
+    line-height: 1;
+    border-radius: 4px;
+}
+
+.wbi-crm-modal-close:hover { background: var(--wbi-bg); color: var(--wbi-text); }
+
+/* ── Form rows ───────────────────────────────────────────── */
+.wbi-crm-form-row {
+    margin-bottom: 12px;
+}
+
+.wbi-crm-form-row label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    color: var(--wbi-text);
+}
+
+.wbi-crm-form-row input,
+.wbi-crm-form-row select,
+.wbi-crm-form-row textarea {
+    width: 100%;
+    border: 1px solid var(--wbi-border);
+    border-radius: var(--wbi-radius-sm);
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--wbi-text);
+    background: var(--wbi-surface);
+    box-shadow: none;
+}
+
+.wbi-crm-form-row input:focus,
+.wbi-crm-form-row select:focus,
+.wbi-crm-form-row textarea:focus {
+    border-color: var(--wbi-primary);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(79,70,229,.15);
+}
+
+/* ── Lead detail layout ──────────────────────────────────── */
+.wbi-crm-detail-layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 20px;
+    align-items: start;
+}
+
+.wbi-crm-detail-main { min-width: 0; }
+.wbi-crm-detail-sidebar { min-width: 0; }
+
+/* ── Activity timeline ───────────────────────────────────── */
+.wbi-crm-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 480px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.wbi-crm-timeline-item {
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+    background: var(--wbi-bg);
+    border-radius: var(--wbi-radius-sm);
+    border: 1px solid var(--wbi-border);
+    transition: opacity .2s;
+}
+
+.wbi-crm-timeline-item.done {
+    opacity: .65;
+}
+
+.wbi-crm-timeline-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    line-height: 1.4;
+}
+
+.wbi-crm-timeline-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.wbi-crm-timeline-body strong {
+    font-size: 13px;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.wbi-crm-timeline-date {
+    font-size: 12px;
+    color: var(--wbi-info);
+    margin-left: 8px;
+}
+
+.wbi-crm-timeline-meta {
+    font-size: 11px;
+    color: var(--wbi-muted);
+    margin-bottom: 4px;
+}
+
+.wbi-crm-timeline-desc {
+    font-size: 12px;
+    color: var(--wbi-text);
+    white-space: pre-line;
+}
+
+/* ── Danger button variant ───────────────────────────────── */
+.wbi-btn-danger {
+    background: var(--wbi-danger);
+    color: #fff;
+    border: none;
+}
+
+.wbi-btn-danger:hover { background: #b91c1c; color: #fff; }
+
+.wbi-btn-link { background: none; border: none; cursor: pointer; padding: 0; }
+.wbi-btn-danger-link { color: var(--wbi-danger); }
+.wbi-btn-danger-link:hover { text-decoration: underline; }
+
+/* ── Drag handle ─────────────────────────────────────────── */
+.wbi-crm-drag-handle {
+    color: var(--wbi-muted);
+    font-size: 14px;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 1024px) {
+    .wbi-crm-detail-layout { grid-template-columns: 1fr; }
+    .wbi-crm-detail-sidebar { order: -1; }
+}
+
+@media (max-width: 782px) {
+    .wbi-crm-board { gap: 10px; }
+    .wbi-crm-column { flex: 0 0 220px; }
+    .wbi-crm-modal-inner { padding: 16px; }
+}
+
+/* =========================================================
+   23. PRINT STYLES
    ========================================================= */
 @media print {
     .wbi-no-print,
