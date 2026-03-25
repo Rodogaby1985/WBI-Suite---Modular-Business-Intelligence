@@ -225,6 +225,11 @@ class WBI_Suite_Loader {
             }
         }
 
+        // 19. Módulo de Reglas de Reabastecimiento
+        if ( ! empty( $this->options['wbi_enable_reorder'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-reorder.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-reorder.php';
+                new WBI_Reorder_Module();
         // 19. Módulo CRM / Pipeline de Ventas
         if ( ! empty( $this->options['wbi_enable_crm'] ) ) {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-crm.php' ) ) {
@@ -551,6 +556,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_api', 'API REST', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_api'] );
         add_settings_field( 'wbi_enable_abandoned_carts', 'Carritos Abandonados', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_abandoned_carts'] );
         add_settings_field( 'wbi_enable_checkout_validator', 'Validación de Checkout (CP vs Provincia)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_checkout_validator'] );
+        add_settings_field( 'wbi_enable_reorder', 'Reglas de Reabastecimiento', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_reorder'] );
         add_settings_field( 'wbi_enable_crm', 'CRM / Pipeline de Ventas', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_crm'] );
 
         // Permissions section
@@ -574,6 +580,7 @@ class WBI_Suite_Loader {
             // Virtual key for the unified documents module (invoice + remitos merged)
             'wbi_enable_documents'         => 'Documentos',
             'wbi_enable_checkout_validator'=> 'Validación de Checkout',
+            'wbi_enable_reorder'           => 'Reglas de Reabastecimiento',
             'wbi_enable_crm'               => 'CRM / Pipeline de Ventas',
         );
 
@@ -643,6 +650,7 @@ class WBI_Suite_Loader {
             'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_purchase','wbi_enable_scoring',
             'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
             'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
+            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_reorder',
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_crm',
         );
         foreach ( $toggle_keys as $k ) {
@@ -666,6 +674,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_picking',        '📦', 'Picking & Armado',         'Armado de pedidos con escaneo de códigos de barra',                       'wbi-picking',    'operaciones'  ),
             array( 'wbi_enable_remitos',        '📄', 'Remitos',                  'Generación de remitos PDF vinculados a pedidos',                          'wbi-documents',  'operaciones'  ),
             array( 'wbi_enable_suppliers',      '👥', 'Proveedores',              'Gestión de proveedores y vinculación con productos',                      'wbi-suppliers',  'operaciones'  ),
+            array( 'wbi_enable_reorder',        '🔄', 'Reglas de Reabastecimiento','Punto de reorden automático con generación de órdenes de compra',          'wbi-reorder',    'operaciones'  ),
             array( 'wbi_enable_purchase',       '🛒', 'Órdenes de Compra',        'Gestión completa de órdenes de compra y recepción de mercadería',          'wbi-purchase',   'operaciones'  ),
             array( 'wbi_enable_data',           '📁', 'Modelo de Datos Extra',    'Campos extra: origen de venta y taxonomías personalizadas',               null,             'datos'        ),
             array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',  'finanzas'     ),
@@ -770,6 +779,7 @@ class WBI_Suite_Loader {
                     array( 'enable_key' => 'wbi_enable_notifications', 'perm_key' => 'wbi_permissions_notifications', 'name' => 'Notificaciones' ),
                     array( 'enable_key' => 'wbi_enable_api',           'perm_key' => 'wbi_permissions_api',           'name' => 'API REST' ),
                     array( 'enable_key' => 'wbi_enable_abandoned_carts','perm_key' => 'wbi_permissions_abandoned_carts','name' => 'Carritos Abandonados' ),
+                    array( 'enable_key' => 'wbi_enable_reorder',        'perm_key' => 'wbi_permissions_reorder',        'name' => 'Reglas de Reabastecimiento' ),
                     array( 'enable_key' => 'wbi_enable_crm',           'perm_key' => 'wbi_permissions_crm',           'name' => 'CRM / Pipeline de Ventas' ),
                 );
                 // Unified documents module: show when invoice or remitos is active
@@ -875,10 +885,13 @@ register_activation_hook( __FILE__, array( 'WBI_Suite_Loader', 'on_activate' ) )
 // Iniciar Plugin
 new WBI_Suite_Loader();
 
-// Deactivation hook: clear scoring cron event
+// Deactivation hook: clear scoring and reorder cron events
 register_deactivation_hook( __FILE__, function() {
     if ( class_exists( 'WBI_Scoring_Module' ) ) {
         WBI_Scoring_Module::deactivate();
+    }
+    if ( class_exists( 'WBI_Reorder_Module' ) ) {
+        WBI_Reorder_Module::deactivate();
     }
 } );
 
