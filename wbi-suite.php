@@ -167,6 +167,14 @@ class WBI_Suite_Loader {
                     new WBI_API_Module();
                 }
             }
+
+            // R. Reportes Contables
+            if ( ! empty( $this->options['wbi_enable_accounting_reports'] ) ) {
+                if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-accounting-reports.php' ) ) {
+                    require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-accounting-reports.php';
+                    new WBI_Accounting_Reports_Module();
+                }
+            }
         }
 
         // 4. Módulo de Códigos de Barra
@@ -534,6 +542,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_api', 'API REST', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_api'] );
         add_settings_field( 'wbi_enable_abandoned_carts', 'Carritos Abandonados', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_abandoned_carts'] );
         add_settings_field( 'wbi_enable_checkout_validator', 'Validación de Checkout (CP vs Provincia)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_checkout_validator'] );
+        add_settings_field( 'wbi_enable_accounting_reports', 'Módulo de Reportes Contables', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_accounting_reports'] );
 
         // Permissions section
         add_settings_section( 'wbi_permissions_section', 'Permisos por Módulo', array( $this, 'permissions_section_desc' ), 'wbi-settings' );
@@ -555,6 +564,7 @@ class WBI_Suite_Loader {
             // Virtual key for the unified documents module (invoice + remitos merged)
             'wbi_enable_documents'         => 'Documentos',
             'wbi_enable_checkout_validator'=> 'Validación de Checkout',
+            'wbi_enable_accounting_reports'=> 'Reportes Contables',
         );
 
         foreach ( $module_slugs as $module_key => $module_name ) {
@@ -616,7 +626,7 @@ class WBI_Suite_Loader {
 
     public function render_settings_page() {
         $opts          = $this->options ?: array();
-        $total_modules = 18;
+        $total_modules = count( $toggle_keys );
         $active_count  = 0;
         $toggle_keys   = array(
             'wbi_enable_b2b','wbi_enable_data','wbi_enable_dashboard','wbi_enable_barcode',
@@ -624,6 +634,7 @@ class WBI_Suite_Loader {
             'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
             'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator',
+            'wbi_enable_accounting_reports',
         );
         foreach ( $toggle_keys as $k ) {
             if ( ! empty( $opts[ $k ] ) ) $active_count++;
@@ -649,6 +660,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',  'finanzas'     ),
             array( 'wbi_enable_taxes',          '🏛️','Gestión de Impuestos',      'Cálculo de IVA, percepciones e impuestos internos',                       'wbi-taxes',      'finanzas'     ),
             array( 'wbi_enable_cashflow',       '💰', 'Flujo de Caja',            'Proyección de flujo de caja y análisis financiero',                       'wbi-cashflow',   'finanzas'     ),
+            array( 'wbi_enable_accounting_reports','📊','Reportes Contables',     'Libro IVA, Estado de Resultados, Posición IVA y Rentabilidad',            'wbi-accounting-reports', 'finanzas' ),
             array( 'wbi_enable_whatsapp',       '💬', 'WhatsApp',                 'Notificaciones automáticas por WhatsApp al cliente',                      'wbi-whatsapp',   'integraciones'),
             array( 'wbi_enable_api',            '📱', 'API REST',                 'Endpoints REST para integración con apps externas',                       'wbi-api',        'integraciones'),
             array( 'wbi_enable_notifications',  '🔔', 'Notificaciones',           'Centro de alertas unificado con badge en admin',                          'wbi-notifications','integraciones'),
@@ -747,6 +759,7 @@ class WBI_Suite_Loader {
                     array( 'enable_key' => 'wbi_enable_notifications', 'perm_key' => 'wbi_permissions_notifications', 'name' => 'Notificaciones' ),
                     array( 'enable_key' => 'wbi_enable_api',           'perm_key' => 'wbi_permissions_api',           'name' => 'API REST' ),
                     array( 'enable_key' => 'wbi_enable_abandoned_carts','perm_key' => 'wbi_permissions_abandoned_carts','name' => 'Carritos Abandonados' ),
+                    array( 'enable_key' => 'wbi_enable_accounting_reports','perm_key' => 'wbi_permissions_accounting_reports','name' => 'Reportes Contables' ),
                 );
                 // Unified documents module: show when invoice or remitos is active
                 if ( ! empty( $opts['wbi_enable_invoice'] ) || ! empty( $opts['wbi_enable_remitos'] ) ) {
