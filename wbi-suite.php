@@ -246,11 +246,17 @@ class WBI_Suite_Loader {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-marketing.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-marketing.php';
                 new WBI_Email_Marketing_Module();
+            }
+        }
+
         // 20. Módulo de Reglas de Reabastecimiento
         if ( ! empty( $this->options['wbi_enable_reorder'] ) ) {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-reorder.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-reorder.php';
                 new WBI_Reorder_Module();
+            }
+        }
+
         // 19. Módulo CRM / Pipeline de Ventas
         if ( ! empty( $this->options['wbi_enable_crm'] ) ) {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-crm.php' ) ) {
@@ -670,8 +676,6 @@ class WBI_Suite_Loader {
 
     public function render_settings_page() {
         $opts          = $this->options ?: array();
-        $total_modules = count( $toggle_keys );
-        $total_modules = 19;
         $active_count  = 0;
         $toggle_keys   = array(
             'wbi_enable_b2b','wbi_enable_data','wbi_enable_dashboard','wbi_enable_barcode',
@@ -679,12 +683,10 @@ class WBI_Suite_Loader {
             'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
             'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator',
-            'wbi_enable_accounting_reports',
-            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_credit_notes',
-            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_email_marketing',
-            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_reorder',
-            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_crm',
+            'wbi_enable_accounting_reports','wbi_enable_credit_notes',
+            'wbi_enable_email_marketing','wbi_enable_reorder','wbi_enable_crm',
         );
+        $total_modules = count( $toggle_keys );
         foreach ( $toggle_keys as $k ) {
             if ( ! empty( $opts[ $k ] ) ) $active_count++;
         }
