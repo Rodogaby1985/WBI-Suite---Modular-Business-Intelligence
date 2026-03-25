@@ -309,7 +309,7 @@ class WBI_CRM_Module {
                     <h1>🎯 CRM / Pipeline de Ventas</h1>
                     <p style="margin:4px 0 0;color:var(--wbi-muted);font-size:13px;">
                         <?php echo esc_html( count( $leads ) ); ?> leads activos
-                        · Valor: <strong><?php echo esc_html( wc_price( array_sum( array_column( $leads, 'expected_revenue' ) ) ) ); ?></strong>
+                        · Valor: <strong><?php echo wp_kses_post( wc_price( array_sum( array_column( $leads, 'expected_revenue' ) ) ) ); ?></strong>
                     </p>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -362,7 +362,7 @@ class WBI_CRM_Module {
                             <span class="wbi-crm-stage-name"><?php echo esc_html( $stage->name ); ?></span>
                             <span class="wbi-crm-stage-count"><?php echo esc_html( count( $stage_leads ) ); ?></span>
                             <?php if ( $stage_value > 0 ) : ?>
-                                <span class="wbi-crm-stage-value"><?php echo esc_html( wc_price( $stage_value ) ); ?></span>
+                                <span class="wbi-crm-stage-value"><?php echo wp_kses_post( wc_price( $stage_value ) ); ?></span>
                             <?php endif; ?>
                         </div>
                         <div class="wbi-crm-cards" data-stage="<?php echo esc_attr( $stage->id ); ?>">
@@ -474,7 +474,7 @@ class WBI_CRM_Module {
                 <div class="wbi-crm-card-company">🏢 <?php echo esc_html( $lead->company ); ?></div>
             <?php endif; ?>
             <div class="wbi-crm-card-footer">
-                <span class="wbi-crm-card-value"><?php echo esc_html( wc_price( $lead->expected_revenue ) ); ?></span>
+                <span class="wbi-crm-card-value"><?php echo wp_kses_post( wc_price( $lead->expected_revenue ) ); ?></span>
                 <?php if ( $avatar ) : ?>
                     <span class="wbi-crm-card-avatar"><?php echo $avatar; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
                 <?php endif; ?>
@@ -1046,7 +1046,7 @@ class WBI_CRM_Module {
                 </div>
                 <div class="wbi-stat-card">
                     <div class="wbi-stat-label">Valor del Pipeline</div>
-                    <div class="wbi-number"><?php echo esc_html( wc_price( $pipeline_value ) ); ?></div>
+                    <div class="wbi-number"><?php echo wp_kses_post( wc_price( $pipeline_value ) ); ?></div>
                 </div>
                 <div class="wbi-stat-card">
                     <div class="wbi-stat-label">Ganados este Mes</div>
@@ -1058,11 +1058,11 @@ class WBI_CRM_Module {
                 </div>
                 <div class="wbi-stat-card">
                     <div class="wbi-stat-label">Revenue Ganado</div>
-                    <div class="wbi-number"><?php echo esc_html( wc_price( $won_revenue ) ); ?></div>
+                    <div class="wbi-number"><?php echo wp_kses_post( wc_price( $won_revenue ) ); ?></div>
                 </div>
                 <div class="wbi-stat-card">
                     <div class="wbi-stat-label">Forecast (prob.)</div>
-                    <div class="wbi-number"><?php echo esc_html( wc_price( $forecast ) ); ?></div>
+                    <div class="wbi-number"><?php echo wp_kses_post( wc_price( $forecast ) ); ?></div>
                 </div>
             </div>
 
@@ -1075,7 +1075,7 @@ class WBI_CRM_Module {
                         <div style="margin-bottom:14px;">
                             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                                 <span><?php echo esc_html( $s->name ); ?> <small style="color:var(--wbi-muted);">(<?php echo esc_html( $s->cnt ); ?> leads)</small></span>
-                                <strong><?php echo esc_html( wc_price( $s->total_value ) ); ?></strong>
+                                <strong><?php echo wp_kses_post( wc_price( $s->total_value ) ); ?></strong>
                             </div>
                             <div style="background:var(--wbi-border);border-radius:4px;height:10px;overflow:hidden;">
                                 <div style="background:<?php echo esc_attr( $s->color ); ?>;width:<?php echo esc_attr( round( $pct ) ); ?>%;height:100%;border-radius:4px;transition:width .3s;"></div>
