@@ -216,6 +216,14 @@ class WBI_Suite_Loader {
                 new WBI_Checkout_Validator();
             }
         }
+
+        // R2. Módulo de Email Marketing
+        if ( ! empty( $this->options['wbi_enable_email_marketing'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-marketing.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-email-marketing.php';
+                new WBI_Email_Marketing_Module();
+            }
+        }
     }
 
     // --- CONFIGURACIÓN EN WP-ADMIN ---
@@ -534,6 +542,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_api', 'API REST', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_api'] );
         add_settings_field( 'wbi_enable_abandoned_carts', 'Carritos Abandonados', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_abandoned_carts'] );
         add_settings_field( 'wbi_enable_checkout_validator', 'Validación de Checkout (CP vs Provincia)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_checkout_validator'] );
+        add_settings_field( 'wbi_enable_email_marketing', 'Email Marketing', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_email_marketing'] );
 
         // Permissions section
         add_settings_section( 'wbi_permissions_section', 'Permisos por Módulo', array( $this, 'permissions_section_desc' ), 'wbi-settings' );
@@ -555,6 +564,7 @@ class WBI_Suite_Loader {
             // Virtual key for the unified documents module (invoice + remitos merged)
             'wbi_enable_documents'         => 'Documentos',
             'wbi_enable_checkout_validator'=> 'Validación de Checkout',
+            'wbi_enable_email_marketing'   => 'Email Marketing',
         );
 
         foreach ( $module_slugs as $module_key => $module_name ) {
@@ -616,14 +626,14 @@ class WBI_Suite_Loader {
 
     public function render_settings_page() {
         $opts          = $this->options ?: array();
-        $total_modules = 18;
+        $total_modules = 19;
         $active_count  = 0;
         $toggle_keys   = array(
             'wbi_enable_b2b','wbi_enable_data','wbi_enable_dashboard','wbi_enable_barcode',
             'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_scoring',
             'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
             'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
-            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator',
+            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_email_marketing',
         );
         foreach ( $toggle_keys as $k ) {
             if ( ! empty( $opts[ $k ] ) ) $active_count++;
@@ -652,6 +662,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_whatsapp',       '💬', 'WhatsApp',                 'Notificaciones automáticas por WhatsApp al cliente',                      'wbi-whatsapp',   'integraciones'),
             array( 'wbi_enable_api',            '📱', 'API REST',                 'Endpoints REST para integración con apps externas',                       'wbi-api',        'integraciones'),
             array( 'wbi_enable_notifications',  '🔔', 'Notificaciones',           'Centro de alertas unificado con badge en admin',                          'wbi-notifications','integraciones'),
+            array( 'wbi_enable_email_marketing','📧', 'Email Marketing',          'Campañas masivas de email, templates, suscriptores y métricas',           'wbi-email-marketing','integraciones'),
         );
 
         $groups = array(
