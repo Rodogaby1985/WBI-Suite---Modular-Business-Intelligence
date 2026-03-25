@@ -2,7 +2,7 @@
 /**
  * Plugin Name: wooErp — Suite de Gestión para WooCommerce
  * Description: Suite modular de gestión integral: B2B, BI, Stock, Facturación, Picking y más.
- * Version: 8.2.0
+ * Version: 9.0.0
  * Author: Rodrigo Castañera
  */
 
