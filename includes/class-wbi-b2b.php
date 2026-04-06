@@ -31,6 +31,13 @@ class WBI_B2B_Module {
         // 6. Precio Mayorista por Variación
         add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'add_variation_wholesale_price_field' ), 10, 3 );
         add_action( 'woocommerce_save_product_variation', array( $this, 'save_variation_wholesale_price_field' ), 10, 2 );
+
+        // 7. Monto mínimo de compra mayorista
+        add_action( 'woocommerce_check_cart_items', array( $this, 'check_minimum_order' ) );
+
+        // 8. Configuración B2B
+        add_action( 'admin_menu', array( $this, 'add_b2b_settings_page' ) );
+        add_action( 'admin_init', array( $this, 'register_b2b_settings' ) );
     }
 
     /**
@@ -147,15 +154,19 @@ class WBI_B2B_Module {
     }
 
     public function hide_prices( $price, $product ) {
+        $hidden_text = esc_html( get_option( 'wbi_b2b_hidden_price_text', 'PRECIO MAYORISTA OCULTO' ) );
+        $hidden_span = '<span class="price-hidden" style="color:#d63638; font-weight:bold;">' . $hidden_text . '</span>';
+
         if ( ! is_user_logged_in() ) {
-            return '<span class="price-hidden" style="color:#d63638; font-weight:bold;">PRECIO MAYORISTA OCULTO</span>';
+            $register_url = get_option( 'wbi_b2b_hidden_price_url', get_permalink( get_option( 'woocommerce_myaccount_page_id' ) ) );
+            return $hidden_span . '<br><a href="' . esc_url( $register_url ) . '" style="font-size:12px;">Regístrate para ver precios &rarr;</a>';
         }
         $user = wp_get_current_user();
         if ( in_array( 'administrator', $user->roles ) ) return $price;
 
         if ( in_array( 'mayorista', $user->roles ) ) {
             if ( get_user_meta( $user->ID, 'wbi_status', true ) !== 'approved' ) {
-                return '<span class="price-hidden" style="color:#d63638; font-weight:bold;">PRECIO MAYORISTA OCULTO</span>';
+                return $hidden_span;
             }
             // Show wholesale price if set
             $wholesale = get_post_meta( $product->get_id(), '_wbi_wholesale_price', true );
@@ -231,5 +242,100 @@ class WBI_B2B_Module {
                 echo '<div class="woocommerce-message">✅ Cuenta Mayorista Activa.</div>';
             }
         }
+    }
+
+    // --- MONTO MÍNIMO DE COMPRA ---
+    public function check_minimum_order() {
+        if ( ! is_user_logged_in() ) return;
+        $user = wp_get_current_user();
+        if ( ! in_array( 'mayorista', $user->roles ) ) return;
+        if ( get_user_meta( $user->ID, 'wbi_status', true ) !== 'approved' ) return;
+
+        $minimum = floatval( get_option( 'wbi_b2b_minimum_order', 0 ) );
+        if ( $minimum <= 0 ) return;
+
+        $cart_total = floatval( WC()->cart->get_subtotal() );
+        if ( $cart_total < $minimum ) {
+            wc_add_notice(
+                sprintf(
+                    'El monto mínimo de compra mayorista es de %s. Tu carrito actual es de %s.',
+                    wc_price( $minimum ),
+                    wc_price( $cart_total )
+                ),
+                'error'
+            );
+        }
+    }
+
+    // --- CONFIGURACIÓN B2B ---
+    public function add_b2b_settings_page() {
+        add_submenu_page(
+            'woocommerce',
+            'wooErp B2B Config',
+            'wooErp B2B',
+            'manage_options',
+            'wbi-b2b-settings',
+            array( $this, 'render_b2b_settings_page' )
+        );
+    }
+
+    public function register_b2b_settings() {
+        register_setting( 'wbi_b2b_group', 'wbi_b2b_minimum_order', array( 'sanitize_callback' => 'floatval' ) );
+        register_setting( 'wbi_b2b_group', 'wbi_b2b_hidden_price_text', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+        register_setting( 'wbi_b2b_group', 'wbi_b2b_hidden_price_url', array( 'sanitize_callback' => 'esc_url_raw' ) );
+    }
+
+    public function render_b2b_settings_page() {
+        if ( ! current_user_can( 'manage_options' ) ) return;
+
+        $minimum     = get_option( 'wbi_b2b_minimum_order', 0 );
+        $hidden_text = get_option( 'wbi_b2b_hidden_price_text', 'PRECIO MAYORISTA OCULTO' );
+        $hidden_url  = get_option( 'wbi_b2b_hidden_price_url', get_permalink( get_option( 'woocommerce_myaccount_page_id' ) ) );
+        ?>
+        <div class="wrap">
+            <h1>wooErp B2B &mdash; Configuración</h1>
+            <form method="post" action="options.php">
+                <?php settings_fields( 'wbi_b2b_group' ); ?>
+                <div style="background:#fff; border:1px solid #c3c4c7; border-left:4px solid #2271b1; padding:15px 20px; margin-bottom:20px; max-width:600px;">
+                    <h2 style="margin-top:0;">Monto Mínimo de Compra Mayorista</h2>
+                    <table class="form-table"><tbody>
+                        <tr>
+                            <th scope="row"><label for="wbi_b2b_minimum_order">Monto mínimo ($):</label></th>
+                            <td>
+                                <input type="number" id="wbi_b2b_minimum_order" name="wbi_b2b_minimum_order"
+                                    value="<?php echo esc_attr( $minimum ); ?>"
+                                    min="0" step="0.01" style="width:120px;" />
+                                <p class="description">Monto mínimo del carrito para mayoristas aprobados. Ingresá 0 para desactivar.</p>
+                            </td>
+                        </tr>
+                    </tbody></table>
+                </div>
+                <div style="background:#fff; border:1px solid #c3c4c7; border-left:4px solid #2271b1; padding:15px 20px; margin-bottom:20px; max-width:600px;">
+                    <h2 style="margin-top:0;">Precio Oculto</h2>
+                    <table class="form-table"><tbody>
+                        <tr>
+                            <th scope="row"><label for="wbi_b2b_hidden_price_text">Texto de precio oculto:</label></th>
+                            <td>
+                                <input type="text" id="wbi_b2b_hidden_price_text" name="wbi_b2b_hidden_price_text"
+                                    value="<?php echo esc_attr( $hidden_text ); ?>"
+                                    style="width:300px;" />
+                                <p class="description">Texto que se muestra en lugar del precio para usuarios no logueados o mayoristas pendientes de aprobación.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="wbi_b2b_hidden_price_url">URL de registro:</label></th>
+                            <td>
+                                <input type="url" id="wbi_b2b_hidden_price_url" name="wbi_b2b_hidden_price_url"
+                                    value="<?php echo esc_attr( $hidden_url ); ?>"
+                                    style="width:300px;" />
+                                <p class="description">URL del formulario de registro que se mostrará en el link "Regístrate para ver precios →" a visitantes no logueados.</p>
+                            </td>
+                        </tr>
+                    </tbody></table>
+                </div>
+                <?php submit_button( 'Guardar configuración B2B' ); ?>
+            </form>
+        </div>
+        <?php
     }
 }
