@@ -38,12 +38,6 @@ class WBI_B2B_Module {
         // 8. Flujo de registro mayorista
         add_action( 'woocommerce_register_form', array( $this, 'add_wholesale_register_field' ) );
         add_action( 'woocommerce_created_customer', array( $this, 'handle_wholesale_registration' ), 1 );
-        // Interceptar DESPUÉS de que WC hizo todo: si es mayorista pendiente, forzar logout
-        add_action( 'template_redirect', array( $this, 'force_logout_pending_wholesale' ) );
-
-        // 9. Bloquear login de mayoristas pendientes y mostrar aviso post-registro
-        add_filter( 'wp_authenticate_user', array( $this, 'block_pending_wholesale_login' ), 10, 2 );
-        add_action( 'woocommerce_login_form_start', array( $this, 'show_wholesale_pending_notice' ) );
     }
 
     /**
@@ -70,19 +64,18 @@ class WBI_B2B_Module {
     public function show_status_column_content( $value, $column_name, $user_id ) {
         if ( 'wbi_status' !== $column_name ) return $value;
 
-        $user = get_userdata( $user_id );
-        if ( ! in_array( 'mayorista', (array) $user->roles ) ) {
-            return '<span style="color:#aaa;">-</span>'; // No es mayorista
+        $request_status = get_user_meta( $user_id, 'wbi_wholesale_request', true );
+
+        if ( ! $request_status ) {
+            return '<span style="color:#aaa;">-</span>';
         }
 
-        $status = get_user_meta( $user_id, 'wbi_status', true );
-        
-        if ( $status === 'approved' ) {
+        if ( $request_status === 'approved' ) {
             return '<span style="color:green; font-weight:bold;">✅ Aprobado</span>';
-        } elseif ( $status === 'rejected' ) {
+        } elseif ( $request_status === 'rejected' ) {
             return '<span style="color:red;">❌ Rechazado</span>';
         } else {
-            return '<span style="color:orange; font-weight:bold;">⏳ Pendiente de aprobacion</span>';
+            return '<span style="color:orange; font-weight:bold;">⏳ Pendiente de aprobación</span>';
         }
     }
 
@@ -90,8 +83,9 @@ class WBI_B2B_Module {
      * BOTONES DE ACCIÓN (Aprobar / Rechazar)
      */
     public function add_approval_actions( $actions, $user_object ) {
-        // Solo mostrar acciones si es mayorista
-        if ( ! in_array( 'mayorista', (array) $user_object->roles ) ) return $actions;
+        // Show action buttons for users who have submitted a wholesale request
+        $request_status = get_user_meta( $user_object->ID, 'wbi_wholesale_request', true );
+        if ( ! $request_status ) return $actions;
 
         $current_status = get_user_meta( $user_object->ID, 'wbi_status', true );
 
@@ -124,9 +118,15 @@ class WBI_B2B_Module {
         if ( ! current_user_can( 'edit_users' ) ) return;
         
         if ( $action === 'approve' && check_admin_referer( 'wbi_approve_user' ) ) {
+            $user = new WP_User( $user_id );
+            $user->set_role( 'mayorista' );
             update_user_meta( $user_id, 'wbi_status', 'approved' );
+            update_user_meta( $user_id, 'wbi_wholesale_request', 'approved' );
             $this->send_approval_email( $user_id, 'approved' );
         } elseif ( $action === 'reject' && check_admin_referer( 'wbi_reject_user' ) ) {
+            $user = new WP_User( $user_id );
+            $user->set_role( 'customer' );
+            update_user_meta( $user_id, 'wbi_wholesale_request', 'rejected' );
             update_user_meta( $user_id, 'wbi_status', 'rejected' );
             $this->send_approval_email( $user_id, 'rejected' );
         }
@@ -144,7 +144,12 @@ class WBI_B2B_Module {
         if ( in_array( 'mayorista', $user->roles ) ) {
             return get_user_meta( $user->ID, 'wbi_status', true ) === 'approved';
         }
-        return true; 
+        // customer with a pending wholesale request cannot buy
+        if ( get_user_meta( $user->ID, 'wbi_wholesale_request', true ) === 'pending' ) {
+            return false;
+        }
+        // regular B2C customer (no wholesale request)
+        return true;
     }
 
     public function apply_wholesale_price( $price, $product ) {
@@ -182,6 +187,14 @@ class WBI_B2B_Module {
                 return '<span class="woocommerce-Price-amount amount">' . wc_price( $wholesale ) . '</span> <small style="color:#888;">(Precio Mayorista)</small>';
             }
         }
+
+        // customer with a pending wholesale request: hide prices and show a review notice
+        $request_status = get_user_meta( $user->ID, 'wbi_wholesale_request', true );
+        if ( 'pending' === $request_status && in_array( 'customer', $user->roles ) ) {
+            return '<span class="price-hidden" style="color:#d63638; font-weight:bold;">⏳ Tu solicitud está siendo revisada por un administrador.</span>';
+        }
+
+        // regular B2C customer (no wholesale request): show normal prices
         return $price;
     }
 
@@ -242,15 +255,17 @@ class WBI_B2B_Module {
 
     public function show_status_message() {
         $user = wp_get_current_user();
-        if ( in_array( 'mayorista', $user->roles ) ) {
-            $status = get_user_meta( $user->ID, 'wbi_status', true );
-            if ( $status === 'pending' ) {
-                echo '<div class="woocommerce-info">⏳ Tu solicitud de cuenta mayorista está siendo revisada. Te notificaremos por email cuando sea aprobada.</div>';
-            } elseif ( $status !== 'approved' ) {
-                echo '<div class="woocommerce-error">⚠️ Tu cuenta mayorista está en revisión. No verás precios hasta ser aprobado.</div>';
-            } else {
-                echo '<div class="woocommerce-message">✅ Cuenta Mayorista Activa.</div>';
-            }
+
+        if ( in_array( 'mayorista', $user->roles ) && get_user_meta( $user->ID, 'wbi_status', true ) === 'approved' ) {
+            echo '<div class="woocommerce-message">✅ Cuenta Mayorista Activa.</div>';
+            return;
+        }
+
+        $request_status = get_user_meta( $user->ID, 'wbi_wholesale_request', true );
+        if ( 'pending' === $request_status ) {
+            echo '<div class="woocommerce-info">⏳ Tu solicitud de cuenta mayorista está siendo revisada por un administrador. Te notificaremos por email cuando sea aprobada.</div>';
+        } elseif ( 'rejected' === $request_status ) {
+            echo '<div class="woocommerce-error">❌ Tu solicitud de cuenta mayorista fue rechazada. Contactá a la tienda para más información.</div>';
         }
     }
 
@@ -299,8 +314,8 @@ class WBI_B2B_Module {
     }
 
     /**
-     * Procesa el registro mayorista: asigna rol, establece status pendiente
-     * y notifica al responsable de la tienda.
+     * Procesa el registro mayorista: marca al usuario con user_meta de solicitud
+     * pendiente sin cambiar su rol (WooCommerce lo maneja como customer).
      *
      * @param int $customer_id ID del usuario recién creado.
      */
@@ -309,92 +324,12 @@ class WBI_B2B_Module {
             return;
         }
 
-        $user = new WP_User( $customer_id );
-
-        // Remover rol customer por defecto y asignar mayorista
-        $user->remove_role( 'customer' );
-        $user->add_role( 'mayorista' );
-
-        // Establecer status pendiente
+        // Leave user as customer (WC default) — role will be changed to mayorista only on admin approval
+        update_user_meta( $customer_id, 'wbi_wholesale_request', 'pending' );
         update_user_meta( $customer_id, 'wbi_status', 'pending' );
 
         // Enviar email de notificación al responsable
         $this->send_new_wholesale_request_email( $customer_id );
-    }
-
-    /**
-     * Intercepta en template_redirect: si un mayorista pendiente está logueado,
-     * destruye la sesión y redirige al login con mensaje de pendiente.
-     * Esto funciona porque se ejecuta DESPUÉS de que WC ya seteó todas las cookies.
-     */
-    public function force_logout_pending_wholesale() {
-        if ( ! is_user_logged_in() ) {
-            return;
-        }
-
-        $user = wp_get_current_user();
-
-        if ( ! in_array( 'mayorista', (array) $user->roles, true ) ) {
-            return;
-        }
-
-        $status = get_user_meta( $user->ID, 'wbi_status', true );
-
-        if ( 'approved' === $status ) {
-            return; // Mayorista aprobado, dejarlo pasar
-        }
-
-        // Destruir la sesión completamente
-        wp_destroy_current_session();
-        wp_clear_auth_cookie();
-        wp_set_current_user( 0 );
-
-        // Redirigir al login con mensaje de pendiente
-        $myaccount    = get_permalink( get_option( 'woocommerce_myaccount_page_id' ) );
-        $redirect_url = add_query_arg( 'wbi_wholesale_pending', '1', $myaccount );
-
-        wp_safe_redirect( $redirect_url );
-        exit;
-    }
-
-    /**
-     * Bloquea el inicio de sesión de usuarios mayoristas que no han sido aprobados.
-     *
-     * @param WP_User|WP_Error $user     Objeto usuario o error.
-     * @param string           $password Contraseña ingresada.
-     * @return WP_User|WP_Error
-     */
-    public function block_pending_wholesale_login( $user, $password ) {
-        if ( is_wp_error( $user ) ) {
-            return $user;
-        }
-
-        if ( in_array( 'mayorista', (array) $user->roles, true ) ) {
-            $status = get_user_meta( $user->ID, 'wbi_status', true );
-            if ( 'approved' !== $status ) {
-                $message = ( 'rejected' === $status )
-                    ? '❌ Tu solicitud de cuenta mayorista fue rechazada. Contactá a la tienda para más información.'
-                    : '⏳ Tu cuenta mayorista está pendiente de aprobación. Te notificaremos por email cuando sea revisada.';
-                return new WP_Error( 'wbi_wholesale_pending', $message );
-            }
-        }
-
-        return $user;
-    }
-
-    /**
-     * Muestra un aviso en el formulario de login indicando que el registro
-     * mayorista fue recibido y está pendiente de aprobación.
-     */
-    public function show_wholesale_pending_notice() {
-        if ( isset( $_GET['wbi_wholesale_pending'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['wbi_wholesale_pending'] ) ) ) {
-            echo wp_kses_post(
-                '<div class="woocommerce-message" role="alert">' .
-                '✅ <strong>¡Registro recibido!</strong> Tu solicitud de cuenta mayorista está siendo revisada. ' .
-                'Te enviaremos un email cuando sea aprobada. Mientras tanto, no podrás iniciar sesión.' .
-                '</div>'
-            );
-        }
     }
 
     /**
@@ -410,7 +345,7 @@ class WBI_B2B_Module {
         $user_name  = $this->get_user_display_name( $user );
         $user_email = $user->user_email;
         $date       = wp_date( 'd/m/Y H:i' );
-        $users_url  = admin_url( 'users.php?role=mayorista' );
+        $users_url  = admin_url( 'users.php' );
 
         $subject = sprintf( '🏢 Nueva solicitud de cuenta mayorista — %s', $user_name );
 
