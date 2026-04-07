@@ -34,6 +34,11 @@ class WBI_B2B_Module {
 
         // 7. Monto mínimo de compra mayorista
         add_action( 'woocommerce_check_cart_items', array( $this, 'check_minimum_order' ) );
+
+        // 8. Flujo de registro mayorista
+        add_action( 'woocommerce_register_form', array( $this, 'add_wholesale_register_field' ) );
+        add_action( 'woocommerce_created_customer', array( $this, 'handle_wholesale_registration' ) );
+        add_filter( 'woocommerce_registration_redirect', array( $this, 'wholesale_registration_redirect' ) );
     }
 
     /**
@@ -115,9 +120,10 @@ class WBI_B2B_Module {
         
         if ( $action === 'approve' && check_admin_referer( 'wbi_approve_user' ) ) {
             update_user_meta( $user_id, 'wbi_status', 'approved' );
-            // Opcional: Enviar email al usuario avisando
+            $this->send_approval_email( $user_id, 'approved' );
         } elseif ( $action === 'reject' && check_admin_referer( 'wbi_reject_user' ) ) {
             update_user_meta( $user_id, 'wbi_status', 'rejected' );
+            $this->send_approval_email( $user_id, 'rejected' );
         }
 
         // Redireccionar para limpiar la URL
@@ -233,7 +239,9 @@ class WBI_B2B_Module {
         $user = wp_get_current_user();
         if ( in_array( 'mayorista', $user->roles ) ) {
             $status = get_user_meta( $user->ID, 'wbi_status', true );
-            if ( $status !== 'approved' ) {
+            if ( $status === 'pending' ) {
+                echo '<div class="woocommerce-info">⏳ Tu solicitud de cuenta mayorista está siendo revisada. Te notificaremos por email cuando sea aprobada.</div>';
+            } elseif ( $status !== 'approved' ) {
                 echo '<div class="woocommerce-error">⚠️ Tu cuenta mayorista está en revisión. No verás precios hasta ser aprobado.</div>';
             } else {
                 echo '<div class="woocommerce-message">✅ Cuenta Mayorista Activa.</div>';
@@ -263,5 +271,172 @@ class WBI_B2B_Module {
                 'error'
             );
         }
+    }
+
+    // --- FLUJO DE REGISTRO MAYORISTA ---
+
+    /**
+     * Agrega un campo oculto en el formulario de registro de WooCommerce
+     * cuando la URL contiene el parámetro ?wholesale=1.
+     */
+    public function add_wholesale_register_field() {
+        if ( ! empty( $_GET['wholesale'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['wholesale'] ) ) ) {
+            echo '<input type="hidden" name="wbi_wholesale_register" value="1">';
+            wp_nonce_field( 'wbi_wholesale_register', 'wbi_wholesale_nonce' );
+        }
+    }
+
+    /**
+     * Procesa el registro mayorista: asigna rol, establece status pendiente
+     * y notifica al responsable de la tienda.
+     *
+     * @param int $customer_id ID del usuario recién creado.
+     */
+    public function handle_wholesale_registration( $customer_id ) {
+        if ( empty( $_POST['wbi_wholesale_register'] ) || '1' !== sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_register'] ) ) ) {
+            return;
+        }
+
+        if ( empty( $_POST['wbi_wholesale_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_nonce'] ) ), 'wbi_wholesale_register' ) ) {
+            return;
+        }
+
+        $user = new WP_User( $customer_id );
+
+        // Remover rol customer por defecto y asignar mayorista
+        $user->remove_role( 'customer' );
+        $user->add_role( 'mayorista' );
+
+        // Establecer status pendiente
+        update_user_meta( $customer_id, 'wbi_status', 'pending' );
+
+        // Marcar que es un registro mayorista (para la redirección)
+        update_user_meta( $customer_id, 'wbi_wholesale_registered', '1' );
+
+        // Enviar email de notificación al responsable
+        $this->send_new_wholesale_request_email( $customer_id );
+    }
+
+    /**
+     * Redirige al dashboard de Mi Cuenta después del registro mayorista.
+     *
+     * @param string $url URL de redirección original.
+     * @return string URL de redirección modificada.
+     */
+    public function wholesale_registration_redirect( $url ) {
+        $user = wp_get_current_user();
+        if ( $user->ID && in_array( 'mayorista', (array) $user->roles ) ) {
+            $pending = get_user_meta( $user->ID, 'wbi_wholesale_registered', true );
+            if ( '1' === $pending ) {
+                delete_user_meta( $user->ID, 'wbi_wholesale_registered' );
+                return wc_get_page_permalink( 'myaccount' );
+            }
+        }
+        return $url;
+    }
+
+    /**
+     * Envía email de notificación al responsable de la tienda cuando
+     * un nuevo usuario se registra como mayorista.
+     *
+     * @param int $customer_id ID del usuario que se registró.
+     */
+    private function send_new_wholesale_request_email( $customer_id ) {
+        $user       = get_userdata( $customer_id );
+        $recipient  = $this->get_notification_email();
+        $site_name  = get_bloginfo( 'name' );
+        $user_name  = $this->get_user_display_name( $user );
+        $user_email = $user->user_email;
+        $date       = wp_date( 'd/m/Y H:i' );
+        $users_url  = admin_url( 'users.php?role=mayorista' );
+
+        $subject = sprintf( '🏢 Nueva solicitud de cuenta mayorista — %s', $user_name );
+
+        $body = '<!DOCTYPE html><html><body style="font-family:sans-serif; color:#333;">';
+        $body .= '<h2 style="color:#0071a1;">🏢 Nueva solicitud de cuenta mayorista</h2>';
+        $body .= '<p>Se ha registrado un nuevo usuario solicitando una cuenta mayorista en <strong>' . esc_html( $site_name ) . '</strong>.</p>';
+        $body .= '<table style="border-collapse:collapse; width:100%; max-width:500px;">';
+        $body .= '<tr><td style="padding:6px; font-weight:bold;">Nombre:</td><td style="padding:6px;">' . esc_html( $user_name ) . '</td></tr>';
+        $body .= '<tr style="background:#f9f9f9;"><td style="padding:6px; font-weight:bold;">Email:</td><td style="padding:6px;">' . esc_html( $user_email ) . '</td></tr>';
+        $body .= '<tr><td style="padding:6px; font-weight:bold;">Fecha de registro:</td><td style="padding:6px;">' . esc_html( $date ) . '</td></tr>';
+        $body .= '</table>';
+        $body .= '<p style="margin-top:20px;"><a href="' . esc_url( $users_url ) . '" style="background:#0071a1; color:#fff; padding:10px 18px; text-decoration:none; border-radius:4px;">Ver solicitudes pendientes</a></p>';
+        $body .= '</body></html>';
+
+        $headers = array( 'Content-Type: text/html; charset=UTF-8' );
+        $sent = wp_mail( $recipient, $subject, $body, $headers );
+        if ( ! $sent ) {
+            error_log( sprintf( 'WBI B2B: No se pudo enviar email de nueva solicitud mayorista para usuario ID %d al destinatario %s', $customer_id, $recipient ) );
+        }
+    }
+
+    /**
+     * Envía email al usuario cuando su solicitud es aprobada o rechazada.
+     *
+     * @param int    $user_id ID del usuario.
+     * @param string $status  'approved' o 'rejected'.
+     */
+    private function send_approval_email( $user_id, $status ) {
+        $user      = get_userdata( $user_id );
+        $site_name = get_bloginfo( 'name' );
+        $shop_url  = get_permalink( wc_get_page_id( 'shop' ) );
+        $user_name = $this->get_user_display_name( $user );
+
+        $headers = array( 'Content-Type: text/html; charset=UTF-8' );
+
+        if ( 'approved' === $status ) {
+            $subject = '✅ Tu cuenta mayorista ha sido aprobada';
+            $body    = '<!DOCTYPE html><html><body style="font-family:sans-serif; color:#333;">';
+            $body   .= '<h2 style="color:#2e7d32;">✅ ¡Tu cuenta mayorista fue aprobada!</h2>';
+            $body   .= '<p>Hola <strong>' . esc_html( $user_name ) . '</strong>,</p>';
+            $body   .= '<p>Tu solicitud de cuenta mayorista en <strong>' . esc_html( $site_name ) . '</strong> ha sido <strong>aprobada</strong>.</p>';
+            $body   .= '<p>Ya podés ingresar a la tienda y ver los precios mayoristas exclusivos para vos.</p>';
+            $body   .= '<p style="margin-top:20px;"><a href="' . esc_url( $shop_url ) . '" style="background:#2e7d32; color:#fff; padding:10px 18px; text-decoration:none; border-radius:4px;">Ir a la tienda</a></p>';
+            $body   .= '</body></html>';
+        } else {
+            $subject = '❌ Solicitud de cuenta mayorista';
+            $body    = '<!DOCTYPE html><html><body style="font-family:sans-serif; color:#333;">';
+            $body   .= '<h2 style="color:#c62828;">❌ Solicitud de cuenta mayorista</h2>';
+            $body   .= '<p>Hola <strong>' . esc_html( $user_name ) . '</strong>,</p>';
+            $body   .= '<p>Lamentablemente, tu solicitud de cuenta mayorista en <strong>' . esc_html( $site_name ) . '</strong> no pudo ser procesada en este momento.</p>';
+            $body   .= '<p>Si tenés alguna consulta, por favor comunicate directamente con la tienda.</p>';
+            $body   .= '</body></html>';
+        }
+
+        $sent = wp_mail( $user->user_email, $subject, $body, $headers );
+        if ( ! $sent ) {
+            error_log( sprintf( 'WBI B2B: No se pudo enviar email de %s para usuario ID %d (%s)', $status, $user_id, $user->user_email ) );
+        }
+    }
+
+    /**
+     * Retorna el nombre a mostrar de un usuario WP.
+     *
+     * @param WP_User $user Objeto usuario.
+     * @return string Nombre del usuario.
+     */
+    private function get_user_display_name( $user ) {
+        return $user->display_name ? $user->display_name : $user->user_login;
+    }
+
+    /**
+     * Obtiene el email de notificación para nuevas solicitudes mayoristas.
+     * Prioridad: campo específico B2B → email de "Nuevo pedido" de WC → admin email.
+     *
+     * @return string Email del destinatario.
+     */
+    private function get_notification_email() {
+        $opts = get_option( 'wbi_modules_settings', array() );
+        // 1. Primero: campo específico B2B
+        if ( ! empty( $opts['wbi_b2b_notification_email'] ) ) {
+            return sanitize_email( $opts['wbi_b2b_notification_email'] );
+        }
+        // 2. Segundo: email de "Nuevo pedido" de WooCommerce
+        $wc_settings = get_option( 'woocommerce_new_order_settings', array() );
+        if ( ! empty( $wc_settings['recipient'] ) ) {
+            return $wc_settings['recipient'];
+        }
+        // 3. Fallback: admin email de WordPress
+        return get_option( 'admin_email' );
     }
 }
