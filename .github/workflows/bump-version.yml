@@ -1,0 +1,70 @@
+name: Auto Bump Version (Patch)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      # Solo triggerea cuando se cambian archivos PHP o de includes, NO cuando se cambia solo la versión
+      - 'includes/**'
+      - 'assets/**'
+      - 'wbi-suite.php'
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    # No ejecutar si el commit fue hecho por el bot (evitar loop infinito)
+    if: "!contains(github.event.head_commit.message, '[skip bump]') && !contains(github.event.head_commit.message, 'chore: bump version')"
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read current version
+        id: version
+        run: |
+          # Extraer versión del header del plugin
+          CURRENT=$(grep -oP '^\s*\*\s*Version:\s*\K[0-9]+\.[0-9]+\.[0-9]+' wbi-suite.php)
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+
+          # Separar componentes
+          MAJOR=$(echo $CURRENT | cut -d. -f1)
+          MINOR=$(echo $CURRENT | cut -d. -f2)
+          PATCH=$(echo $CURRENT | cut -d. -f3)
+
+          # Incrementar patch
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Versión actual: $CURRENT → Nueva: $NEW_VERSION"
+
+      - name: Update version in wbi-suite.php
+        run: |
+          # Actualizar header del plugin (línea " * Version: X.Y.Z")
+          sed -i "s/^\(\s*\*\s*Version:\s*\)[0-9]\+\.[0-9]\+\.[0-9]\+/\1${{ steps.version.outputs.new }}/" wbi-suite.php
+
+          # Actualizar variable $version en render_settings_page
+          sed -i "s/\(\$version\s*=\s*'\)[0-9]\+\.[0-9]\+\.[0-9]\+/\1${{ steps.version.outputs.new }}/" wbi-suite.php
+
+          echo "Archivo actualizado:"
+          grep "Version:" wbi-suite.php | head -1
+          grep "\$version" wbi-suite.php | head -1
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add wbi-suite.php
+          # Solo hacer commit si hay cambios
+          if git diff --cached --quiet; then
+            echo "No hay cambios de versión para commitear"
+          else
+            git commit -m "chore: bump version to ${{ steps.version.outputs.new }} [skip bump]"
+            git push
+            echo "✅ Versión bumpeada a ${{ steps.version.outputs.new }}"
+          fi
