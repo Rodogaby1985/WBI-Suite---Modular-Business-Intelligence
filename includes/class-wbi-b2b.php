@@ -37,8 +37,13 @@ class WBI_B2B_Module {
 
         // 8. Flujo de registro mayorista
         add_action( 'woocommerce_register_form', array( $this, 'add_wholesale_register_field' ) );
-        add_action( 'woocommerce_created_customer', array( $this, 'handle_wholesale_registration' ) );
+        add_filter( 'woocommerce_registration_auth_new_customer', array( $this, 'prevent_wholesale_auto_login' ), 10, 2 );
+        add_action( 'woocommerce_created_customer', array( $this, 'handle_wholesale_registration' ), 1 );
         add_filter( 'woocommerce_registration_redirect', array( $this, 'wholesale_registration_redirect' ) );
+
+        // 9. Bloquear login de mayoristas pendientes y mostrar aviso post-registro
+        add_filter( 'wp_authenticate_user', array( $this, 'block_pending_wholesale_login' ), 10, 2 );
+        add_action( 'woocommerce_login_form_start', array( $this, 'show_wholesale_pending_notice' ) );
     }
 
     /**
@@ -276,11 +281,37 @@ class WBI_B2B_Module {
     // --- FLUJO DE REGISTRO MAYORISTA ---
 
     /**
+     * Bloquea el auto-login de WooCommerce cuando el registro viene del formulario mayorista.
+     *
+     * @param bool $auto_login  Si WooCommerce auto-logeará al nuevo usuario.
+     * @param int  $customer_id ID del usuario recién creado.
+     * @return bool
+     */
+    public function prevent_wholesale_auto_login( $auto_login, $customer_id ) {
+        if (
+            ! empty( $_POST['wbi_wholesale_register'] ) &&
+            ! empty( $_POST['wbi_wholesale_nonce'] ) &&
+            wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_nonce'] ) ), 'wbi_wholesale_register' )
+        ) {
+            return false;
+        }
+        return $auto_login;
+    }
+
+    /**
      * Agrega un campo oculto en el formulario de registro de WooCommerce
-     * cuando la URL contiene el parámetro ?wholesale=1.
+     * cuando la URL contiene el parámetro ?wholesale=1 o cuando el POST
+     * lo indica (para preservar el flag al reenviar el formulario con errores).
      */
     public function add_wholesale_register_field() {
-        if ( ! empty( $_GET['wholesale'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['wholesale'] ) ) ) {
+        $is_wholesale = false;
+        if ( isset( $_GET['wholesale'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['wholesale'] ) ) ) {
+            $is_wholesale = true;
+        } elseif ( isset( $_POST['wbi_wholesale_register'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_register'] ) ) ) {
+            $is_wholesale = true;
+        }
+
+        if ( $is_wholesale ) {
             echo '<input type="hidden" name="wbi_wholesale_register" value="1">';
             wp_nonce_field( 'wbi_wholesale_register', 'wbi_wholesale_nonce' );
         }
@@ -310,29 +341,67 @@ class WBI_B2B_Module {
         // Establecer status pendiente
         update_user_meta( $customer_id, 'wbi_status', 'pending' );
 
-        // Marcar que es un registro mayorista (para la redirección)
-        update_user_meta( $customer_id, 'wbi_wholesale_registered', '1' );
-
         // Enviar email de notificación al responsable
         $this->send_new_wholesale_request_email( $customer_id );
     }
 
     /**
-     * Redirige al dashboard de Mi Cuenta después del registro mayorista.
+     * Redirige al dashboard de Mi Cuenta con un parámetro de aviso
+     * después del registro mayorista.
      *
      * @param string $url URL de redirección original.
      * @return string URL de redirección modificada.
      */
     public function wholesale_registration_redirect( $url ) {
-        $user = wp_get_current_user();
-        if ( $user->ID && in_array( 'mayorista', (array) $user->roles ) ) {
-            $pending = get_user_meta( $user->ID, 'wbi_wholesale_registered', true );
-            if ( '1' === $pending ) {
-                delete_user_meta( $user->ID, 'wbi_wholesale_registered' );
-                return wc_get_page_permalink( 'myaccount' );
-            }
+        if (
+            ! empty( $_POST['wbi_wholesale_register'] ) &&
+            ! empty( $_POST['wbi_wholesale_nonce'] ) &&
+            wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_nonce'] ) ), 'wbi_wholesale_register' )
+        ) {
+            $myaccount = get_permalink( get_option( 'woocommerce_myaccount_page_id' ) );
+            return add_query_arg( 'wbi_wholesale_pending', '1', $myaccount );
         }
         return $url;
+    }
+
+    /**
+     * Bloquea el inicio de sesión de usuarios mayoristas que no han sido aprobados.
+     *
+     * @param WP_User|WP_Error $user     Objeto usuario o error.
+     * @param string           $password Contraseña ingresada.
+     * @return WP_User|WP_Error
+     */
+    public function block_pending_wholesale_login( $user, $password ) {
+        if ( is_wp_error( $user ) ) {
+            return $user;
+        }
+
+        if ( in_array( 'mayorista', (array) $user->roles, true ) ) {
+            $status = get_user_meta( $user->ID, 'wbi_status', true );
+            if ( 'approved' !== $status ) {
+                $message = ( 'rejected' === $status )
+                    ? '❌ Tu solicitud de cuenta mayorista fue rechazada. Contactá a la tienda para más información.'
+                    : '⏳ Tu cuenta mayorista está pendiente de aprobación. Te notificaremos por email cuando sea revisada.';
+                return new WP_Error( 'wbi_wholesale_pending', $message );
+            }
+        }
+
+        return $user;
+    }
+
+    /**
+     * Muestra un aviso en el formulario de login indicando que el registro
+     * mayorista fue recibido y está pendiente de aprobación.
+     */
+    public function show_wholesale_pending_notice() {
+        if ( isset( $_GET['wbi_wholesale_pending'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['wbi_wholesale_pending'] ) ) ) {
+            echo wp_kses_post(
+                '<div class="woocommerce-message" role="alert">' .
+                '✅ <strong>¡Registro recibido!</strong> Tu solicitud de cuenta mayorista está siendo revisada. ' .
+                'Te enviaremos un email cuando sea aprobada. Mientras tanto, no podrás iniciar sesión.' .
+                '</div>'
+            );
+        }
     }
 
     /**
