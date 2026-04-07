@@ -37,9 +37,9 @@ class WBI_B2B_Module {
 
         // 8. Flujo de registro mayorista
         add_action( 'woocommerce_register_form', array( $this, 'add_wholesale_register_field' ) );
-        add_filter( 'woocommerce_registration_auth_new_customer', array( $this, 'prevent_wholesale_auto_login' ), 10, 2 );
         add_action( 'woocommerce_created_customer', array( $this, 'handle_wholesale_registration' ), 1 );
-        add_filter( 'woocommerce_registration_redirect', array( $this, 'wholesale_registration_redirect' ) );
+        // Interceptar DESPUÉS de que WC hizo todo: si es mayorista pendiente, forzar logout
+        add_action( 'template_redirect', array( $this, 'force_logout_pending_wholesale' ) );
 
         // 9. Bloquear login de mayoristas pendientes y mostrar aviso post-registro
         add_filter( 'wp_authenticate_user', array( $this, 'block_pending_wholesale_login' ), 10, 2 );
@@ -281,20 +281,6 @@ class WBI_B2B_Module {
     // --- FLUJO DE REGISTRO MAYORISTA ---
 
     /**
-     * Bloquea el auto-login de WooCommerce cuando el registro viene del formulario mayorista.
-     *
-     * @param bool $auto_login  Si WooCommerce auto-logeará al nuevo usuario.
-     * @param int  $customer_id ID del usuario recién creado.
-     * @return bool
-     */
-    public function prevent_wholesale_auto_login( $auto_login, $customer_id ) {
-        if ( ! empty( $_POST['wbi_wholesale_register'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_register'] ) ) ) {
-            return false;
-        }
-        return $auto_login;
-    }
-
-    /**
      * Agrega un campo oculto en el formulario de registro de WooCommerce
      * cuando la URL contiene el parámetro ?wholesale=1 o cuando el POST
      * lo indica (para preservar el flag al reenviar el formulario con errores).
@@ -332,28 +318,43 @@ class WBI_B2B_Module {
         // Establecer status pendiente
         update_user_meta( $customer_id, 'wbi_status', 'pending' );
 
-        // Forzar logout inmediato si WooCommerce logueó al usuario
-        if ( is_user_logged_in() && get_current_user_id() === $customer_id ) {
-            wp_logout();
-        }
-
         // Enviar email de notificación al responsable
         $this->send_new_wholesale_request_email( $customer_id );
     }
 
     /**
-     * Redirige al dashboard de Mi Cuenta con un parámetro de aviso
-     * después del registro mayorista.
-     *
-     * @param string $url URL de redirección original.
-     * @return string URL de redirección modificada.
+     * Intercepta en template_redirect: si un mayorista pendiente está logueado,
+     * destruye la sesión y redirige al login con mensaje de pendiente.
+     * Esto funciona porque se ejecuta DESPUÉS de que WC ya seteó todas las cookies.
      */
-    public function wholesale_registration_redirect( $url ) {
-        if ( ! empty( $_POST['wbi_wholesale_register'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_register'] ) ) ) {
-            $myaccount = get_permalink( get_option( 'woocommerce_myaccount_page_id' ) );
-            return add_query_arg( 'wbi_wholesale_pending', '1', $myaccount );
+    public function force_logout_pending_wholesale() {
+        if ( ! is_user_logged_in() ) {
+            return;
         }
-        return $url;
+
+        $user = wp_get_current_user();
+
+        if ( ! in_array( 'mayorista', (array) $user->roles, true ) ) {
+            return;
+        }
+
+        $status = get_user_meta( $user->ID, 'wbi_status', true );
+
+        if ( 'approved' === $status ) {
+            return; // Mayorista aprobado, dejarlo pasar
+        }
+
+        // Destruir la sesión completamente
+        wp_destroy_current_session();
+        wp_clear_auth_cookie();
+        wp_set_current_user( 0 );
+
+        // Redirigir al login con mensaje de pendiente
+        $myaccount    = get_permalink( get_option( 'woocommerce_myaccount_page_id' ) );
+        $redirect_url = add_query_arg( 'wbi_wholesale_pending', '1', $myaccount );
+
+        wp_safe_redirect( $redirect_url );
+        exit;
     }
 
     /**
