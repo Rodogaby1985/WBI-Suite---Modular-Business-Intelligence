@@ -288,11 +288,7 @@ class WBI_B2B_Module {
      * @return bool
      */
     public function prevent_wholesale_auto_login( $auto_login, $customer_id ) {
-        if (
-            ! empty( $_POST['wbi_wholesale_register'] ) &&
-            ! empty( $_POST['wbi_wholesale_nonce'] ) &&
-            wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_nonce'] ) ), 'wbi_wholesale_register' )
-        ) {
+        if ( ! empty( $_POST['wbi_wholesale_register'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_register'] ) ) ) {
             return false;
         }
         return $auto_login;
@@ -313,7 +309,6 @@ class WBI_B2B_Module {
 
         if ( $is_wholesale ) {
             echo '<input type="hidden" name="wbi_wholesale_register" value="1">';
-            wp_nonce_field( 'wbi_wholesale_register', 'wbi_wholesale_nonce' );
         }
     }
 
@@ -328,10 +323,6 @@ class WBI_B2B_Module {
             return;
         }
 
-        if ( empty( $_POST['wbi_wholesale_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_nonce'] ) ), 'wbi_wholesale_register' ) ) {
-            return;
-        }
-
         $user = new WP_User( $customer_id );
 
         // Remover rol customer por defecto y asignar mayorista
@@ -340,6 +331,11 @@ class WBI_B2B_Module {
 
         // Establecer status pendiente
         update_user_meta( $customer_id, 'wbi_status', 'pending' );
+
+        // Forzar logout inmediato si WooCommerce logueó al usuario
+        if ( is_user_logged_in() && get_current_user_id() === $customer_id ) {
+            wp_logout();
+        }
 
         // Enviar email de notificación al responsable
         $this->send_new_wholesale_request_email( $customer_id );
@@ -353,11 +349,7 @@ class WBI_B2B_Module {
      * @return string URL de redirección modificada.
      */
     public function wholesale_registration_redirect( $url ) {
-        if (
-            ! empty( $_POST['wbi_wholesale_register'] ) &&
-            ! empty( $_POST['wbi_wholesale_nonce'] ) &&
-            wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_nonce'] ) ), 'wbi_wholesale_register' )
-        ) {
+        if ( ! empty( $_POST['wbi_wholesale_register'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['wbi_wholesale_register'] ) ) ) {
             $myaccount = get_permalink( get_option( 'woocommerce_myaccount_page_id' ) );
             return add_query_arg( 'wbi_wholesale_pending', '1', $myaccount );
         }
