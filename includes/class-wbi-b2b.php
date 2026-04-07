@@ -119,12 +119,13 @@ class WBI_B2B_Module {
         
         if ( $action === 'approve' && check_admin_referer( 'wbi_approve_user' ) ) {
             $user = new WP_User( $user_id );
-            $user->remove_role( 'customer' );
-            $user->add_role( 'mayorista' );
+            $user->set_role( 'mayorista' );
             update_user_meta( $user_id, 'wbi_status', 'approved' );
             update_user_meta( $user_id, 'wbi_wholesale_request', 'approved' );
             $this->send_approval_email( $user_id, 'approved' );
         } elseif ( $action === 'reject' && check_admin_referer( 'wbi_reject_user' ) ) {
+            $user = new WP_User( $user_id );
+            $user->set_role( 'customer' );
             update_user_meta( $user_id, 'wbi_wholesale_request', 'rejected' );
             update_user_meta( $user_id, 'wbi_status', 'rejected' );
             $this->send_approval_email( $user_id, 'rejected' );
@@ -189,7 +190,7 @@ class WBI_B2B_Module {
 
         // customer with a pending wholesale request: hide prices and show a review notice
         $request_status = get_user_meta( $user->ID, 'wbi_wholesale_request', true );
-        if ( 'pending' === $request_status ) {
+        if ( 'pending' === $request_status && in_array( 'customer', $user->roles ) ) {
             return '<span class="price-hidden" style="color:#d63638; font-weight:bold;">⏳ Tu solicitud está siendo revisada por un administrador.</span>';
         }
 
