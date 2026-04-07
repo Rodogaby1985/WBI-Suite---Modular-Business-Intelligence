@@ -582,6 +582,10 @@ class WBI_Suite_Loader {
         if ( isset( $input['wbi_b2b_hidden_price_url'] ) ) {
             $input['wbi_b2b_hidden_price_url'] = esc_url_raw( $input['wbi_b2b_hidden_price_url'] );
         }
+        // Sanitize B2B notification email
+        if ( isset( $input['wbi_b2b_notification_email'] ) ) {
+            $input['wbi_b2b_notification_email'] = sanitize_email( $input['wbi_b2b_notification_email'] );
+        }
         return $input;
     }
 
@@ -620,6 +624,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_b2b_minimum_order',    'B2B: Monto mínimo de compra',  array($this, 'number_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_minimum_order'] );
         add_settings_field( 'wbi_b2b_hidden_price_text','B2B: Texto precio oculto',      array($this, 'text_field'),   'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_hidden_price_text', 'default' => 'PRECIO MAYORISTA OCULTO'] );
         add_settings_field( 'wbi_b2b_hidden_price_url', 'B2B: URL registro mayorista',   array($this, 'text_field'),   'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_hidden_price_url'] );
+        add_settings_field( 'wbi_b2b_notification_email', 'B2B: Email notificación solicitudes', array($this, 'text_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_notification_email'] );
 
         // Permissions section
         add_settings_section( 'wbi_permissions_section', 'Permisos por Módulo', array( $this, 'permissions_section_desc' ), 'wbi-settings' );
@@ -858,6 +863,18 @@ class WBI_Suite_Loader {
                                 <input type="url" name="wbi_modules_settings[wbi_b2b_hidden_price_url]"
                                     value="<?php echo esc_attr( $opts['wbi_b2b_hidden_price_url'] ?? '' ); ?>"
                                     style="width:100%; margin-top:2px;">
+                            </label>
+                            <?php
+                            $wc_new_order = get_option( 'woocommerce_new_order_settings', array() );
+                            $wc_recipient = ! empty( $wc_new_order['recipient'] ) ? $wc_new_order['recipient'] : get_option( 'admin_email' );
+                            ?>
+                            <label style="display:block; margin-top:4px;">
+                                Email notificación B2B:
+                                <input type="email" name="wbi_modules_settings[wbi_b2b_notification_email]"
+                                    value="<?php echo esc_attr( $opts['wbi_b2b_notification_email'] ?? '' ); ?>"
+                                    placeholder="<?php echo esc_attr( $wc_recipient ); ?>"
+                                    style="width:100%; margin-top:2px;">
+                                <span style="color:#888; font-size:11px;">Dejá vacío para usar el email de pedidos de WooCommerce (<?php echo esc_html( $wc_recipient ); ?>)</span>
                             </label>
                         </div>
                         <?php endif; ?>
