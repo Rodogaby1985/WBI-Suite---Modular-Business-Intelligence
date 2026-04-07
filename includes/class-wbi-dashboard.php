@@ -26,7 +26,7 @@ class WBI_Dashboard_View {
         add_submenu_page(
             'wbi-dashboard-view',
             'Dashboard',
-            '📊 Dashboard',
+            'Dashboard',
             'manage_options',
             'wbi-dashboard-view',
             array( $this, 'render' )
