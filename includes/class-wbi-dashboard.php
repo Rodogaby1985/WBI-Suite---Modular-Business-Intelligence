@@ -14,12 +14,12 @@ class WBI_Dashboard_View {
 
     public function register_page() {
         add_menu_page( 
-            'wooErp', 
-            'wooErp', 
+            'Dashboard', 
+            'Dashboard', 
             'manage_options', 
             'wbi-dashboard-view', 
             array( $this, 'render' ), 
-            'dashicons-chart-area', 
+            'dashicons-dashboard', 
             2 
         );
         remove_submenu_page( 'wbi-dashboard-view', 'wbi-dashboard-view' );
