@@ -14,7 +14,7 @@ class WBI_Dashboard_View {
 
     public function register_page() {
         add_menu_page( 
-            'WooErp Dashboard', 
+            'WooErp', 
             'WooErp', 
             'manage_options', 
             'wbi-dashboard-view', 
@@ -22,7 +22,15 @@ class WBI_Dashboard_View {
             'dashicons-analytics', 
             2 
         );
-        remove_submenu_page( 'wbi-dashboard-view', 'wbi-dashboard-view' );
+        // Renombrar el primer submenu automático a "Dashboard"
+        add_submenu_page(
+            'wbi-dashboard-view',
+            'Dashboard',
+            '📊 Dashboard',
+            'manage_options',
+            'wbi-dashboard-view',
+            array( $this, 'render' )
+        );
     }
 
     public function enqueue_assets( $hook ) {
