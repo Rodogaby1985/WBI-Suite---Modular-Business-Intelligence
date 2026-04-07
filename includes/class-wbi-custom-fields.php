@@ -17,7 +17,7 @@ class WBI_Custom_Fields_Module {
         $this->fields_config = get_option( 'wbi_custom_fields_config', array() );
 
         // ── Admin ──────────────────────────────────────────────────────────
-        add_action( 'admin_menu', array( $this, 'add_admin_page' ) );
+        add_action( 'admin_menu', array( $this, 'add_admin_page' ), 100 );
         add_action( 'admin_init', array( $this, 'handle_field_actions' ) );
 
         // ── Registro ───────────────────────────────────────────────────────
@@ -418,6 +418,10 @@ class WBI_Custom_Fields_Module {
     }
 
     public function save_checkout_order_meta( $order_id ) {
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) return;
+
+        $values = array();
         foreach ( $this->fields_config as $field ) {
             $loc = $field['location'] ?? 'both';
             if ( 'register' === $loc ) continue;
@@ -425,7 +429,19 @@ class WBI_Custom_Fields_Module {
             $key   = sanitize_key( $field['key'] );
             $value = isset( $_POST[ $key ] ) ? sanitize_text_field( wp_unslash( $_POST[ $key ] ) ) : '';
             if ( '' !== $value ) {
-                update_post_meta( $order_id, $key, $value );
+                $values[ $key ] = $value;
+                $order->update_meta_data( $key, $value );
+            }
+        }
+        $order->save();
+
+        // Also save to user meta if the order has a logged-in customer.
+        // This ensures user meta is saved even with block-based checkout,
+        // where woocommerce_checkout_update_user_meta may not fire.
+        $customer_id = $order->get_customer_id();
+        if ( $customer_id ) {
+            foreach ( $values as $key => $value ) {
+                update_user_meta( $customer_id, $key, $value );
             }
         }
     }
@@ -456,7 +472,7 @@ class WBI_Custom_Fields_Module {
             if ( 'register' === $loc ) continue;
 
             $key   = sanitize_key( $field['key'] );
-            $value = get_post_meta( $order->get_id(), $key, true );
+            $value = $order->get_meta( $key, true );
             if ( '' !== $value ) {
                 $has_data = true;
                 $output  .= '<p><strong>' . esc_html( $field['label'] ) . ':</strong> ' . esc_html( $value ) . '</p>';
@@ -476,7 +492,7 @@ class WBI_Custom_Fields_Module {
             if ( 'register' === $loc ) continue;
 
             $key   = sanitize_key( $field['key'] );
-            $value = get_post_meta( $order->get_id(), $key, true );
+            $value = $order->get_meta( $key, true );
             if ( '' !== $value ) {
                 $has_data = true;
                 if ( $plain_text ) {
