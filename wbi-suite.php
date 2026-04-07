@@ -264,6 +264,14 @@ class WBI_Suite_Loader {
                 new WBI_CRM_Module();
             }
         }
+
+        // 21. Módulo de Campos Personalizados de Registro/Checkout
+        if ( ! empty( $this->options['wbi_enable_custom_fields'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-custom-fields.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-custom-fields.php';
+                new WBI_Custom_Fields_Module();
+            }
+        }
     }
 
     // --- CONFIGURACIÓN EN WP-ADMIN ---
@@ -559,8 +567,26 @@ class WBI_Suite_Loader {
         );
     }
 
+    /**
+     * Sanitize callback for wbi_modules_settings option.
+     * Ensures the B2B URL field is properly sanitized.
+     *
+     * @param array $input Raw input array.
+     * @return array Sanitized array.
+     */
+    public function sanitize_modules_settings( $input ) {
+        if ( ! is_array( $input ) ) {
+            return array();
+        }
+        // Sanitize B2B URL field specifically
+        if ( isset( $input['wbi_b2b_hidden_price_url'] ) ) {
+            $input['wbi_b2b_hidden_price_url'] = esc_url_raw( $input['wbi_b2b_hidden_price_url'] );
+        }
+        return $input;
+    }
+
     public function register_settings() {
-        register_setting( 'wbi_group', 'wbi_modules_settings' );
+        register_setting( 'wbi_group', 'wbi_modules_settings', array( 'sanitize_callback' => array( $this, 'sanitize_modules_settings' ) ) );
         
         add_settings_section( 'wbi_main_section', 'Módulos Disponibles', null, 'wbi-settings' );
         
@@ -588,6 +614,12 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_email_marketing', 'Email Marketing', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_email_marketing'] );
         add_settings_field( 'wbi_enable_reorder', 'Reglas de Reabastecimiento', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_reorder'] );
         add_settings_field( 'wbi_enable_crm', 'CRM / Pipeline de Ventas', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_crm'] );
+        add_settings_field( 'wbi_enable_custom_fields', 'Campos Personalizados (Registro/Checkout)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_custom_fields'] );
+
+        // B2B config fields (minimum order, hidden price text, registration URL)
+        add_settings_field( 'wbi_b2b_minimum_order',    'B2B: Monto mínimo de compra',  array($this, 'number_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_minimum_order'] );
+        add_settings_field( 'wbi_b2b_hidden_price_text','B2B: Texto precio oculto',      array($this, 'text_field'),   'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_hidden_price_text', 'default' => 'PRECIO MAYORISTA OCULTO'] );
+        add_settings_field( 'wbi_b2b_hidden_price_url', 'B2B: URL registro mayorista',   array($this, 'text_field'),   'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_hidden_price_url'] );
 
         // Permissions section
         add_settings_section( 'wbi_permissions_section', 'Permisos por Módulo', array( $this, 'permissions_section_desc' ), 'wbi-settings' );
@@ -615,6 +647,7 @@ class WBI_Suite_Loader {
             'wbi_enable_email_marketing'   => 'Email Marketing',
             'wbi_enable_reorder'           => 'Reglas de Reabastecimiento',
             'wbi_enable_crm'               => 'CRM / Pipeline de Ventas',
+            'wbi_enable_custom_fields'     => 'Campos Personalizados',
         );
 
         foreach ( $module_slugs as $module_key => $module_name ) {
@@ -674,6 +707,19 @@ class WBI_Suite_Loader {
         echo "<input type='checkbox' name='wbi_modules_settings[$id]' value='1' $checked /> <b>Activar</b>";
     }
 
+    public function number_field( $args ) {
+        $id    = $args['id'];
+        $value = isset( $this->options[ $id ] ) ? $this->options[ $id ] : '';
+        echo "<input type='number' name='wbi_modules_settings[" . esc_attr( $id ) . "]' value='" . esc_attr( $value ) . "' min='0' step='0.01' style='width:120px;'>";
+    }
+
+    public function text_field( $args ) {
+        $id      = $args['id'];
+        $default = isset( $args['default'] ) ? $args['default'] : '';
+        $value   = isset( $this->options[ $id ] ) ? $this->options[ $id ] : $default;
+        echo "<input type='text' name='wbi_modules_settings[" . esc_attr( $id ) . "]' value='" . esc_attr( $value ) . "' style='width:300px;'>";
+    }
+
     public function render_settings_page() {
         $opts          = $this->options ?: array();
         $active_count  = 0;
@@ -685,6 +731,7 @@ class WBI_Suite_Loader {
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator',
             'wbi_enable_accounting_reports','wbi_enable_credit_notes',
             'wbi_enable_email_marketing','wbi_enable_reorder','wbi_enable_crm',
+            'wbi_enable_custom_fields',
         );
         $total_modules = count( $toggle_keys );
         foreach ( $toggle_keys as $k ) {
@@ -711,6 +758,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_reorder',        '🔄', 'Reglas de Reabastecimiento','Punto de reorden automático con generación de órdenes de compra',          'wbi-reorder',    'operaciones'  ),
             array( 'wbi_enable_purchase',       '🛒', 'Órdenes de Compra',        'Gestión completa de órdenes de compra y recepción de mercadería',          'wbi-purchase',   'operaciones'  ),
             array( 'wbi_enable_data',           '📁', 'Modelo de Datos Extra',    'Campos extra: origen de venta y taxonomías personalizadas',               null,             'datos'        ),
+            array( 'wbi_enable_custom_fields',  '📋', 'Campos Personalizados',    'Campos custom en registro y checkout con validación de formato y duplicados', 'wbi-custom-fields', 'datos'     ),
             array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',    'finanzas'     ),
             array( 'wbi_enable_credit_notes',   '💳', 'Notas de Crédito/Débito',  'Emisión de NC/ND vinculadas a facturas AFIP (tipo A/B/C)',                 'wbi-credit-notes', 'finanzas'     ),
             array( 'wbi_enable_taxes',          '🏛️','Gestión de Impuestos',      'Cálculo de IVA, percepciones e impuestos internos',                       'wbi-taxes',      'finanzas'     ),
@@ -790,6 +838,29 @@ class WBI_Suite_Loader {
                                 </a>
                             <?php endif; ?>
                         </div>
+                        <?php if ( 'wbi_enable_b2b' === $key ) : ?>
+                        <div class="wbi-b2b-config" style="margin-top:12px; padding-top:10px; border-top:1px solid #e0e0e0; font-size:12px;">
+                            <p style="margin:0 0 6px; font-weight:600; color:#50575e;">⚙️ Configuración B2B</p>
+                            <label style="display:block; margin-bottom:4px;">
+                                Monto mínimo ($):
+                                <input type="number" name="wbi_modules_settings[wbi_b2b_minimum_order]"
+                                    value="<?php echo esc_attr( $opts['wbi_b2b_minimum_order'] ?? '' ); ?>"
+                                    min="0" step="0.01" style="width:90px; margin-left:4px;">
+                            </label>
+                            <label style="display:block; margin-bottom:4px;">
+                                Texto precio oculto:
+                                <input type="text" name="wbi_modules_settings[wbi_b2b_hidden_price_text]"
+                                    value="<?php echo esc_attr( $opts['wbi_b2b_hidden_price_text'] ?? 'PRECIO MAYORISTA OCULTO' ); ?>"
+                                    style="width:100%; margin-top:2px;">
+                            </label>
+                            <label style="display:block;">
+                                URL registro mayorista:
+                                <input type="url" name="wbi_modules_settings[wbi_b2b_hidden_price_url]"
+                                    value="<?php echo esc_attr( $opts['wbi_b2b_hidden_price_url'] ?? '' ); ?>"
+                                    style="width:100%; margin-top:2px;">
+                            </label>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     <?php endforeach; ?>
                     </div>
@@ -820,6 +891,7 @@ class WBI_Suite_Loader {
                     array( 'enable_key' => 'wbi_enable_credit_notes',   'perm_key' => 'wbi_permissions_credit_notes',   'name' => 'Notas de Crédito / Débito' ),
                     array( 'enable_key' => 'wbi_enable_reorder',        'perm_key' => 'wbi_permissions_reorder',        'name' => 'Reglas de Reabastecimiento' ),
                     array( 'enable_key' => 'wbi_enable_crm',           'perm_key' => 'wbi_permissions_crm',           'name' => 'CRM / Pipeline de Ventas' ),
+                    array( 'enable_key' => 'wbi_enable_custom_fields', 'perm_key' => 'wbi_permissions_custom_fields', 'name' => 'Campos Personalizados' ),
                 );
                 // Unified documents module: show when invoice or remitos is active
                 if ( ! empty( $opts['wbi_enable_invoice'] ) || ! empty( $opts['wbi_enable_remitos'] ) ) {
