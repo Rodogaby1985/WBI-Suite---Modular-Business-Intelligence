@@ -202,6 +202,26 @@ class WBI_Invoice_Module {
             'cae_vto'              => '',
         );
 
+        // Collect custom fields for the invoice
+        $cf_config          = get_option( 'wbi_custom_fields_config', array() );
+        $custom_fields_data = array();
+        $customer_id_cf     = $order->get_customer_id();
+        foreach ( $cf_config as $cf ) {
+            $cf_key = sanitize_key( $cf['key'] );
+            $val    = $order->get_meta( $cf_key, true );
+            if ( ( '' === $val || false === $val ) && $customer_id_cf ) {
+                $val = get_user_meta( $customer_id_cf, $cf_key, true );
+            }
+            if ( '' !== $val && false !== $val ) {
+                $custom_fields_data[] = array(
+                    'label' => $cf['label'],
+                    'key'   => $cf_key,
+                    'value' => $val,
+                );
+            }
+        }
+        $inv_data['custom_fields'] = $custom_fields_data;
+
         // Store meta (HPOS-compatible)
         $order->update_meta_data( '_wbi_invoice_number', $inv_number );
         $order->update_meta_data( '_wbi_invoice_type', $type );
@@ -313,6 +333,28 @@ th { background:#f0f0f0; }
     </tr>
 </table>
 
+<?php
+$custom_fields = isset( $inv['custom_fields'] ) ? $inv['custom_fields'] : array();
+if ( ! empty( $custom_fields ) ) :
+?>
+<div class="section-title">Datos Adicionales del Cliente</div>
+<table>
+<?php
+    $chunks = array_chunk( $custom_fields, 2 );
+    foreach ( $chunks as $pair ) :
+?>
+    <tr>
+        <td><strong><?php echo esc_html( $pair[0]['label'] ); ?>:</strong> <?php echo esc_html( $pair[0]['value'] ); ?></td>
+        <?php if ( isset( $pair[1] ) ) : ?>
+            <td><strong><?php echo esc_html( $pair[1]['label'] ); ?>:</strong> <?php echo esc_html( $pair[1]['value'] ); ?></td>
+        <?php else : ?>
+            <td></td>
+        <?php endif; ?>
+    </tr>
+<?php endforeach; ?>
+</table>
+<?php endif; ?>
+
 <div class="section-title">Detalle</div>
 <table>
     <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio Unit.</th><th>Subtotal</th></tr></thead>
@@ -399,8 +441,35 @@ th { background:#f0f0f0; }
             echo '<input type="hidden" name="action" value="wbi_generate_invoice">';
             echo '<input type="hidden" name="order_id" value="' . intval( $order_id ) . '">';
             echo '<p>Tipo: <select name="invoice_type"><option>A</option><option selected>B</option><option>C</option></select></p>';
+
+            // Try to auto-fill CUIT from custom fields if empty
+            $razon_social_prefill = '';
+            $cf_config            = get_option( 'wbi_custom_fields_config', array() );
+            $customer_id_cf       = $order->get_customer_id();
+            foreach ( $cf_config as $cf ) {
+                $cf_key = sanitize_key( $cf['key'] );
+                if ( empty( $cuit ) && preg_match( '/(cuit|dni|doc|nro_doc|documento)/', $cf_key ) ) {
+                    $val = $order->get_meta( $cf_key, true );
+                    if ( empty( $val ) && $customer_id_cf ) {
+                        $val = get_user_meta( $customer_id_cf, $cf_key, true );
+                    }
+                    if ( ! empty( $val ) ) {
+                        $cuit = $val;
+                    }
+                }
+                if ( empty( $razon_social_prefill ) && preg_match( '/(razon|social|empresa|company)/', $cf_key ) ) {
+                    $val = $order->get_meta( $cf_key, true );
+                    if ( empty( $val ) && $customer_id_cf ) {
+                        $val = get_user_meta( $customer_id_cf, $cf_key, true );
+                    }
+                    if ( ! empty( $val ) ) {
+                        $razon_social_prefill = $val;
+                    }
+                }
+            }
+
             echo '<p><label>CUIT/DNI:<br><input type="text" name="customer_cuit" value="' . esc_attr( $cuit ) . '" style="width:100%;"></label></p>';
-            echo '<p><label>Razón Social:<br><input type="text" name="customer_razon_social" style="width:100%;"></label></p>';
+            echo '<p><label>Razón Social:<br><input type="text" name="customer_razon_social" value="' . esc_attr( $razon_social_prefill ) . '" style="width:100%;"></label></p>';
             echo '<p><label>Condición IVA:<br><select name="customer_tax_condition" style="width:100%;">';
             foreach ( array( 'Consumidor Final', 'Responsable Inscripto', 'Monotributista', 'Exento' ) as $opt ) {
                 $sel = selected( $tax_condition, $opt, false );
