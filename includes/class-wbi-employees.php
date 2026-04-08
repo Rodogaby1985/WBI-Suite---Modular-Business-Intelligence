@@ -216,9 +216,9 @@ class WBI_Employees_Module {
     public function enqueue_assets( $hook ) {
         $pages = array(
             'toplevel_page_wbi-employees',
-            'empleados_page_wbi-employees-departments',
-            'empleados_page_wbi-employees-contracts',
-            'empleados_page_wbi-employees-config',
+            'wbi-employees_page_wbi-employees-departments',
+            'wbi-employees_page_wbi-employees-contracts',
+            'wbi-employees_page_wbi-employees-config',
         );
         if ( ! in_array( $hook, $pages, true ) ) {
             return;
@@ -567,6 +567,12 @@ class WBI_Employees_Module {
     private function get_departments() {
         global $wpdb;
         return $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}wbi_departments ORDER BY name ASC" );
+    }
+
+    private function get_department( $id ) {
+        global $wpdb;
+        if ( ! $id ) return null;
+        return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}wbi_departments WHERE id = %d", $id ) );
     }
 
     private function get_employees( $filters = array() ) {
@@ -1153,7 +1159,7 @@ class WBI_Employees_Module {
 
     private function render_department_form( $action ) {
         $id   = intval( $_GET['id'] ?? 0 );
-        $dept = $id ? ( function() use ( $id ) { global $wpdb; return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}wbi_departments WHERE id = %d", $id ) ); } )() : null;
+        $dept = $id ? $this->get_department( $id ) : null;
         $all_depts = $this->get_departments();
         $all_emps  = $this->get_employees();
         $title = 'new' === $action ? 'Nuevo Departamento' : 'Editar Departamento';
