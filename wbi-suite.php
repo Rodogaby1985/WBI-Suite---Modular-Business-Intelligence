@@ -586,6 +586,13 @@ class WBI_Suite_Loader {
         if ( isset( $input['wbi_b2b_notification_email'] ) ) {
             $input['wbi_b2b_notification_email'] = sanitize_email( $input['wbi_b2b_notification_email'] );
         }
+        // Sanitize B2B authorized roles (array of role slugs)
+        if ( isset( $input['wbi_b2b_authorized_roles'] ) && is_array( $input['wbi_b2b_authorized_roles'] ) ) {
+            $input['wbi_b2b_authorized_roles'] = array_map( 'sanitize_key', $input['wbi_b2b_authorized_roles'] );
+        } else {
+            // When no checkboxes are checked, the field is absent from POST — default to empty array
+            $input['wbi_b2b_authorized_roles'] = array();
+        }
         return $input;
     }
 
@@ -875,6 +882,23 @@ class WBI_Suite_Loader {
                                     placeholder="<?php echo esc_attr( $wc_recipient ); ?>"
                                     style="width:100%; margin-top:2px;">
                                 <span style="color:#888; font-size:11px;">Dejá vacío para usar el email de pedidos de WooCommerce (<?php echo esc_html( $wc_recipient ); ?>)</span>
+                            </label>
+                            <label style="display:block; margin-top:8px;">
+                                Roles autorizados para ver precios y comprar:
+                                <div style="margin-top:4px;">
+                                <?php
+                                $authorized = isset( $opts['wbi_b2b_authorized_roles'] ) ? (array) $opts['wbi_b2b_authorized_roles'] : array( 'administrator', 'mayorista' );
+                                $all_roles  = wp_roles()->roles;
+                                foreach ( $all_roles as $role_slug => $role_data ) :
+                                    $checked = in_array( $role_slug, $authorized, true ) ? 'checked' : '';
+                                ?>
+                                    <label style="display:inline-block; margin-right:10px;">
+                                        <input type="checkbox" name="wbi_modules_settings[wbi_b2b_authorized_roles][]" value="<?php echo esc_attr( $role_slug ); ?>" <?php echo $checked; ?>>
+                                        <?php echo esc_html( $role_data['name'] ); ?>
+                                    </label>
+                                <?php endforeach; ?>
+                                </div>
+                                <span style="color:#888; font-size:11px;">Solo estos roles podrán ver precios y comprar. El resto verá "Precio oculto".</span>
                             </label>
                         </div>
                         <?php endif; ?>
