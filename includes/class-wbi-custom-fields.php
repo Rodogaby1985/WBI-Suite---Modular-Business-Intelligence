@@ -35,6 +35,12 @@ class WBI_Custom_Fields_Module {
         add_action( 'woocommerce_admin_order_data_after_billing_address', array( $this, 'display_in_order_admin' ) );
         add_action( 'woocommerce_email_after_order_table', array( $this, 'display_in_email' ), 10, 4 );
 
+        // ── Perfil de usuario en admin ──────────────────────────────────────
+        add_action( 'show_user_profile', array( $this, 'display_user_profile_fields' ) );
+        add_action( 'edit_user_profile', array( $this, 'display_user_profile_fields' ) );
+        add_action( 'personal_options_update', array( $this, 'save_user_profile_fields' ) );
+        add_action( 'edit_user_profile_update', array( $this, 'save_user_profile_fields' ) );
+
         // ── Toggle JS ──────────────────────────────────────────────────────
         add_action( 'wp_footer', array( $this, 'render_toggle_js' ) );
     }
@@ -685,5 +691,76 @@ class WBI_Custom_Fields_Module {
             $result[ $part ] = $part;
         }
         return $result;
+    }
+
+    // =========================================================================
+    // PERFIL DE USUARIO (wp-admin) — mostrar y guardar campos personalizados
+    // =========================================================================
+
+    /**
+     * Muestra los campos personalizados en el perfil del usuario (wp-admin).
+     *
+     * @param WP_User $user El usuario cuyo perfil se está viendo/editando.
+     */
+    public function display_user_profile_fields( $user ) {
+        $fields = $this->fields_config;
+        if ( empty( $fields ) ) return;
+
+        echo '<h3>📋 Campos Personalizados WBI</h3>';
+        echo '<table class="form-table"><tbody>';
+
+        foreach ( $fields as $field ) {
+            $key   = sanitize_key( $field['key'] );
+            $value = get_user_meta( $user->ID, $key, true );
+            $label = esc_html( $field['label'] );
+
+            echo '<tr>';
+            echo '<th><label for="' . esc_attr( $key ) . '">' . $label . '</label></th>';
+            echo '<td>';
+
+            $type = $field['type'] ?? 'text';
+
+            if ( 'select' === $type ) {
+                $options_list = $this->parse_options( $field['options'] ?? '' );
+                echo '<select id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '" class="regular-text">';
+                echo '<option value="">— Seleccioná —</option>';
+                foreach ( $options_list as $opt_val => $opt_lbl ) {
+                    echo '<option value="' . esc_attr( $opt_val ) . '"' . selected( $value, $opt_val, false ) . '>' . esc_html( $opt_lbl ) . '</option>';
+                }
+                echo '</select>';
+            } elseif ( 'radio' === $type ) {
+                $options_list = $this->parse_options( $field['options'] ?? '' );
+                foreach ( $options_list as $opt_val => $opt_lbl ) {
+                    echo '<label style="margin-right:16px;">';
+                    echo '<input type="radio" name="' . esc_attr( $key ) . '" value="' . esc_attr( $opt_val ) . '"' . checked( $value, $opt_val, false ) . '> ';
+                    echo esc_html( $opt_lbl ) . '</label>';
+                }
+            } else {
+                echo '<input type="' . esc_attr( $type ) . '" id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '" value="' . esc_attr( $value ) . '" class="regular-text">';
+            }
+
+            echo '</td>';
+            echo '</tr>';
+        }
+
+        echo '</tbody></table>';
+    }
+
+    /**
+     * Guarda los campos personalizados desde el perfil del usuario (wp-admin).
+     *
+     * @param int $user_id ID del usuario.
+     */
+    public function save_user_profile_fields( $user_id ) {
+        if ( ! current_user_can( 'edit_user', $user_id ) ) return;
+        if ( ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ), 'update-user_' . $user_id ) ) return;
+
+        foreach ( $this->fields_config as $field ) {
+            $key = sanitize_key( $field['key'] );
+            if ( isset( $_POST[ $key ] ) ) {
+                $value = sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
+                update_user_meta( $user_id, $key, $value );
+            }
+        }
     }
 }

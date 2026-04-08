@@ -34,6 +34,11 @@ class WBI_B2B_Module {
 
         // 7. Monto mínimo de compra mayorista
         add_action( 'woocommerce_check_cart_items', array( $this, 'check_minimum_order' ) );
+
+        // 8. Ocultar botón "Agregar al carrito" para usuarios no autorizados
+        add_filter( 'woocommerce_loop_add_to_cart_link', array( $this, 'hide_add_to_cart_loop' ), 10, 2 );
+        add_action( 'woocommerce_before_add_to_cart_form', array( $this, 'maybe_hide_add_to_cart_form' ) );
+        add_filter( 'woocommerce_variation_is_purchasable', array( $this, 'restrict_variation_purchase' ), 10, 2 );
     }
 
     /**
@@ -261,6 +266,41 @@ class WBI_B2B_Module {
     }
 
     public function restrict_purchase( $purchasable, $product ) {
+        return $this->is_authorized() ? $purchasable : false;
+    }
+
+    /**
+     * Oculta el botón "Agregar al carrito" en el loop de productos.
+     */
+    public function hide_add_to_cart_loop( $html, $product ) {
+        if ( ! $this->is_authorized() ) {
+            return '';
+        }
+        return $html;
+    }
+
+    /**
+     * Oculta el formulario completo de "agregar al carrito" en la página de producto individual.
+     * Inyecta CSS para ocultar el form si el usuario no está autorizado.
+     */
+    public function maybe_hide_add_to_cart_form() {
+        if ( ! $this->is_authorized() ) {
+            echo '<style>
+                form.cart,
+                .single_add_to_cart_button,
+                .woocommerce-variation-add-to-cart,
+                .quantity,
+                .variations_form .single_variation_wrap {
+                    display: none !important;
+                }
+            </style>';
+        }
+    }
+
+    /**
+     * Restricción de compra para variaciones.
+     */
+    public function restrict_variation_purchase( $purchasable, $variation ) {
         return $this->is_authorized() ? $purchasable : false;
     }
 
