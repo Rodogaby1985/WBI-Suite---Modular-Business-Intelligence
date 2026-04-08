@@ -521,6 +521,51 @@ class WBI_Custom_Fields_Module {
     }
 
     // =========================================================================
+    // PUBLIC HELPERS — usados por otros módulos (facturación, etc.)
+    // =========================================================================
+
+    /**
+     * Returns the fields configuration array.
+     *
+     * @return array
+     */
+    public function get_fields_config() {
+        return $this->fields_config;
+    }
+
+    /**
+     * Devuelve un array de los campos personalizados de checkout/both guardados
+     * en un pedido. Otros módulos (facturación) pueden usarlo.
+     *
+     * @param WC_Order $order
+     * @return array [ [ 'label' => ..., 'key' => ..., 'value' => ... ], ... ]
+     */
+    public function get_custom_fields_for_order( $order ) {
+        $result      = array();
+        $customer_id = $order->get_customer_id();
+
+        foreach ( $this->fields_config as $field ) {
+            $key   = sanitize_key( $field['key'] );
+            $value = $order->get_meta( $key, true );
+
+            // Fallback: if not in order_meta, try user_meta
+            if ( ( '' === $value || false === $value ) && $customer_id ) {
+                $value = get_user_meta( $customer_id, $key, true );
+            }
+
+            if ( '' !== $value && false !== $value ) {
+                $result[] = array(
+                    'label' => $field['label'],
+                    'key'   => $key,
+                    'value' => $value,
+                );
+            }
+        }
+
+        return $result;
+    }
+
+    // =========================================================================
     // TOGGLE JS
     // =========================================================================
 
