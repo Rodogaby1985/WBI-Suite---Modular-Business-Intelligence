@@ -181,6 +181,50 @@ class WBI_Employees_Module {
             created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id)
         ) $charset;" );
+
+        $this->maybe_seed_data();
+    }
+
+    private function maybe_seed_data() {
+        global $wpdb;
+
+        // Departments
+        if ( ! $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_departments" ) ) {
+            $departments = array( 'Administración', 'Ventas', 'Operaciones', 'RRHH', 'IT' );
+            $colors      = array( '#0073aa', '#46b450', '#e65054', '#9b59b6', '#00a0d2' );
+            foreach ( $departments as $i => $name ) {
+                $wpdb->insert( $wpdb->prefix . 'wbi_departments', array(
+                    'name'  => $name,
+                    'color' => $colors[ $i ],
+                ) );
+            }
+        }
+
+        // Work locations
+        if ( ! $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_work_locations" ) ) {
+            $wpdb->insert( $wpdb->prefix . 'wbi_work_locations', array( 'name' => 'Oficina Central', 'type' => 'oficina', 'address' => '' ) );
+            $wpdb->insert( $wpdb->prefix . 'wbi_work_locations', array( 'name' => 'Remoto',          'type' => 'remoto',  'address' => '' ) );
+        }
+
+        // Work schedules
+        if ( ! $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_work_schedules" ) ) {
+            $wpdb->insert( $wpdb->prefix . 'wbi_work_schedules', array( 'name' => 'Jornada Completa', 'hours_per_week' => 40, 'description' => 'Lunes a viernes, 8 horas diarias' ) );
+            $wpdb->insert( $wpdb->prefix . 'wbi_work_schedules', array( 'name' => 'Media Jornada',    'hours_per_week' => 20, 'description' => 'Lunes a viernes, 4 horas diarias' ) );
+        }
+
+        // Departure reasons
+        if ( ! $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_departure_reasons" ) ) {
+            foreach ( array( 'Renuncia', 'Despido', 'Fin de contrato', 'Jubilación' ) as $reason ) {
+                $wpdb->insert( $wpdb->prefix . 'wbi_departure_reasons', array( 'name' => $reason ) );
+            }
+        }
+
+        // Skill types
+        if ( ! $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_skill_types" ) ) {
+            foreach ( array( 'Idiomas', 'Programación', 'Gestión', 'Comunicación' ) as $skill ) {
+                $wpdb->insert( $wpdb->prefix . 'wbi_skill_types', array( 'name' => $skill ) );
+            }
+        }
     }
 
     // =========================================================================
@@ -193,20 +237,92 @@ class WBI_Employees_Module {
             return;
         }
 
-        add_menu_page(
-            'Empleados / RRHH',
-            '👥 Empleados',
-            'manage_options',
-            'wbi-employees',
-            array( $this, 'page_employees' ),
-            'dashicons-groups',
-            54
-        );
+        $cap = current_user_can( 'manage_options' ) ? 'manage_options' : 'manage_woocommerce';
 
-        add_submenu_page( 'wbi-employees', 'Empleados',      'Empleados',      'manage_options', 'wbi-employees',             array( $this, 'page_employees' ) );
-        add_submenu_page( 'wbi-employees', 'Departamentos',  'Departamentos',  'manage_options', 'wbi-employees-departments',  array( $this, 'page_departments' ) );
-        add_submenu_page( 'wbi-employees', 'Contratos',      'Contratos',      'manage_options', 'wbi-employees-contracts',    array( $this, 'page_contracts' ) );
-        add_submenu_page( 'wbi-employees', 'Configuración',  'Configuración',  'manage_options', 'wbi-employees-config',       array( $this, 'page_config' ) );
+        add_submenu_page(
+            'wbi-dashboard-view',
+            'Empleados / RRHH',
+            '<span class="dashicons dashicons-groups" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> Empleados',
+            $cap,
+            'wbi-employees',
+            array( $this, 'render_page' )
+        );
+    }
+
+    // =========================================================================
+    // PAGE ROUTER
+    // =========================================================================
+
+    public function render_page() {
+        if ( ! current_user_can( 'manage_options' ) && ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( esc_html__( 'No tenés permisos para acceder a esta página.', 'wbi-suite' ) );
+        }
+
+        $tab    = sanitize_key( $_GET['tab']    ?? 'employees' );
+        $action = sanitize_key( $_GET['action'] ?? '' );
+
+        // Form actions render full-page (with their own wrap + back button)
+        if ( in_array( $action, array( 'new', 'edit' ), true ) ) {
+            switch ( $tab ) {
+                case 'departments':
+                    $this->render_department_form( $action );
+                    return;
+                case 'contracts':
+                    $this->render_contract_form( $action );
+                    return;
+                default:
+                    $this->render_employee_form( $action );
+                    return;
+            }
+        }
+
+        $base_url = admin_url( 'admin.php?page=wbi-employees' );
+        ?>
+        <div class="wrap">
+            <h1 class="wp-heading-inline">
+                <span class="dashicons dashicons-groups" style="font-size:22px;vertical-align:middle;margin-right:6px;"></span>
+                Empleados / RRHH
+            </h1>
+
+            <nav class="nav-tab-wrapper" style="margin-top:12px;">
+                <a href="<?php echo esc_url( $base_url . '&tab=employees' ); ?>"
+                   class="nav-tab <?php echo 'employees' === $tab ? 'nav-tab-active' : ''; ?>">
+                    👥 Empleados
+                </a>
+                <a href="<?php echo esc_url( $base_url . '&tab=departments' ); ?>"
+                   class="nav-tab <?php echo 'departments' === $tab ? 'nav-tab-active' : ''; ?>">
+                    🏢 Departamentos
+                </a>
+                <a href="<?php echo esc_url( $base_url . '&tab=contracts' ); ?>"
+                   class="nav-tab <?php echo 'contracts' === $tab ? 'nav-tab-active' : ''; ?>">
+                    📋 Contratos
+                </a>
+                <a href="<?php echo esc_url( $base_url . '&tab=settings' ); ?>"
+                   class="nav-tab <?php echo 'settings' === $tab ? 'nav-tab-active' : ''; ?>">
+                    ⚙️ Configuración
+                </a>
+            </nav>
+
+            <div style="margin-top:16px;">
+                <?php
+                switch ( $tab ) {
+                    case 'departments':
+                        $this->render_department_list();
+                        break;
+                    case 'contracts':
+                        $this->render_contract_list();
+                        break;
+                    case 'settings':
+                        $this->page_config();
+                        break;
+                    default:
+                        $this->render_employee_list();
+                        break;
+                }
+                ?>
+            </div>
+        </div>
+        <?php
     }
 
     // =========================================================================
@@ -214,13 +330,7 @@ class WBI_Employees_Module {
     // =========================================================================
 
     public function enqueue_assets( $hook ) {
-        $pages = array(
-            'toplevel_page_wbi-employees',
-            'wbi-employees_page_wbi-employees-departments',
-            'wbi-employees_page_wbi-employees-contracts',
-            'wbi-employees_page_wbi-employees-config',
-        );
-        if ( ! in_array( $hook, $pages, true ) ) {
+        if ( false === strpos( $hook, 'wbi-employees' ) ) {
             return;
         }
         wp_add_inline_style( 'wp-admin', $this->get_inline_css() );
@@ -413,7 +523,7 @@ class WBI_Employees_Module {
         } else {
             $wpdb->insert( $wpdb->prefix . 'wbi_departments', $data );
         }
-        wp_redirect( admin_url( 'admin.php?page=wbi-employees-departments&saved=1' ) );
+        wp_redirect( admin_url( 'admin.php?page=wbi-employees&tab=departments&saved=1' ) );
         exit;
     }
 
@@ -423,7 +533,7 @@ class WBI_Employees_Module {
         if ( $id > 0 ) {
             $wpdb->delete( $wpdb->prefix . 'wbi_departments', array( 'id' => $id ) );
         }
-        wp_redirect( admin_url( 'admin.php?page=wbi-employees-departments&deleted=1' ) );
+        wp_redirect( admin_url( 'admin.php?page=wbi-employees&tab=departments&deleted=1' ) );
         exit;
     }
 
@@ -446,7 +556,7 @@ class WBI_Employees_Module {
         } else {
             $wpdb->insert( $wpdb->prefix . 'wbi_employee_contracts', $data );
         }
-        wp_redirect( admin_url( 'admin.php?page=wbi-employees-contracts&saved=1' ) );
+        wp_redirect( admin_url( 'admin.php?page=wbi-employees&tab=contracts&saved=1' ) );
         exit;
     }
 
@@ -456,7 +566,7 @@ class WBI_Employees_Module {
         if ( $id > 0 ) {
             $wpdb->delete( $wpdb->prefix . 'wbi_employee_contracts', array( 'id' => $id ) );
         }
-        wp_redirect( admin_url( 'admin.php?page=wbi-employees-contracts&deleted=1' ) );
+        wp_redirect( admin_url( 'admin.php?page=wbi-employees&tab=contracts&deleted=1' ) );
         exit;
     }
 
@@ -478,7 +588,7 @@ class WBI_Employees_Module {
         );
 
         if ( ! isset( $table_map[ $type ] ) ) {
-            wp_redirect( admin_url( 'admin.php?page=wbi-employees-config' ) );
+            wp_redirect( admin_url( 'admin.php?page=wbi-employees&tab=settings' ) );
             exit;
         }
 
@@ -491,7 +601,7 @@ class WBI_Employees_Module {
             $wpdb->insert( $table, $data );
         }
 
-        wp_redirect( admin_url( 'admin.php?page=wbi-employees-config&tab=' . $type . '&saved=1' ) );
+        wp_redirect( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=' . $type . '&saved=1' ) );
         exit;
     }
 
@@ -556,7 +666,7 @@ class WBI_Employees_Module {
             $wpdb->delete( $table_map[ $type ], array( 'id' => $id ) );
         }
 
-        wp_redirect( admin_url( 'admin.php?page=wbi-employees-config&tab=' . $type . '&deleted=1' ) );
+        wp_redirect( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=' . $type . '&deleted=1' ) );
         exit;
     }
 
@@ -682,36 +792,35 @@ class WBI_Employees_Module {
         $employees   = $this->get_employees( $filters );
         $view        = sanitize_text_field( $_GET['view'] ?? 'list' );
         ?>
-        <div class="wrap">
-            <div class="wbi-emp-header">
-                <h1>👥 Empleados</h1>
-                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&action=new' ) ); ?>" class="button button-primary">+ Nuevo Empleado</a>
-            </div>
+        <div class="wbi-emp-header">
+            <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=employees&action=new' ) ); ?>" class="button button-primary">+ Nuevo Empleado</a>
+        </div>
 
-            <?php
-            if ( ! empty( $_GET['saved'] ) )   $this->notice( 'success', 'Empleado guardado correctamente.' );
-            if ( ! empty( $_GET['deleted'] ) ) $this->notice( 'success', 'Empleado eliminado.' );
-            ?>
+        <?php
+        if ( ! empty( $_GET['saved'] ) )   $this->notice( 'success', 'Empleado guardado correctamente.' );
+        if ( ! empty( $_GET['deleted'] ) ) $this->notice( 'success', 'Empleado eliminado.' );
+        ?>
 
-            <!-- Filters -->
-            <form method="get" class="wbi-filter-bar">
-                <input type="hidden" name="page" value="wbi-employees">
-                <input type="text" name="search" value="<?php echo esc_attr( $filters['search'] ); ?>" placeholder="Buscar empleado…" style="width:220px;">
-                <select name="department_id">
-                    <option value="">Todos los departamentos</option>
-                    <?php foreach ( $departments as $d ) : ?>
-                        <option value="<?php echo esc_attr( $d->id ); ?>" <?php selected( $filters['department_id'], $d->id ); ?>><?php echo esc_html( $d->name ); ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <select name="status">
-                    <option value="">Todos los estados</option>
-                    <option value="active"   <?php selected( $filters['status'], 'active' ); ?>>Activos</option>
-                    <option value="archived" <?php selected( $filters['status'], 'archived' ); ?>>Archivados</option>
-                    <option value="departed" <?php selected( $filters['status'], 'departed' ); ?>>Egresados</option>
-                </select>
-                <button type="submit" class="button">Filtrar</button>
-                <?php if ( $filters['search'] || $filters['department_id'] || $filters['status'] ) : ?>
-                    <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees' ) ); ?>" class="button">Limpiar</a>
+        <!-- Filters -->
+        <form method="get" class="wbi-filter-bar">
+            <input type="hidden" name="page" value="wbi-employees">
+            <input type="hidden" name="tab" value="employees">
+            <input type="text" name="search" value="<?php echo esc_attr( $filters['search'] ); ?>" placeholder="Buscar empleado…" style="width:220px;">
+            <select name="department_id">
+                <option value="">Todos los departamentos</option>
+                <?php foreach ( $departments as $d ) : ?>
+                    <option value="<?php echo esc_attr( $d->id ); ?>" <?php selected( $filters['department_id'], $d->id ); ?>><?php echo esc_html( $d->name ); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select name="status">
+                <option value="">Todos los estados</option>
+                <option value="active"   <?php selected( $filters['status'], 'active' ); ?>>Activos</option>
+                <option value="archived" <?php selected( $filters['status'], 'archived' ); ?>>Archivados</option>
+                <option value="departed" <?php selected( $filters['status'], 'departed' ); ?>>Egresados</option>
+            </select>
+            <button type="submit" class="button">Filtrar</button>
+            <?php if ( $filters['search'] || $filters['department_id'] || $filters['status'] ) : ?>
+                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=employees' ) ); ?>" class="button">Limpiar</a>
                 <?php endif; ?>
                 <span style="margin-left:auto; color:#50575e; font-size:13px;"><?php echo count( $employees ); ?> empleados</span>
                 <div class="wbi-view-toggle">
@@ -754,7 +863,7 @@ class WBI_Employees_Module {
                                     </span>
                                 </td>
                                 <td>
-                                    <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&action=edit&id=' . $emp->id ) ); ?>" class="button button-small">Editar</a>
+                                    <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=employees&action=edit&id=' . $emp->id ) ); ?>" class="button button-small">Editar</a>
                                     <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar este empleado?');">
                                         <?php $this->nonce_field(); ?>
                                         <input type="hidden" name="wbi_emp_action" value="delete_employee">
@@ -797,7 +906,7 @@ class WBI_Employees_Module {
                             <?php endif; ?>
                         </div>
                         <div class="emp-actions">
-                            <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&action=edit&id=' . $emp->id ) ); ?>" class="button button-small">Editar</a>
+                            <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=employees&action=edit&id=' . $emp->id ) ); ?>" class="button button-small">Editar</a>
                             <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar este empleado?');">
                                 <?php $this->nonce_field(); ?>
                                 <input type="hidden" name="wbi_emp_action" value="delete_employee">
@@ -809,7 +918,6 @@ class WBI_Employees_Module {
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
-        </div>
 
         <script>
         function setView(v) {
@@ -844,7 +952,7 @@ class WBI_Employees_Module {
         <div class="wrap">
             <div class="wbi-emp-header">
                 <h1><?php echo esc_html( $title ); ?></h1>
-                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees' ) ); ?>" class="button">← Volver</a>
+                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=employees' ) ); ?>" class="button">← Volver</a>
             </div>
 
             <form method="post">
@@ -1111,48 +1219,45 @@ class WBI_Employees_Module {
     private function render_department_list() {
         $depts = $this->get_departments();
         ?>
-        <div class="wrap">
-            <div class="wbi-emp-header">
-                <h1>🏢 Departamentos</h1>
-                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-departments&action=new' ) ); ?>" class="button button-primary">+ Nuevo Departamento</a>
-            </div>
+        <div class="wbi-emp-header">
+            <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=departments&action=new' ) ); ?>" class="button button-primary">+ Nuevo Departamento</a>
+        </div>
 
-            <?php
-            if ( ! empty( $_GET['saved'] ) )   $this->notice( 'success', 'Departamento guardado.' );
-            if ( ! empty( $_GET['deleted'] ) ) $this->notice( 'success', 'Departamento eliminado.' );
-            ?>
+        <?php
+        if ( ! empty( $_GET['saved'] ) )   $this->notice( 'success', 'Departamento guardado.' );
+        if ( ! empty( $_GET['deleted'] ) ) $this->notice( 'success', 'Departamento eliminado.' );
+        ?>
 
-            <div class="wbi-emp-card-grid">
-                <?php if ( empty( $depts ) ) : ?>
-                    <p style="color:#50575e;">No hay departamentos registrados.</p>
-                <?php else : ?>
-                    <?php foreach ( $depts as $d ) : ?>
-                    <?php $count = $this->get_department_employee_count( $d->id ); ?>
-                    <div class="wbi-dept-card">
-                        <div class="wbi-dept-color-badge" style="background:<?php echo esc_attr( $d->color ); ?>;"></div>
-                        <div style="flex:1;">
-                            <p class="wbi-dept-name"><?php echo esc_html( $d->name ); ?></p>
-                            <p class="wbi-dept-count">👥 <?php echo esc_html( $count ); ?> empleado<?php echo 1 !== $count ? 's' : ''; ?> activo<?php echo 1 !== $count ? 's' : ''; ?></p>
-                            <?php if ( $d->parent_id ) : ?>
-                                <p style="font-size:12px; color:#50575e;">↳ <?php echo esc_html( $this->get_department_name( $d->parent_id ) ); ?></p>
-                            <?php endif; ?>
-                            <?php if ( $d->manager_id ) : ?>
-                                <p style="font-size:12px; color:#50575e;">Manager: <?php echo $this->get_employee_name( $d->manager_id ); ?></p>
-                            <?php endif; ?>
-                        </div>
-                        <div class="wbi-dept-actions">
-                            <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-departments&action=edit&id=' . $d->id ) ); ?>" class="button button-small">Editar</a>
-                            <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar este departamento?');">
-                                <?php $this->nonce_field(); ?>
-                                <input type="hidden" name="wbi_emp_action" value="delete_department">
-                                <input type="hidden" name="department_id" value="<?php echo esc_attr( $d->id ); ?>">
-                                <button type="submit" class="button button-small" style="color:#a00;">✕</button>
-                            </form>
-                        </div>
+        <div class="wbi-emp-card-grid">
+            <?php if ( empty( $depts ) ) : ?>
+                <p style="color:#50575e;">No hay departamentos registrados.</p>
+            <?php else : ?>
+                <?php foreach ( $depts as $d ) : ?>
+                <?php $count = $this->get_department_employee_count( $d->id ); ?>
+                <div class="wbi-dept-card">
+                    <div class="wbi-dept-color-badge" style="background:<?php echo esc_attr( $d->color ); ?>;"></div>
+                    <div style="flex:1;">
+                        <p class="wbi-dept-name"><?php echo esc_html( $d->name ); ?></p>
+                        <p class="wbi-dept-count">👥 <?php echo esc_html( $count ); ?> empleado<?php echo 1 !== $count ? 's' : ''; ?> activo<?php echo 1 !== $count ? 's' : ''; ?></p>
+                        <?php if ( $d->parent_id ) : ?>
+                            <p style="font-size:12px; color:#50575e;">↳ <?php echo esc_html( $this->get_department_name( $d->parent_id ) ); ?></p>
+                        <?php endif; ?>
+                        <?php if ( $d->manager_id ) : ?>
+                            <p style="font-size:12px; color:#50575e;">Manager: <?php echo $this->get_employee_name( $d->manager_id ); ?></p>
+                        <?php endif; ?>
                     </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
+                    <div class="wbi-dept-actions">
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=departments&action=edit&id=' . $d->id ) ); ?>" class="button button-small">Editar</a>
+                        <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar este departamento?');">
+                            <?php $this->nonce_field(); ?>
+                            <input type="hidden" name="wbi_emp_action" value="delete_department">
+                            <input type="hidden" name="department_id" value="<?php echo esc_attr( $d->id ); ?>">
+                            <button type="submit" class="button button-small" style="color:#a00;">✕</button>
+                        </form>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
         </div>
         <?php
     }
@@ -1167,7 +1272,7 @@ class WBI_Employees_Module {
         <div class="wrap">
             <div class="wbi-emp-header">
                 <h1><?php echo esc_html( $title ); ?></h1>
-                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-departments' ) ); ?>" class="button">← Volver</a>
+                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=departments' ) ); ?>" class="button">← Volver</a>
             </div>
             <form method="post">
                 <?php $this->nonce_field(); ?>
@@ -1218,45 +1323,42 @@ class WBI_Employees_Module {
         $contracts = $wpdb->get_results( "SELECT c.*, e.first_name, e.last_name FROM {$wpdb->prefix}wbi_employee_contracts c LEFT JOIN {$wpdb->prefix}wbi_employees e ON e.id = c.employee_id ORDER BY c.created_at DESC" );
         $status_labels = array( 'draft' => 'Borrador', 'active' => 'Activo', 'expired' => 'Vencido', 'cancelled' => 'Cancelado' );
         ?>
-        <div class="wrap">
-            <div class="wbi-emp-header">
-                <h1>📋 Contratos</h1>
-                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-contracts&action=new' ) ); ?>" class="button button-primary">+ Nuevo Contrato</a>
-            </div>
-            <?php
-            if ( ! empty( $_GET['saved'] ) )   $this->notice( 'success', 'Contrato guardado.' );
-            if ( ! empty( $_GET['deleted'] ) ) $this->notice( 'success', 'Contrato eliminado.' );
-            ?>
-            <table class="widefat wbi-sortable">
-                <thead>
-                    <tr><th>Empleado</th><th>Salario</th><th>Inicio</th><th>Fin</th><th>Estado</th><th>Acciones</th></tr>
-                </thead>
-                <tbody>
-                    <?php if ( empty( $contracts ) ) : ?>
-                        <tr><td colspan="6" style="text-align:center; color:#50575e; padding:24px;">No hay contratos registrados.</td></tr>
-                    <?php else : ?>
-                        <?php foreach ( $contracts as $c ) : ?>
-                        <tr>
-                            <td><?php echo esc_html( $c->first_name . ' ' . $c->last_name ); ?></td>
-                            <td>$<?php echo number_format( $c->salary, 2, ',', '.' ); ?></td>
-                            <td><?php echo esc_html( $c->start_date ?? '—' ); ?></td>
-                            <td><?php echo esc_html( $c->end_date ?? '—' ); ?></td>
-                            <td><span class="wbi-emp-status <?php echo esc_attr( $c->status ); ?>"><?php echo esc_html( $status_labels[ $c->status ] ?? $c->status ); ?></span></td>
-                            <td>
-                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-contracts&action=edit&id=' . $c->id ) ); ?>" class="button button-small">Editar</a>
-                                <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar este contrato?');">
-                                    <?php $this->nonce_field(); ?>
-                                    <input type="hidden" name="wbi_emp_action" value="delete_contract">
-                                    <input type="hidden" name="contract_id" value="<?php echo esc_attr( $c->id ); ?>">
-                                    <button type="submit" class="button button-small" style="color:#a00;">Eliminar</button>
-                                </form>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+        <div class="wbi-emp-header">
+            <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=contracts&action=new' ) ); ?>" class="button button-primary">+ Nuevo Contrato</a>
         </div>
+        <?php
+        if ( ! empty( $_GET['saved'] ) )   $this->notice( 'success', 'Contrato guardado.' );
+        if ( ! empty( $_GET['deleted'] ) ) $this->notice( 'success', 'Contrato eliminado.' );
+        ?>
+        <table class="widefat wbi-sortable">
+            <thead>
+                <tr><th>Empleado</th><th>Salario</th><th>Inicio</th><th>Fin</th><th>Estado</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+                <?php if ( empty( $contracts ) ) : ?>
+                    <tr><td colspan="6" style="text-align:center; color:#50575e; padding:24px;">No hay contratos registrados.</td></tr>
+                <?php else : ?>
+                    <?php foreach ( $contracts as $c ) : ?>
+                    <tr>
+                        <td><?php echo esc_html( $c->first_name . ' ' . $c->last_name ); ?></td>
+                        <td>$<?php echo number_format( $c->salary, 2, ',', '.' ); ?></td>
+                        <td><?php echo esc_html( $c->start_date ?? '—' ); ?></td>
+                        <td><?php echo esc_html( $c->end_date ?? '—' ); ?></td>
+                        <td><span class="wbi-emp-status <?php echo esc_attr( $c->status ); ?>"><?php echo esc_html( $status_labels[ $c->status ] ?? $c->status ); ?></span></td>
+                        <td>
+                            <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=contracts&action=edit&id=' . $c->id ) ); ?>" class="button button-small">Editar</a>
+                            <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar este contrato?');">
+                                <?php $this->nonce_field(); ?>
+                                <input type="hidden" name="wbi_emp_action" value="delete_contract">
+                                <input type="hidden" name="contract_id" value="<?php echo esc_attr( $c->id ); ?>">
+                                <button type="submit" class="button button-small" style="color:#a00;">Eliminar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
         <?php
     }
 
@@ -1272,7 +1374,7 @@ class WBI_Employees_Module {
         <div class="wrap">
             <div class="wbi-emp-header">
                 <h1><?php echo esc_html( $title ); ?></h1>
-                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-contracts' ) ); ?>" class="button">← Volver</a>
+                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=contracts' ) ); ?>" class="button">← Volver</a>
             </div>
             <form method="post">
                 <?php $this->nonce_field(); ?>
@@ -1318,8 +1420,8 @@ class WBI_Employees_Module {
     // =========================================================================
 
     public function page_config() {
-        $tab  = sanitize_text_field( $_GET['tab'] ?? 'location' );
-        $tabs = array(
+        $subtab = sanitize_key( $_GET['subtab'] ?? 'location' );
+        $tabs   = array(
             'location'          => '📍 Ubicaciones',
             'schedule'          => '🕐 Horarios',
             'departure_reason'  => '🚪 Motivos de egreso',
@@ -1328,39 +1430,31 @@ class WBI_Employees_Module {
             'job_position'      => '💼 Puestos de trabajo',
             'contract_template' => '📄 Plantillas de contrato',
         );
+
+        if ( ! empty( $_GET['saved'] ) )   $this->notice( 'success', 'Guardado correctamente.' );
+        if ( ! empty( $_GET['deleted'] ) ) $this->notice( 'success', 'Eliminado correctamente.' );
+
+        $base = admin_url( 'admin.php?page=wbi-employees&tab=settings' );
         ?>
-        <div class="wrap">
-            <h1>⚙️ Configuración de Empleados</h1>
+        <nav class="nav-tab-wrapper" style="margin-top:8px; margin-bottom:16px;">
+            <?php foreach ( $tabs as $key => $label ) : ?>
+                <a href="<?php echo esc_url( $base . '&subtab=' . $key ); ?>"
+                   class="nav-tab <?php echo $subtab === $key ? 'nav-tab-active' : ''; ?>">
+                    <?php echo esc_html( $label ); ?>
+                </a>
+            <?php endforeach; ?>
+        </nav>
 
-            <?php
-            if ( ! empty( $_GET['saved'] ) )   $this->notice( 'success', 'Guardado correctamente.' );
-            if ( ! empty( $_GET['deleted'] ) ) $this->notice( 'success', 'Eliminado correctamente.' );
-            ?>
-
-            <nav class="nav-tab-wrapper">
-                <?php foreach ( $tabs as $key => $label ) : ?>
-                    <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=' . $key ) ); ?>"
-                       class="nav-tab <?php echo $tab === $key ? 'nav-tab-active' : ''; ?>">
-                        <?php echo esc_html( $label ); ?>
-                    </a>
-                <?php endforeach; ?>
-            </nav>
-
-            <div style="margin-top:20px;">
-                <?php
-                switch ( $tab ) {
-                    case 'location':         $this->render_config_locations(); break;
-                    case 'schedule':         $this->render_config_schedules(); break;
-                    case 'departure_reason': $this->render_config_departure_reasons(); break;
-                    case 'skill_type':       $this->render_config_skill_types(); break;
-                    case 'tag':              $this->render_config_tags(); break;
-                    case 'job_position':     $this->render_config_job_positions(); break;
-                    case 'contract_template':$this->render_config_contract_templates(); break;
-                }
-                ?>
-            </div>
-        </div>
         <?php
+        switch ( $subtab ) {
+            case 'location':          $this->render_config_locations(); break;
+            case 'schedule':          $this->render_config_schedules(); break;
+            case 'departure_reason':  $this->render_config_departure_reasons(); break;
+            case 'skill_type':        $this->render_config_skill_types(); break;
+            case 'tag':               $this->render_config_tags(); break;
+            case 'job_position':      $this->render_config_job_positions(); break;
+            case 'contract_template': $this->render_config_contract_templates(); break;
+        }
     }
 
     // ── Config: Locations ─────────────────────────────────────────────────────
@@ -1386,7 +1480,7 @@ class WBI_Employees_Module {
                             <td><?php echo esc_html( ucfirst( $it->type ) ); ?></td>
                             <td><?php echo esc_html( $it->address ); ?></td>
                             <td>
-                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=location&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
+                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=location&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
                                 <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar?');">
                                     <?php $this->nonce_field(); ?>
                                     <input type="hidden" name="wbi_emp_action" value="delete_config_item">
@@ -1419,7 +1513,7 @@ class WBI_Employees_Module {
                     <p><label>Dirección<br><input type="text" name="location_address" value="<?php echo esc_attr( $item->address ?? '' ); ?>" class="widefat"></label></p>
                     <?php submit_button( 'Guardar', 'primary', 'submit', false ); ?>
                     <?php if ( $item ) : ?>
-                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=location' ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=location' ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
                     <?php endif; ?>
                 </form>
             </div>
@@ -1450,7 +1544,7 @@ class WBI_Employees_Module {
                             <td><?php echo esc_html( $it->hours_per_week ); ?></td>
                             <td><?php echo esc_html( $it->description ); ?></td>
                             <td>
-                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=schedule&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
+                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=schedule&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
                                 <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar?');">
                                     <?php $this->nonce_field(); ?>
                                     <input type="hidden" name="wbi_emp_action" value="delete_config_item">
@@ -1477,7 +1571,7 @@ class WBI_Employees_Module {
                     <p><label>Descripción<br><textarea name="config_description" rows="3" class="widefat"><?php echo esc_textarea( $item->description ?? '' ); ?></textarea></label></p>
                     <?php submit_button( 'Guardar', 'primary', 'submit', false ); ?>
                     <?php if ( $item ) : ?>
-                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=schedule' ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=schedule' ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
                     <?php endif; ?>
                 </form>
             </div>
@@ -1506,7 +1600,7 @@ class WBI_Employees_Module {
                         <tr>
                             <td><?php echo esc_html( $it->name ); ?></td>
                             <td>
-                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=' . $type . '&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
+                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=' . $type . '&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
                                 <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar?');">
                                     <?php $this->nonce_field(); ?>
                                     <input type="hidden" name="wbi_emp_action" value="delete_config_item">
@@ -1531,7 +1625,7 @@ class WBI_Employees_Module {
                     <p><label>Nombre *<br><input type="text" name="config_name" value="<?php echo esc_attr( $item->name ?? '' ); ?>" class="widefat" required></label></p>
                     <?php submit_button( 'Guardar', 'primary', 'submit', false ); ?>
                     <?php if ( $item ) : ?>
-                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=' . $type ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=' . $type ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
                     <?php endif; ?>
                 </form>
             </div>
@@ -1571,7 +1665,7 @@ class WBI_Employees_Module {
                             <td><span style="background:<?php echo esc_attr( $it->color ); ?>; color:#fff; padding:2px 10px; border-radius:12px; font-size:12px;"><?php echo esc_html( $it->name ); ?></span></td>
                             <td><?php echo esc_html( $it->color ); ?></td>
                             <td>
-                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=tag&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
+                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=tag&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
                                 <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar?');">
                                     <?php $this->nonce_field(); ?>
                                     <input type="hidden" name="wbi_emp_action" value="delete_config_item">
@@ -1597,7 +1691,7 @@ class WBI_Employees_Module {
                     <p><label>Color<br><input type="color" name="tag_color" value="<?php echo esc_attr( $item->color ?? '#0073aa' ); ?>"></label></p>
                     <?php submit_button( 'Guardar', 'primary', 'submit', false ); ?>
                     <?php if ( $item ) : ?>
-                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=tag' ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=tag' ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
                     <?php endif; ?>
                 </form>
             </div>
@@ -1630,7 +1724,7 @@ class WBI_Employees_Module {
                             <td><?php echo esc_html( 'abierto' === $it->status ? 'Abierto' : 'Cerrado' ); ?></td>
                             <td><?php echo esc_html( $it->expected_employees ); ?></td>
                             <td>
-                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=job_position&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
+                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=job_position&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
                                 <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar?');">
                                     <?php $this->nonce_field(); ?>
                                     <input type="hidden" name="wbi_emp_action" value="delete_config_item">
@@ -1671,7 +1765,7 @@ class WBI_Employees_Module {
                     <p><label>Descripción<br><textarea name="config_description" rows="3" class="widefat"><?php echo esc_textarea( $item->description ?? '' ); ?></textarea></label></p>
                     <?php submit_button( 'Guardar', 'primary', 'submit', false ); ?>
                     <?php if ( $item ) : ?>
-                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=job_position' ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=job_position' ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
                     <?php endif; ?>
                 </form>
             </div>
@@ -1703,7 +1797,7 @@ class WBI_Employees_Module {
                             <td><?php echo esc_html( $it->salary_structure ); ?></td>
                             <td><?php echo esc_html( $it->schedule_name ?? '—' ); ?></td>
                             <td>
-                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=contract_template&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
+                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=contract_template&edit=' . $it->id ) ); ?>" class="button button-small">Editar</a>
                                 <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar?');">
                                     <?php $this->nonce_field(); ?>
                                     <input type="hidden" name="wbi_emp_action" value="delete_config_item">
@@ -1738,7 +1832,7 @@ class WBI_Employees_Module {
                     <p><label>Descripción<br><textarea name="config_description" rows="3" class="widefat"><?php echo esc_textarea( $item->description ?? '' ); ?></textarea></label></p>
                     <?php submit_button( 'Guardar', 'primary', 'submit', false ); ?>
                     <?php if ( $item ) : ?>
-                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees-config&tab=contract_template' ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=settings&subtab=contract_template' ) ); ?>" class="button" style="margin-left:6px;">Cancelar</a>
                     <?php endif; ?>
                 </form>
             </div>
