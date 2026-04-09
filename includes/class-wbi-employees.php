@@ -189,7 +189,7 @@ class WBI_Employees_Module {
         global $wpdb;
 
         // Departments
-        if ( ! $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_departments" ) ) {
+        if ( 0 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_departments" ) ) {
             $departments = array( 'Administración', 'Ventas', 'Operaciones', 'RRHH', 'IT' );
             $colors      = array( '#0073aa', '#46b450', '#e65054', '#9b59b6', '#00a0d2' );
             foreach ( $departments as $i => $name ) {
@@ -201,26 +201,26 @@ class WBI_Employees_Module {
         }
 
         // Work locations
-        if ( ! $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_work_locations" ) ) {
+        if ( 0 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_work_locations" ) ) {
             $wpdb->insert( $wpdb->prefix . 'wbi_work_locations', array( 'name' => 'Oficina Central', 'type' => 'oficina', 'address' => '' ) );
             $wpdb->insert( $wpdb->prefix . 'wbi_work_locations', array( 'name' => 'Remoto',          'type' => 'remoto',  'address' => '' ) );
         }
 
         // Work schedules
-        if ( ! $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_work_schedules" ) ) {
+        if ( 0 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_work_schedules" ) ) {
             $wpdb->insert( $wpdb->prefix . 'wbi_work_schedules', array( 'name' => 'Jornada Completa', 'hours_per_week' => 40, 'description' => 'Lunes a viernes, 8 horas diarias' ) );
             $wpdb->insert( $wpdb->prefix . 'wbi_work_schedules', array( 'name' => 'Media Jornada',    'hours_per_week' => 20, 'description' => 'Lunes a viernes, 4 horas diarias' ) );
         }
 
         // Departure reasons
-        if ( ! $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_departure_reasons" ) ) {
+        if ( 0 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_departure_reasons" ) ) {
             foreach ( array( 'Renuncia', 'Despido', 'Fin de contrato', 'Jubilación' ) as $reason ) {
                 $wpdb->insert( $wpdb->prefix . 'wbi_departure_reasons', array( 'name' => $reason ) );
             }
         }
 
         // Skill types
-        if ( ! $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_skill_types" ) ) {
+        if ( 0 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wbi_skill_types" ) ) {
             foreach ( array( 'Idiomas', 'Programación', 'Gestión', 'Comunicación' ) as $skill ) {
                 $wpdb->insert( $wpdb->prefix . 'wbi_skill_types', array( 'name' => $skill ) );
             }
