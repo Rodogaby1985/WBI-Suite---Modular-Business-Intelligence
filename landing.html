@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>wooErp — Suite de Gestión para WooCommerce | WBI Suite</title>
-  <meta name="description" content="wooErp convierte tu WooCommerce en un ERP completo. 25 módulos activables, facturación AFIP, CRM, picking, RRHH, BI dashboard y más. Sin salir de WordPress." />
-  <meta name="keywords" content="WooCommerce ERP, plugin ERP WordPress, facturación AFIP, CRM WooCommerce, BI Suite, wooErp, WBI Suite, RRHH WooCommerce, gestión empleados" />
+  <meta name="description" content="wooErp convierte tu WooCommerce en un ERP completo. 25 módulos activables, facturación AFIP, CRM, picking, BI dashboard y más. Sin salir de WordPress." />
+  <meta name="keywords" content="WooCommerce ERP, plugin ERP WordPress, facturación AFIP, CRM WooCommerce, BI Suite, wooErp, WBI Suite" />
   <meta property="og:title" content="wooErp — Suite de Gestión para WooCommerce" />
   <meta property="og:description" content="Tu tienda de WooCommerce ya tiene todo. Solo le faltaba un cerebro." />
   <meta property="og:type" content="website" />
@@ -963,7 +963,7 @@
     <div class="particles" id="particles" aria-hidden="true"></div>
 
     <div class="hero-content">
-      <div class="hero-badge">🧠 WBI Suite v9.0.14 — ERP Nativo para WooCommerce</div>
+      <div class="hero-badge">🧠 WBI Suite v9.0.13 — ERP Nativo para WooCommerce</div>
 
       <h1 class="hero-title">
         <span class="gradient-text">wooErp</span> —<br/>Suite de Gestión<br/>para WooCommerce
@@ -1241,10 +1241,10 @@
               <p class="module-desc">Notificaciones automáticas cuando productos llegan a nivel de stock crítico.</p>
               <span class="module-badge">Operaciones</span>
             </div>
-            <div class="module-card reveal" data-delay="6">
+            <div class="module-card reveal-scale" data-delay="8">
               <div class="module-icon">👥</div>
               <h3 class="module-name">Empleados / RRHH</h3>
-              <p class="module-desc">Gestión integral de empleados, departamentos, contratos, habilidades, currículum y reclutamiento. Todo tu equipo organizado desde WordPress.</p>
+              <p class="module-desc">Gestión completa de empleados, departamentos, contratos, habilidades, horarios de trabajo y reclutamiento. Inspirado en Odoo HR.</p>
               <span class="module-badge">Nuevo</span>
             </div>
           </div>
@@ -1440,8 +1440,8 @@
             </tr>
             <tr>
               <td>Gestión de Empleados / RRHH</td>
-              <td class="check-yes">✅ Nativo — departamentos, contratos, habilidades, currículum</td>
-              <td class="check-yes">✅ Módulo HR completo</td>
+              <td class="check-yes">✅ Departamentos, contratos, habilidades, reclutamiento</td>
+              <td class="check-yes">✅ Módulo completo (requiere licencia Enterprise para algunas funciones)</td>
             </tr>
           </tbody>
         </table>
@@ -1570,7 +1570,6 @@
           <span class="pill">✅ Instalación en minutos</span>
           <span class="pill accent">🇦🇷 AFIP nativo</span>
           <span class="pill accent">🧩 25 módulos</span>
-          <span class="pill accent">👥 RRHH</span>
         </div>
 
         <div class="hero-cta-group reveal" data-delay="2">
@@ -1678,14 +1677,11 @@
     /* ========== TYPING EFFECT ========== */
     const typingTarget = document.getElementById('typed-text');
     const phrases = [
-      "25 módulos. 6 categorías. 1 solo plugin.",
-      "Facturación AFIP. Dashboard BI. CRM. Picking. RRHH. Y más.",
-      "Tu WooCommerce ya tiene todo. Solo le faltaba un cerebro.",
-      "De ecommerce a ERP completo. Sin cambiar de plataforma.",
-      "Empleados, departamentos y contratos. RRHH nativo en WooCommerce.",
-      "Costos, márgenes, flujo de caja. Finanzas bajo control.",
-      "Pipeline de ventas. Leads. Scoring. Tu CRM integrado.",
-      "Picking con código de barras. Armado ágil de pedidos."
+      'Tu tienda de WooCommerce ya tiene todo. Solo le faltaba un cerebro.',
+      '25 módulos. Una licencia. Cero complejidad.',
+      'ERP nativo para WooCommerce. Sin sincronizaciones. Sin sorpresas.',
+      'Facturación AFIP, CRM, Picking y mucho más — dentro de WordPress.',
+      'RRHH completo: empleados, departamentos, contratos y habilidades.'
     ];
     let phraseIdx = 0, charIdx = 0, deleting = false;
     function typeLoop() {
