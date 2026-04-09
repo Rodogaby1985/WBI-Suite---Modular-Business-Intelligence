@@ -345,7 +345,7 @@ class WBI_Employees_Module {
         .wbi-emp-card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; margin-top:16px; }
         .wbi-emp-card { background:#fff; border:1px solid #c3c4c7; border-radius:8px; padding:16px; position:relative; transition:box-shadow .2s; }
         .wbi-emp-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.12); }
-        .wbi-emp-card .emp-avatar { width:56px; height:56px; border-radius:50%; object-fit:cover; background:#e0e0e0; display:flex; align-items:center; justify-content:center; font-size:24px; color:#888; overflow:hidden; flex-shrink:0; }
+        .wbi-emp-card .emp-avatar { width:56px; height:56px; border-radius:50%; background:#e0e0e0; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; color:#fff; overflow:hidden; flex-shrink:0; text-transform:uppercase; }
         .wbi-emp-card .emp-avatar img { width:100%; height:100%; object-fit:cover; }
         .wbi-emp-card .emp-name { font-size:15px; font-weight:700; margin:0 0 2px; color:#1d2327; }
         .wbi-emp-card .emp-title { font-size:12px; color:#50575e; margin:0 0 4px; }
@@ -364,6 +364,16 @@ class WBI_Employees_Module {
         .wbi-dept-name { font-size:15px; font-weight:700; margin:0 0 2px; }
         .wbi-dept-count { font-size:13px; color:#50575e; }
         .wbi-dept-actions { margin-left:auto; display:flex; gap:6px; }
+        .wbi-status-counters { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; align-items:center; }
+        .wbi-status-counter { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:14px; font-size:12px; font-weight:600; }
+        .wbi-status-counter.active { background:#d4edda; color:#155724; }
+        .wbi-status-counter.archived { background:#e2e3e5; color:#383d41; }
+        .wbi-status-counter.departed { background:#f8d7da; color:#721c24; }
+        .wbi-contract-status { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600; }
+        .wbi-contract-status.draft { background:#fff3cd; color:#856404; }
+        .wbi-contract-status.active { background:#d4edda; color:#155724; }
+        .wbi-contract-status.expired { background:#f8d7da; color:#721c24; }
+        .wbi-contract-status.cancelled { background:#e2e3e5; color:#383d41; }
         .wbi-tabs { display:flex; gap:0; border-bottom:2px solid #c3c4c7; margin-bottom:20px; flex-wrap:wrap; }
         .wbi-tab { padding:10px 18px; cursor:pointer; font-size:13px; font-weight:600; color:#50575e; border:none; background:none; border-bottom:3px solid transparent; margin-bottom:-2px; }
         .wbi-tab.active { color:#0073aa; border-bottom-color:#0073aa; }
@@ -768,6 +778,11 @@ class WBI_Employees_Module {
         echo '<div class="notice notice-' . esc_attr( $type ) . ' is-dismissible"><p>' . esc_html( $msg ) . '</p></div>';
     }
 
+    private function get_avatar_color( $name ) {
+        $colors = array( '#0073aa', '#46b450', '#e65054', '#9b59b6', '#00a0d2', '#f39c12', '#27ae60', '#e74c3c', '#2980b9', '#8e44ad' );
+        return $colors[ abs( crc32( $name ) ) % count( $colors ) ];
+    }
+
     // =========================================================================
     // PAGE: EMPLOYEES
     // =========================================================================
@@ -783,6 +798,7 @@ class WBI_Employees_Module {
     }
 
     private function render_employee_list() {
+        global $wpdb;
         $departments = $this->get_departments();
         $filters     = array(
             'search'        => sanitize_text_field( $_GET['search'] ?? '' ),
@@ -791,6 +807,14 @@ class WBI_Employees_Module {
         );
         $employees   = $this->get_employees( $filters );
         $view        = sanitize_text_field( $_GET['view'] ?? 'list' );
+
+        // Count employees by status (unfiltered)
+        $counts = array( 'active' => 0, 'archived' => 0, 'departed' => 0 );
+        foreach ( $wpdb->get_results( "SELECT status, COUNT(*) as cnt FROM {$wpdb->prefix}wbi_employees GROUP BY status" ) as $row ) {
+            if ( isset( $counts[ $row->status ] ) ) {
+                $counts[ $row->status ] = (int) $row->cnt;
+            }
+        }
         ?>
         <div class="wbi-emp-header">
             <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=employees&action=new' ) ); ?>" class="button button-primary">+ Nuevo Empleado</a>
@@ -801,8 +825,15 @@ class WBI_Employees_Module {
         if ( ! empty( $_GET['deleted'] ) ) $this->notice( 'success', 'Empleado eliminado.' );
         ?>
 
+        <!-- Status counters -->
+        <div class="wbi-status-counters">
+            <span class="wbi-status-counter active">✓ Activos: <?php echo esc_html( $counts['active'] ); ?></span>
+            <span class="wbi-status-counter archived">◎ Archivados: <?php echo esc_html( $counts['archived'] ); ?></span>
+            <span class="wbi-status-counter departed">✕ Egresados: <?php echo esc_html( $counts['departed'] ); ?></span>
+        </div>
+
         <!-- Filters -->
-        <form method="get" class="wbi-filter-bar">
+        <form method="get" class="wbi-filter-bar" id="emp-filter-form">
             <input type="hidden" name="page" value="wbi-employees">
             <input type="hidden" name="tab" value="employees">
             <input type="text" name="search" value="<?php echo esc_attr( $filters['search'] ); ?>" placeholder="Buscar empleado…" style="width:220px;">
@@ -848,10 +879,22 @@ class WBI_Employees_Module {
                         <?php if ( empty( $employees ) ) : ?>
                             <tr><td colspan="7" style="text-align:center; color:#50575e; padding:24px;">No se encontraron empleados.</td></tr>
                         <?php else : ?>
-                            <?php foreach ( $employees as $emp ) : ?>
+                            <?php foreach ( $employees as $emp ) :
+                                $initials  = strtoupper( mb_substr( $emp->first_name, 0, 1 ) . mb_substr( $emp->last_name, 0, 1 ) );
+                                $avatar_bg = $this->get_avatar_color( $emp->first_name . $emp->last_name );
+                            ?>
                             <tr>
                                 <td>
-                                    <strong><?php echo esc_html( $emp->first_name . ' ' . $emp->last_name ); ?></strong>
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <div style="width:32px;height:32px;border-radius:50%;background:<?php echo esc_attr( $avatar_bg ); ?>;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;">
+                                            <?php if ( $emp->photo_url ) : ?>
+                                                <img src="<?php echo esc_url( $emp->photo_url ); ?>" alt="" style="width:100%;height:100%;object-fit:cover;">
+                                            <?php else : ?>
+                                                <?php echo esc_html( $initials ?: '?' ); ?>
+                                            <?php endif; ?>
+                                        </div>
+                                        <strong><?php echo esc_html( $emp->first_name . ' ' . $emp->last_name ); ?></strong>
+                                    </div>
                                 </td>
                                 <td><?php echo esc_html( $emp->job_title ); ?></td>
                                 <td><?php echo esc_html( $this->get_department_name( $emp->department_id ) ); ?></td>
@@ -883,14 +926,17 @@ class WBI_Employees_Module {
                 <?php if ( empty( $employees ) ) : ?>
                     <p style="color:#50575e;">No se encontraron empleados.</p>
                 <?php else : ?>
-                    <?php foreach ( $employees as $emp ) : ?>
+                    <?php foreach ( $employees as $emp ) :
+                        $initials  = strtoupper( mb_substr( $emp->first_name, 0, 1 ) . mb_substr( $emp->last_name, 0, 1 ) );
+                        $avatar_bg = $this->get_avatar_color( $emp->first_name . $emp->last_name );
+                    ?>
                     <div class="wbi-emp-card <?php echo 'archived' === $emp->status ? 'archived' : ''; ?>">
                         <div class="emp-info">
-                            <div class="emp-avatar">
+                            <div class="emp-avatar" style="background:<?php echo esc_attr( $avatar_bg ); ?>;">
                                 <?php if ( $emp->photo_url ) : ?>
                                     <img src="<?php echo esc_url( $emp->photo_url ); ?>" alt="">
                                 <?php else : ?>
-                                    👤
+                                    <?php echo esc_html( $initials ?: '?' ); ?>
                                 <?php endif; ?>
                             </div>
                             <div class="emp-meta">
@@ -927,6 +973,7 @@ class WBI_Employees_Module {
             document.querySelectorAll('.wbi-view-toggle button').forEach(function(b, i) {
                 b.classList.toggle('active', (i === 0 && v === 'list') || (i === 1 && v === 'card'));
             });
+            document.getElementById('emp-filter-form').submit();
         }
         </script>
         <?php
@@ -1320,8 +1367,20 @@ class WBI_Employees_Module {
 
     private function render_contract_list() {
         global $wpdb;
-        $contracts = $wpdb->get_results( "SELECT c.*, e.first_name, e.last_name FROM {$wpdb->prefix}wbi_employee_contracts c LEFT JOIN {$wpdb->prefix}wbi_employees e ON e.id = c.employee_id ORDER BY c.created_at DESC" );
         $status_labels = array( 'draft' => 'Borrador', 'active' => 'Activo', 'expired' => 'Vencido', 'cancelled' => 'Cancelado' );
+        $filter_status = sanitize_text_field( $_GET['contract_status'] ?? '' );
+        $filter_emp    = intval( $_GET['contract_employee'] ?? 0 );
+
+        $where  = '1=1';
+        if ( $filter_status && isset( $status_labels[ $filter_status ] ) ) {
+            $where .= $wpdb->prepare( ' AND c.status = %s', $filter_status );
+        }
+        if ( $filter_emp > 0 ) {
+            $where .= $wpdb->prepare( ' AND c.employee_id = %d', $filter_emp );
+        }
+
+        $contracts = $wpdb->get_results( "SELECT c.*, e.first_name, e.last_name FROM {$wpdb->prefix}wbi_employee_contracts c LEFT JOIN {$wpdb->prefix}wbi_employees e ON e.id = c.employee_id WHERE $where ORDER BY c.created_at DESC" );
+        $all_employees = $this->get_employees();
         ?>
         <div class="wbi-emp-header">
             <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=contracts&action=new' ) ); ?>" class="button button-primary">+ Nuevo Contrato</a>
@@ -1330,6 +1389,30 @@ class WBI_Employees_Module {
         if ( ! empty( $_GET['saved'] ) )   $this->notice( 'success', 'Contrato guardado.' );
         if ( ! empty( $_GET['deleted'] ) ) $this->notice( 'success', 'Contrato eliminado.' );
         ?>
+
+        <!-- Filters -->
+        <form method="get" class="wbi-filter-bar" style="margin-bottom:16px;">
+            <input type="hidden" name="page" value="wbi-employees">
+            <input type="hidden" name="tab" value="contracts">
+            <select name="contract_status">
+                <option value="">Todos los estados</option>
+                <?php foreach ( $status_labels as $sv => $sl ) : ?>
+                    <option value="<?php echo esc_attr( $sv ); ?>" <?php selected( $filter_status, $sv ); ?>><?php echo esc_html( $sl ); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select name="contract_employee">
+                <option value="0">Todos los empleados</option>
+                <?php foreach ( $all_employees as $e ) : ?>
+                    <option value="<?php echo esc_attr( $e->id ); ?>" <?php selected( $filter_emp, $e->id ); ?>><?php echo esc_html( $e->first_name . ' ' . $e->last_name ); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <button type="submit" class="button">Filtrar</button>
+            <?php if ( $filter_status || $filter_emp ) : ?>
+                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=contracts' ) ); ?>" class="button">Limpiar</a>
+            <?php endif; ?>
+            <span style="margin-left:auto; color:#50575e; font-size:13px;"><?php echo count( $contracts ); ?> contrato<?php echo 1 !== count( $contracts ) ? 's' : ''; ?></span>
+        </form>
+
         <table class="widefat wbi-sortable">
             <thead>
                 <tr><th>Empleado</th><th>Salario</th><th>Inicio</th><th>Fin</th><th>Estado</th><th>Acciones</th></tr>
@@ -1340,11 +1423,11 @@ class WBI_Employees_Module {
                 <?php else : ?>
                     <?php foreach ( $contracts as $c ) : ?>
                     <tr>
-                        <td><?php echo esc_html( $c->first_name . ' ' . $c->last_name ); ?></td>
+                        <td><?php echo esc_html( trim( $c->first_name . ' ' . $c->last_name ) ?: '—' ); ?></td>
                         <td>$<?php echo number_format( $c->salary, 2, ',', '.' ); ?></td>
                         <td><?php echo esc_html( $c->start_date ?? '—' ); ?></td>
                         <td><?php echo esc_html( $c->end_date ?? '—' ); ?></td>
-                        <td><span class="wbi-emp-status <?php echo esc_attr( $c->status ); ?>"><?php echo esc_html( $status_labels[ $c->status ] ?? $c->status ); ?></span></td>
+                        <td><span class="wbi-contract-status <?php echo esc_attr( $c->status ); ?>"><?php echo esc_html( $status_labels[ $c->status ] ?? $c->status ); ?></span></td>
                         <td>
                             <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-employees&tab=contracts&action=edit&id=' . $c->id ) ); ?>" class="button button-small">Editar</a>
                             <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar este contrato?');">
