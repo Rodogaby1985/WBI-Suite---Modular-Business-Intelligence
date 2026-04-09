@@ -783,6 +783,16 @@ class WBI_Employees_Module {
         return $colors[ abs( crc32( $name ) ) % count( $colors ) ];
     }
 
+    private function get_initials( $first_name, $last_name ) {
+        $first = mb_substr( (string) $first_name, 0, 1 );
+        $last  = mb_substr( (string) $last_name, 0, 1 );
+        $initials = strtoupper( $first . $last );
+        if ( '' === $initials ) {
+            $initials = strtoupper( mb_substr( (string) $first_name . (string) $last_name, 0, 2 ) );
+        }
+        return $initials ?: '?';
+    }
+
     // =========================================================================
     // PAGE: EMPLOYEES
     // =========================================================================
@@ -880,7 +890,7 @@ class WBI_Employees_Module {
                             <tr><td colspan="7" style="text-align:center; color:#50575e; padding:24px;">No se encontraron empleados.</td></tr>
                         <?php else : ?>
                             <?php foreach ( $employees as $emp ) :
-                                $initials  = strtoupper( mb_substr( $emp->first_name, 0, 1 ) . mb_substr( $emp->last_name, 0, 1 ) );
+                                $initials  = $this->get_initials( $emp->first_name, $emp->last_name );
                                 $avatar_bg = $this->get_avatar_color( $emp->first_name . $emp->last_name );
                             ?>
                             <tr>
@@ -890,7 +900,7 @@ class WBI_Employees_Module {
                                             <?php if ( $emp->photo_url ) : ?>
                                                 <img src="<?php echo esc_url( $emp->photo_url ); ?>" alt="" style="width:100%;height:100%;object-fit:cover;">
                                             <?php else : ?>
-                                                <?php echo esc_html( $initials ?: '?' ); ?>
+                                                <?php echo esc_html( $initials ); ?>
                                             <?php endif; ?>
                                         </div>
                                         <strong><?php echo esc_html( $emp->first_name . ' ' . $emp->last_name ); ?></strong>
@@ -927,7 +937,7 @@ class WBI_Employees_Module {
                     <p style="color:#50575e;">No se encontraron empleados.</p>
                 <?php else : ?>
                     <?php foreach ( $employees as $emp ) :
-                        $initials  = strtoupper( mb_substr( $emp->first_name, 0, 1 ) . mb_substr( $emp->last_name, 0, 1 ) );
+                        $initials  = $this->get_initials( $emp->first_name, $emp->last_name );
                         $avatar_bg = $this->get_avatar_color( $emp->first_name . $emp->last_name );
                     ?>
                     <div class="wbi-emp-card <?php echo 'archived' === $emp->status ? 'archived' : ''; ?>">
@@ -936,7 +946,7 @@ class WBI_Employees_Module {
                                 <?php if ( $emp->photo_url ) : ?>
                                     <img src="<?php echo esc_url( $emp->photo_url ); ?>" alt="">
                                 <?php else : ?>
-                                    <?php echo esc_html( $initials ?: '?' ); ?>
+                                    <?php echo esc_html( $initials ); ?>
                                 <?php endif; ?>
                             </div>
                             <div class="emp-meta">
