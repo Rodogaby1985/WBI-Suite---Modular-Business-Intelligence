@@ -301,6 +301,129 @@ function wbiWaSend(oid, ph){
 
         if ( ! current_user_can( 'manage_options' ) ) return;
 
+        // -----------------------------------------------------------------------
+        // 1. Handle POST: save configuration
+        // -----------------------------------------------------------------------
+        $saved = false;
+        if ( isset( $_POST['wbi_whatsapp_config_nonce'] ) &&
+             wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['wbi_whatsapp_config_nonce'] ) ), 'wbi_whatsapp_config' )
+        ) {
+            $new_settings = array();
+
+            // Phone
+            $new_settings['phone'] = isset( $_POST['wbi_whatsapp_settings']['phone'] )
+                ? sanitize_text_field( wp_unslash( $_POST['wbi_whatsapp_settings']['phone'] ) )
+                : '';
+
+            // Statuses
+            $new_settings['statuses'] = array();
+            if ( isset( $_POST['wbi_whatsapp_settings']['statuses'] ) && is_array( $_POST['wbi_whatsapp_settings']['statuses'] ) ) {
+                foreach ( $_POST['wbi_whatsapp_settings']['statuses'] as $s ) {
+                    $s = sanitize_text_field( wp_unslash( $s ) );
+                    if ( array_key_exists( $s, $this->supported_statuses ) ) {
+                        $new_settings['statuses'][] = $s;
+                    }
+                }
+            }
+
+            // Templates
+            $new_settings['templates'] = array();
+            if ( isset( $_POST['wbi_whatsapp_settings']['templates'] ) && is_array( $_POST['wbi_whatsapp_settings']['templates'] ) ) {
+                foreach ( $_POST['wbi_whatsapp_settings']['templates'] as $status_key => $tpl ) {
+                    $status_key = sanitize_text_field( wp_unslash( $status_key ) );
+                    if ( array_key_exists( $status_key, $this->supported_statuses ) ) {
+                        $new_settings['templates'][ $status_key ] = sanitize_textarea_field( wp_unslash( $tpl ) );
+                    }
+                }
+            }
+
+            update_option( 'wbi_whatsapp_settings', $new_settings );
+            $saved = true;
+        }
+
+        // -----------------------------------------------------------------------
+        // 2. Show save notice
+        // -----------------------------------------------------------------------
+        $opts      = get_option( 'wbi_whatsapp_settings', array() );
+        $phone     = isset( $opts['phone'] ) ? esc_attr( $opts['phone'] ) : '';
+        $enabled   = isset( $opts['statuses'] ) ? (array) $opts['statuses'] : array( 'processing', 'completed' );
+        $templates = isset( $opts['templates'] ) ? (array) $opts['templates'] : array();
+        $defaults  = $this->get_default_templates();
+
+        echo '<div class="wrap">';
+        echo '<h1>💬 WhatsApp — Notificaciones</h1>';
+
+        if ( $saved ) {
+            echo '<div class="notice notice-success is-dismissible"><p>✅ Configuración guardada.</p></div>';
+        }
+
+        // -----------------------------------------------------------------------
+        // 3. Configuration form
+        // -----------------------------------------------------------------------
+        ?>
+        <div style="background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:20px;margin-bottom:30px;">
+            <h2 style="margin-top:0;">⚙️ Configuración WhatsApp</h2>
+            <form method="post">
+                <?php wp_nonce_field( 'wbi_whatsapp_config', 'wbi_whatsapp_config_nonce' ); ?>
+
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row"><label for="wbi_wa_phone">Teléfono WhatsApp Business</label></th>
+                        <td>
+                            <input type="text" id="wbi_wa_phone" name="wbi_whatsapp_settings[phone]"
+                                   value="<?php echo esc_attr( $phone ); ?>"
+                                   class="regular-text" placeholder="5491112345678">
+                            <p class="description">Número en formato internacional sin + (ej: 5491112345678). Este número recibe los pedidos desde la página de agradecimiento.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Estados que disparan notificación automática</th>
+                        <td>
+                            <?php foreach ( $this->supported_statuses as $key => $label ) : ?>
+                                <label style="display:block;margin-bottom:4px;">
+                                    <input type="checkbox"
+                                           name="wbi_whatsapp_settings[statuses][]"
+                                           value="<?php echo esc_attr( $key ); ?>"
+                                           <?php checked( in_array( $key, $enabled, true ) ); ?>>
+                                    <?php echo esc_html( $label ); ?>
+                                </label>
+                            <?php endforeach; ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Plantillas de mensaje por estado</th>
+                        <td>
+                            <p class="description" style="margin-bottom:10px;">
+                                Placeholders disponibles:
+                                <code>{order_number}</code>,
+                                <code>{customer_name}</code>,
+                                <code>{order_total}</code>,
+                                <code>{tracking_number}</code>,
+                                <code>{site_name}</code>
+                            </p>
+                            <?php foreach ( $this->supported_statuses as $key => $label ) :
+                                $tpl = isset( $templates[ $key ] ) ? $templates[ $key ] : ( isset( $defaults[ $key ] ) ? $defaults[ $key ] : '' );
+                            ?>
+                                <p>
+                                    <strong><?php echo esc_html( $label ); ?></strong><br>
+                                    <textarea name="wbi_whatsapp_settings[templates][<?php echo esc_attr( $key ); ?>]"
+                                              rows="3"
+                                              style="width:100%;max-width:600px;"><?php echo esc_textarea( $tpl ); ?></textarea>
+                                </p>
+                            <?php endforeach; ?>
+                        </td>
+                    </tr>
+                </table>
+
+                <p><button type="submit" class="button button-primary">💾 Guardar Configuración</button></p>
+            </form>
+        </div>
+        <?php
+
+        // -----------------------------------------------------------------------
+        // 4. Log of sent notifications
+        // -----------------------------------------------------------------------
+
         // Date filter
         $date_from = isset( $_GET['date_from'] ) ? sanitize_text_field( wp_unslash( $_GET['date_from'] ) ) : date( 'Y-m-d', strtotime( '-30 days' ) );
         $date_to   = isset( $_GET['date_to'] )   ? sanitize_text_field( wp_unslash( $_GET['date_to'] ) )   : date( 'Y-m-d' );
@@ -321,9 +444,6 @@ function wbiWaSend(oid, ph){
                 $date_to . ' 23:59:59'
             )
         );
-
-        echo '<div class="wrap">';
-        echo '<h1>💬 WhatsApp — Notificaciones</h1>';
 
         // Filter form
         echo '<form method="get" style="margin-bottom:15px;">';
