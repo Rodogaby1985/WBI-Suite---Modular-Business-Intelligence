@@ -162,25 +162,59 @@ class WBI_Reorder_Module {
 
         $where_sql = implode( ' AND ', $where );
 
-        if ( ! empty( $params ) ) {
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-            $rules = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE {$where_sql} ORDER BY id DESC", ...$params ) );
-        } else {
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-            $rules = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY id DESC" );
-        }
+        $per_page     = 20;
+        $current_page = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
 
-        // Attach live stock to each rule
-        foreach ( $rules as $rule ) {
-            $rule->current_stock = (float) get_post_meta( $rule->product_id, '_stock', true );
-        }
-
-        // Apply "below min stock" filter in PHP (needs live stock)
+        // For "below min stock" filter, we need all rows (to filter in PHP), then paginate.
         if ( $filter_below ) {
-            $rules = array_values( array_filter( $rules, function( $r ) {
+            if ( ! empty( $params ) ) {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $all_rules = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE {$where_sql} ORDER BY id DESC", ...$params ) );
+            } else {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $all_rules = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY id DESC" );
+            }
+
+            // Attach live stock to each rule
+            foreach ( $all_rules as $rule ) {
+                $rule->current_stock = (float) get_post_meta( $rule->product_id, '_stock', true );
+            }
+
+            // Apply "below min stock" filter in PHP (needs live stock)
+            $all_rules   = array_values( array_filter( $all_rules, function( $r ) {
                 return $r->current_stock <= $r->min_stock;
             } ) );
+            $total_rules = count( $all_rules );
+            $offset      = ( $current_page - 1 ) * $per_page;
+            $rules       = array_slice( $all_rules, $offset, $per_page );
+        } else {
+            // Count total for pagination
+            if ( ! empty( $params ) ) {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $total_rules = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}", ...$params ) );
+            } else {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $total_rules = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+            }
+
+            $offset = ( $current_page - 1 ) * $per_page;
+
+            if ( ! empty( $params ) ) {
+                $params_with_limit = array_merge( $params, array( $per_page, $offset ) );
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $rules = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE {$where_sql} ORDER BY id DESC LIMIT %d OFFSET %d", ...$params_with_limit ) );
+            } else {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $rules = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} ORDER BY id DESC LIMIT %d OFFSET %d", $per_page, $offset ) );
+            }
+
+            // Attach live stock to each rule
+            foreach ( $rules as $rule ) {
+                $rule->current_stock = (float) get_post_meta( $rule->product_id, '_stock', true );
+            }
         }
+
+        $total_pages = $total_rules > 0 ? (int) ceil( $total_rules / $per_page ) : 1;
 
         // Get unique suppliers for filter dropdown
         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -327,6 +361,32 @@ class WBI_Reorder_Module {
                     </tbody>
                 </table>
             </form>
+
+            <?php if ( $total_pages > 1 ) :
+                $base_args = array( 'page' => 'wbi-reorder' );
+                if ( $filter_supplier ) {
+                    $base_args['filter_supplier'] = $filter_supplier;
+                }
+                if ( $filter_active !== '' ) {
+                    $base_args['filter_active'] = $filter_active;
+                }
+                if ( $filter_below ) {
+                    $base_args['filter_below'] = 1;
+                }
+                $pagination_base = add_query_arg( $base_args, admin_url( 'admin.php' ) );
+            ?>
+            <div style="margin-top:16px;">
+                <?php echo paginate_links( array( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+                    'base'      => $pagination_base . '%_%',
+                    'format'    => '&paged=%#%',
+                    'current'   => $current_page,
+                    'total'     => $total_pages,
+                    'prev_text' => '&laquo; Anterior',
+                    'next_text' => 'Siguiente &raquo;',
+                ) ); ?>
+            </div>
+            <?php endif; ?>
+
             <?php endif; ?>
         </div>
         <?php
@@ -683,6 +743,10 @@ class WBI_Reorder_Module {
         // Group rules by supplier so we create one PO per supplier
         $by_supplier = array();
         foreach ( $rules as $rule ) {
+            $lock_key = 'wbi_reorder_lock_' . $rule->id;
+            if ( get_transient( $lock_key ) ) {
+                continue; // Ya se disparó recientemente
+            }
             $stock = (float) get_post_meta( $rule->product_id, '_stock', true );
             if ( $stock <= (float) $rule->min_stock ) {
                 $qty = $this->calculate_order_qty( $rule, $stock );
@@ -719,6 +783,10 @@ class WBI_Reorder_Module {
 
         $by_supplier = array();
         foreach ( $rules as $rule ) {
+            $lock_key = 'wbi_reorder_lock_' . $rule->id;
+            if ( get_transient( $lock_key ) ) {
+                continue; // Ya se disparó recientemente
+            }
             if ( $stock <= (float) $rule->min_stock ) {
                 $qty = $this->calculate_order_qty( $rule, $stock );
                 if ( $qty <= 0 ) continue;
@@ -758,6 +826,9 @@ class WBI_Reorder_Module {
 
         foreach ( $items as $item ) {
             $rule = $item['rule'];
+
+            // Set cooldown lock to prevent duplicate POs for this rule
+            set_transient( 'wbi_reorder_lock_' . $rule->id, true, 30 * MINUTE_IN_SECONDS );
 
             // Update rule metadata
             $wpdb->update(
@@ -958,6 +1029,15 @@ class WBI_Reorder_Module {
             'is_active'     => isset( $_POST['is_active'] ) ? 1 : 0,
             'updated_at'    => current_time( 'mysql' ),
         );
+
+        // Validate business rules
+        if ( 'min_max' === $data['rule_type'] && $data['max_stock'] <= $data['min_stock'] ) {
+            wp_send_json_error( 'El stock máximo debe ser mayor al stock mínimo.' );
+        }
+        if ( 'fixed_qty' === $data['rule_type'] && $data['reorder_qty'] <= 0 ) {
+            wp_send_json_error( 'La cantidad a ordenar debe ser mayor a 0.' );
+        }
+
         $formats = array( '%d', '%s', '%s', '%d', '%s', '%f', '%f', '%f', '%s', '%d', '%f', '%d', '%s' );
 
         if ( $rule_id ) {
