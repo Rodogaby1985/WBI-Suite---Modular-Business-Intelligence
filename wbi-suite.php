@@ -46,6 +46,10 @@ class WBI_Suite_Loader {
             return; // Stop here — only the license activation page will show
         }
 
+        // Módulo de Campos de Registro (Provincia, Localidad, Teléfono) — siempre activo
+        require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-registration-fields.php';
+        new WBI_Registration_Fields();
+
         // 1. Módulo B2B (Roles, Precios Ocultos, Aprobación)
         if ( ! empty( $this->options['wbi_enable_b2b'] ) ) {
             require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-b2b.php';
