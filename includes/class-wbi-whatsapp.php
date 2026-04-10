@@ -521,7 +521,7 @@ function wbiWaSend(oid, ph){
             $product_name = $item->get_name();
             $qty          = $item->get_quantity();
             $line_total   = number_format( (float) $item->get_total(), 2, ',', '.' );
-            $items_text  .= '• ' . $product_name . ' x' . $qty . ' — $' . $line_total . "\n";
+            $items_text  .= '- ' . $product_name . ' x' . $qty . ' — $' . $line_total . "\n";
         }
 
         // Totals
@@ -531,18 +531,18 @@ function wbiWaSend(oid, ph){
         $payment_method = $order->get_payment_method_title();
         $site_name      = get_bloginfo( 'name' );
 
-        $message  = '🛒 *Nuevo Pedido #' . $order_id . '*' . "\n\n";
-        $message .= '👤 *Cliente:* ' . $first_name . ' ' . $last_name . "\n";
-        $message .= '📧 *Email:* ' . $email . "\n";
-        $message .= '📞 *Teléfono:* ' . $phone . "\n";
-        $message .= '🏠 *Dirección:* ' . $address . ', ' . $city . ', ' . $state . "\n";
-        $message .= '📮 *CP:* ' . $postcode . "\n\n";
-        $message .= '📦 *Productos:*' . "\n";
+        $message  = '*Nuevo Pedido #' . $order_id . '*' . "\n\n";
+        $message .= '*Cliente:* ' . $first_name . ' ' . $last_name . "\n";
+        $message .= '*Email:* ' . $email . "\n";
+        $message .= '*Telefono:* ' . $phone . "\n";
+        $message .= '*Direccion:* ' . $address . ', ' . $city . ', ' . $state . "\n";
+        $message .= '*CP:* ' . $postcode . "\n\n";
+        $message .= '*Productos:*' . "\n";
         $message .= $items_text . "\n";
-        $message .= '💰 *Subtotal:* $' . $subtotal . "\n";
-        $message .= '🚚 *Envío:* $' . $shipping_total . "\n";
-        $message .= '💵 *Total:* $' . $order_total . "\n\n";
-        $message .= '🔗 *Método de pago:* ' . $payment_method . "\n\n";
+        $message .= '*Subtotal:* $' . $subtotal . "\n";
+        $message .= '*Envio:* $' . $shipping_total . "\n";
+        $message .= '*Total:* $' . $order_total . "\n\n";
+        $message .= '*Metodo de pago:* ' . $payment_method . "\n\n";
         $message .= 'Pedido realizado desde ' . $site_name;
 
         return $message;
@@ -571,9 +571,8 @@ function wbiWaSend(oid, ph){
             return;
         }
 
-        $message     = $this->build_order_message( $order );
-        $encoded_msg = rawurlencode( $message );
-        $wa_url      = 'https://wa.me/' . rawurlencode( $phone ) . '?text=' . $encoded_msg;
+        $message = $this->build_order_message( $order );
+        $wa_url  = 'https://wa.me/' . preg_replace( '/\D/', '', $phone ) . '?text=' . urlencode( $message );
 
         echo '<div style="text-align:center; margin:30px 0; padding:20px; background:#f0faf0; border:2px solid #25D366; border-radius:8px;">';
         echo '<p style="font-size:16px; margin-bottom:12px; color:#333;">📲 ¿Querés enviarnos tu pedido por WhatsApp?</p>';
@@ -613,9 +612,8 @@ function wbiWaSend(oid, ph){
             return;
         }
 
-        $message     = $this->build_order_message( $order );
-        $encoded_msg = rawurlencode( $message );
-        $wa_url      = 'https://wa.me/' . rawurlencode( $phone ) . '?text=' . $encoded_msg;
+        $message = $this->build_order_message( $order );
+        $wa_url  = 'https://wa.me/' . preg_replace( '/\D/', '', $phone ) . '?text=' . urlencode( $message );
 
         if ( $plain_text ) {
             echo "\n💬 Enviá tu pedido por WhatsApp: " . esc_url( $wa_url ) . "\n";
