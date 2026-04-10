@@ -75,6 +75,7 @@ class WBI_Registration_Fields {
                 class="woocommerce-Input woocommerce-Input--text input-text"
                 placeholder="<?php esc_attr_e( 'Tu ciudad o localidad', 'wbi-suite' ); ?>"
                 value="<?php echo esc_attr( $billing_city ); ?>"
+                required
             />
         </p>
 
@@ -87,6 +88,7 @@ class WBI_Registration_Fields {
                 class="woocommerce-Input woocommerce-Input--text input-text"
                 placeholder="<?php esc_attr_e( 'Ej: 11-1234-5678', 'wbi-suite' ); ?>"
                 value="<?php echo esc_attr( $billing_phone ); ?>"
+                required
             />
         </p>
         <?php
