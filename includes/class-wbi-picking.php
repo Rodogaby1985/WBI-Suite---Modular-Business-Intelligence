@@ -471,6 +471,20 @@ class WBI_Picking_Module {
 
         $picking_status = $order->get_meta( '_wbi_picking_status' );
         $picking_data   = json_decode( $order->get_meta( '_wbi_picking_data' ), true );
+        $picking_user   = (int) $order->get_meta( '_wbi_picking_user' );
+
+        // Show warning if another user is currently picking this order
+        if ( 'picking' === $picking_status && $picking_user && $picking_user !== get_current_user_id() ) {
+            $other_user = get_userdata( $picking_user );
+            $other_name = $other_user ? $other_user->display_name : '#' . $picking_user;
+            echo '<div class="notice notice-warning" style="margin:10px 0;"><p>'
+                . sprintf(
+                    /* translators: %s: display name of the user currently picking the order */
+                    esc_html__( '⚠️ Atención: Este pedido ya está siendo armado por %s.', 'wbi-suite' ),
+                    '<strong>' . esc_html( $other_name ) . '</strong>'
+                )
+                . '</p></div>';
+        }
 
         // If not yet started, build initial picking data from order items
         if ( ! $picking_status || 'picking' !== $picking_status || ! is_array( $picking_data ) ) {
@@ -987,6 +1001,15 @@ class WBI_Picking_Module {
         $order = wc_get_order( $order_id );
         if ( ! $order ) wp_send_json_error( 'Pedido no encontrado' );
 
+        // Concurrency check: prevent two users from picking the same order simultaneously
+        $existing_status = $order->get_meta( '_wbi_picking_status' );
+        $existing_user   = $order->get_meta( '_wbi_picking_user' );
+        if ( 'picking' === $existing_status && $existing_user && (int) $existing_user !== get_current_user_id() ) {
+            $user_data = get_userdata( (int) $existing_user );
+            $name      = $user_data ? $user_data->display_name : '#' . $existing_user;
+            wp_send_json_error( 'Este pedido ya está siendo armado por ' . esc_html( $name ) );
+        }
+
         $items = array();
         foreach ( $order->get_items() as $item ) {
             $product_id   = $item->get_product_id();
@@ -1050,6 +1073,26 @@ class WBI_Picking_Module {
             }
         }
         unset( $item );
+
+        if ( ! $found ) {
+            // Second pass: search by product SKU as fallback
+            foreach ( $picking_data as $idx => &$item ) {
+                $lookup_id = $item['variation_id'] ?: $item['product_id'];
+                $sku       = get_post_meta( $lookup_id, '_sku', true );
+                if ( $sku && $sku === $barcode ) {
+                    $found         = true;
+                    $matched_index = $idx;
+                    if ( $item['qty_scanned'] >= $item['qty_required'] ) {
+                        $already_complete = true;
+                    } else {
+                        $item['qty_scanned']++;
+                        $item['scanned_at'][] = current_time( 'mysql' );
+                    }
+                    break;
+                }
+            }
+            unset( $item );
+        }
 
         if ( ! $found ) {
             wp_send_json_error( array(
