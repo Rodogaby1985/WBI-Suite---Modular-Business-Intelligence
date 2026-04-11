@@ -47,6 +47,9 @@ class WBI_Whatsapp_Module {
         // Register query var and template redirect for public order receipt
         add_filter( 'query_vars', array( $this, 'add_receipt_query_vars' ) );
         add_action( 'template_redirect', array( $this, 'render_order_receipt_page' ) );
+
+        // Floating WhatsApp bubble on frontend
+        add_action( 'wp_footer', array( $this, 'render_floating_bubble' ) );
     }
 
     // -------------------------------------------------------------------------
@@ -341,6 +344,31 @@ function wbiWaSend(oid, ph){
                 }
             }
 
+            // Bubble settings
+            $new_settings['bubble_enabled']       = ! empty( $_POST['wbi_whatsapp_settings']['bubble_enabled'] );
+            $new_settings['bubble_phone']         = isset( $_POST['wbi_whatsapp_settings']['bubble_phone'] )
+                ? sanitize_text_field( wp_unslash( $_POST['wbi_whatsapp_settings']['bubble_phone'] ) )
+                : '';
+            $new_settings['bubble_message']       = isset( $_POST['wbi_whatsapp_settings']['bubble_message'] )
+                ? sanitize_textarea_field( wp_unslash( $_POST['wbi_whatsapp_settings']['bubble_message'] ) )
+                : 'Hola! Me gustaría hacer una consulta.';
+            $bubble_pos = isset( $_POST['wbi_whatsapp_settings']['bubble_position'] )
+                ? sanitize_text_field( wp_unslash( $_POST['wbi_whatsapp_settings']['bubble_position'] ) )
+                : 'right';
+            $new_settings['bubble_position']      = in_array( $bubble_pos, array( 'right', 'left' ), true ) ? $bubble_pos : 'right';
+            $new_settings['bubble_delay']         = isset( $_POST['wbi_whatsapp_settings']['bubble_delay'] )
+                ? max( 0, min( 30, intval( $_POST['wbi_whatsapp_settings']['bubble_delay'] ) ) )
+                : 3;
+            $new_settings['bubble_tooltip']       = isset( $_POST['wbi_whatsapp_settings']['bubble_tooltip'] )
+                ? sanitize_text_field( wp_unslash( $_POST['wbi_whatsapp_settings']['bubble_tooltip'] ) )
+                : '¿Necesitás ayuda?';
+            $new_settings['bubble_exclude_pages'] = isset( $_POST['wbi_whatsapp_settings']['bubble_exclude_pages'] )
+                ? sanitize_textarea_field( wp_unslash( $_POST['wbi_whatsapp_settings']['bubble_exclude_pages'] ) )
+                : '';
+            $new_settings['bubble_color']         = isset( $_POST['wbi_whatsapp_settings']['bubble_color'] )
+                ? ( sanitize_hex_color( wp_unslash( $_POST['wbi_whatsapp_settings']['bubble_color'] ) ) ?: '#25D366' )
+                : '#25D366';
+
             update_option( 'wbi_whatsapp_settings', $new_settings );
             $saved = true;
         }
@@ -415,6 +443,88 @@ function wbiWaSend(oid, ph){
                                               style="width:100%;max-width:600px;"><?php echo esc_textarea( $tpl ); ?></textarea>
                                 </p>
                             <?php endforeach; ?>
+                        </td>
+                    </tr>
+                </table>
+
+                <hr style="margin:30px 0;">
+                <h2>💬 Burbuja Flotante</h2>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row"><label for="wbi_wa_bubble_enabled">Activar burbuja flotante</label></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" id="wbi_wa_bubble_enabled"
+                                       name="wbi_whatsapp_settings[bubble_enabled]" value="1"
+                                       <?php checked( ! empty( $opts['bubble_enabled'] ) ); ?>>
+                                Mostrar botón flotante de WhatsApp en el frontend
+                            </label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="wbi_wa_bubble_phone">Número de WhatsApp para la burbuja</label></th>
+                        <td>
+                            <input type="text" id="wbi_wa_bubble_phone"
+                                   name="wbi_whatsapp_settings[bubble_phone]"
+                                   value="<?php echo esc_attr( isset( $opts['bubble_phone'] ) ? $opts['bubble_phone'] : '' ); ?>"
+                                   class="regular-text" placeholder="5491112345678">
+                            <p class="description">Si queda vacío, se usa el número principal de arriba.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="wbi_wa_bubble_message">Mensaje predefinido</label></th>
+                        <td>
+                            <textarea id="wbi_wa_bubble_message"
+                                      name="wbi_whatsapp_settings[bubble_message]"
+                                      rows="3"
+                                      style="width:100%;max-width:600px;"><?php echo esc_textarea( isset( $opts['bubble_message'] ) ? $opts['bubble_message'] : 'Hola! Me gustaría hacer una consulta.' ); ?></textarea>
+                            <p class="description">El mensaje que se pre-carga cuando el cliente hace clic en la burbuja.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="wbi_wa_bubble_position">Posición</label></th>
+                        <td>
+                            <select id="wbi_wa_bubble_position" name="wbi_whatsapp_settings[bubble_position]">
+                                <option value="right" <?php selected( ( isset( $opts['bubble_position'] ) ? $opts['bubble_position'] : 'right' ), 'right' ); ?>>Inferior derecha</option>
+                                <option value="left"  <?php selected( ( isset( $opts['bubble_position'] ) ? $opts['bubble_position'] : 'right' ), 'left' ); ?>>Inferior izquierda</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="wbi_wa_bubble_delay">Demora de aparición (segundos)</label></th>
+                        <td>
+                            <input type="number" id="wbi_wa_bubble_delay"
+                                   name="wbi_whatsapp_settings[bubble_delay]"
+                                   value="<?php echo intval( isset( $opts['bubble_delay'] ) ? $opts['bubble_delay'] : 3 ); ?>"
+                                   min="0" max="30" style="width:80px;">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="wbi_wa_bubble_tooltip">Tooltip / texto del badge</label></th>
+                        <td>
+                            <input type="text" id="wbi_wa_bubble_tooltip"
+                                   name="wbi_whatsapp_settings[bubble_tooltip]"
+                                   value="<?php echo esc_attr( isset( $opts['bubble_tooltip'] ) ? $opts['bubble_tooltip'] : '¿Necesitás ayuda?' ); ?>"
+                                   class="regular-text">
+                            <p class="description">Texto que aparece al lado de la burbuja. Dejá vacío para no mostrar tooltip.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="wbi_wa_bubble_exclude">Ocultar en estas páginas</label></th>
+                        <td>
+                            <textarea id="wbi_wa_bubble_exclude"
+                                      name="wbi_whatsapp_settings[bubble_exclude_pages]"
+                                      rows="4"
+                                      style="width:100%;max-width:600px;"><?php echo esc_textarea( isset( $opts['bubble_exclude_pages'] ) ? $opts['bubble_exclude_pages'] : '' ); ?></textarea>
+                            <p class="description">URLs o slugs donde no mostrar la burbuja, una por línea (ej: /checkout, /mi-cuenta).</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="wbi_wa_bubble_color">Color de fondo</label></th>
+                        <td>
+                            <input type="color" id="wbi_wa_bubble_color"
+                                   name="wbi_whatsapp_settings[bubble_color]"
+                                   value="<?php echo esc_attr( isset( $opts['bubble_color'] ) ? $opts['bubble_color'] : '#25D366' ); ?>">
                         </td>
                     </tr>
                 </table>
@@ -728,6 +838,106 @@ function wbiWaSend(oid, ph){
         echo 'Enviar por WhatsApp';
         echo '</a>';
         echo '</div>';
+    }
+
+    // -------------------------------------------------------------------------
+    // Frontend: floating WhatsApp bubble
+    // -------------------------------------------------------------------------
+
+    /**
+     * Render the floating WhatsApp bubble in the frontend footer.
+     * Only rendered when bubble is enabled and a phone number is configured.
+     */
+    public function render_floating_bubble() {
+        if ( is_admin() ) {
+            return;
+        }
+
+        $opts = get_option( 'wbi_whatsapp_settings', array() );
+
+        if ( empty( $opts['bubble_enabled'] ) ) {
+            return;
+        }
+
+        // Determine phone: use bubble-specific number if set, otherwise fall back to main phone
+        $phone = ! empty( $opts['bubble_phone'] ) ? trim( $opts['bubble_phone'] ) : ( isset( $opts['phone'] ) ? trim( $opts['phone'] ) : '' );
+        $phone = preg_replace( '/\D/', '', $phone );
+
+        if ( empty( $phone ) ) {
+            return;
+        }
+
+        // Check excluded pages
+        if ( ! empty( $opts['bubble_exclude_pages'] ) ) {
+            $current_path = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+            $excludes     = array_filter( array_map( 'trim', explode( "\n", $opts['bubble_exclude_pages'] ) ) );
+            foreach ( $excludes as $excluded ) {
+                if ( ! empty( $excluded ) && false !== strpos( $current_path, $excluded ) ) {
+                    return;
+                }
+            }
+        }
+
+        $message  = ! empty( $opts['bubble_message'] ) ? $opts['bubble_message'] : 'Hola! Me gustaría hacer una consulta.';
+        $position = ( isset( $opts['bubble_position'] ) && 'left' === $opts['bubble_position'] ) ? 'left' : 'right';
+        $delay    = isset( $opts['bubble_delay'] ) ? max( 0, min( 30, intval( $opts['bubble_delay'] ) ) ) : 3;
+        $tooltip  = isset( $opts['bubble_tooltip'] ) ? trim( $opts['bubble_tooltip'] ) : '¿Necesitás ayuda?';
+        $color    = ! empty( $opts['bubble_color'] ) ? $opts['bubble_color'] : '#25D366';
+
+        $wa_url      = 'https://wa.me/' . $phone . '?text=' . rawurlencode( $message );
+        $delay_ms    = $delay * 1000;
+        $side_css    = ( 'left' === $position ) ? 'left:20px;right:auto;' : 'right:20px;left:auto;';
+        $tooltip_css = ( 'left' === $position ) ? 'left:70px;right:auto;' : 'right:70px;left:auto;';
+
+        ?>
+        <!-- WBI WhatsApp Floating Bubble -->
+        <div id="wbi-wa-bubble" style="display:none;position:fixed;bottom:20px;<?php echo esc_attr( $side_css ); ?>z-index:99999;align-items:center;">
+            <?php if ( ! empty( $tooltip ) ) : ?>
+            <div id="wbi-wa-tooltip" style="position:absolute;bottom:12px;<?php echo esc_attr( $tooltip_css ); ?>background:#fff;padding:8px 14px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+                <span><?php echo esc_html( $tooltip ); ?></span>
+                <button id="wbi-wa-tooltip-close" style="background:none;border:none;cursor:pointer;font-size:16px;line-height:1;padding:0;color:#999;" aria-label="Cerrar">×</button>
+            </div>
+            <?php endif; ?>
+            <a href="<?php echo esc_url( $wa_url ); ?>" target="_blank" rel="noopener noreferrer"
+               id="wbi-wa-btn"
+               style="display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:<?php echo esc_attr( $color ); ?>;box-shadow:0 4px 12px rgba(0,0,0,0.15);text-decoration:none;transition:transform 0.3s ease,box-shadow 0.3s ease;"
+               aria-label="Contactar por WhatsApp">                <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+            </a>
+        </div>
+        <style>
+        #wbi-wa-bubble { opacity: 0; transform: translateY(20px); }
+        #wbi-wa-bubble.wbi-show { opacity: 1; transform: translateY(0); transition: opacity 0.4s ease, transform 0.4s ease; }
+        #wbi-wa-btn:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.2) !important; }
+        @media (max-width: 480px) {
+            #wbi-wa-btn { width: 48px !important; height: 48px !important; }
+            #wbi-wa-tooltip { display: none !important; }
+        }
+        </style>
+        <script>
+        (function(){
+            var closeBtn = document.getElementById('wbi-wa-tooltip-close');
+            if ( closeBtn ) {
+                closeBtn.addEventListener('click', function(){
+                    var tooltip = document.getElementById('wbi-wa-tooltip');
+                    if ( tooltip ) { tooltip.style.display = 'none'; }
+                });
+            }
+            setTimeout(function(){
+                var bubble = document.getElementById('wbi-wa-bubble');
+                if ( bubble ) {
+                    bubble.style.display = 'flex';
+                    requestAnimationFrame(function(){
+                        requestAnimationFrame(function(){
+                            bubble.classList.add('wbi-show');
+                        });
+                    });
+                }
+            }, <?php echo intval( $delay_ms ); ?>);
+        })();
+        </script>
+        <?php
     }
 
     // -------------------------------------------------------------------------
