@@ -43,6 +43,10 @@ class WBI_Whatsapp_Module {
 
         // Email: add WhatsApp link after order table (customer emails only)
         add_action( 'woocommerce_email_after_order_table', array( $this, 'render_whatsapp_order_email_link' ), 20, 4 );
+
+        // Register query var and template redirect for public order receipt
+        add_filter( 'query_vars', array( $this, 'add_receipt_query_vars' ) );
+        add_action( 'template_redirect', array( $this, 'render_order_receipt_page' ) );
     }
 
     // -------------------------------------------------------------------------
@@ -493,17 +497,87 @@ function wbiWaSend(oid, ph){
      * @return string  Plain text message (not URL-encoded).
      */
     private function build_order_message( $order ) {
-        $order_id = $order->get_id();
+        $order_id  = $order->get_id();
+        $site_name = get_bloginfo( 'name' );
+        $total     = number_format( (float) $order->get_total(), 2, ',', '.' );
 
-        // Customer info
-        $first_name = $order->get_billing_first_name();
-        $last_name  = $order->get_billing_last_name();
-        $email      = $order->get_billing_email();
-        $phone      = $order->get_billing_phone();
-        $address    = $order->get_billing_address_1();
-        $city       = $order->get_billing_city();
-        $postcode   = $order->get_billing_postcode();
-        $state_raw  = $order->get_billing_state();
+        // Build receipt URL
+        $receipt_url = add_query_arg( array(
+            'wbi_order_receipt' => $order_id,
+            'key'               => $order->get_order_key(),
+        ), home_url( '/' ) );
+
+        $message  = 'Hola! Acabo de realizar el pedido *#' . $order_id . '* en ' . $site_name . ".\n\n";
+        $message .= 'Total: *$' . $total . "*\n\n";
+        $message .= "Ver detalle completo:\n";
+        $message .= $receipt_url;
+
+        return $message;
+    }
+
+    // -------------------------------------------------------------------------
+    // Public order receipt endpoint
+    // -------------------------------------------------------------------------
+
+    /**
+     * Register the wbi_order_receipt query variable.
+     *
+     * @param string[] $vars Array of registered query variable names.
+     * @return string[]
+     */
+    public function add_receipt_query_vars( $vars ) {
+        $vars[] = 'wbi_order_receipt';
+        return $vars;
+    }
+
+    /**
+     * Intercept the request and render the order receipt page when the
+     * wbi_order_receipt query var is present.
+     */
+    public function render_order_receipt_page() {
+        $order_id = get_query_var( 'wbi_order_receipt' );
+        if ( empty( $order_id ) ) {
+            return;
+        }
+
+        $order_id = intval( $order_id );
+        $order    = wc_get_order( $order_id );
+        if ( ! $order ) {
+            wp_die( 'Pedido no encontrado.', 'Error', array( 'response' => 404 ) );
+        }
+
+        // Validate order key for security
+        $provided_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
+        if ( $provided_key !== $order->get_order_key() ) {
+            wp_die( 'Acceso no autorizado.', 'Error', array( 'response' => 403 ) );
+        }
+
+        // Render the receipt page and exit
+        $this->output_receipt_html( $order );
+        exit;
+    }
+
+    /**
+     * Output a standalone HTML receipt page for the given order.
+     *
+     * @param WC_Order $order
+     */
+    private function output_receipt_html( $order ) {
+        $order_id       = $order->get_id();
+        $site_name      = get_bloginfo( 'name' );
+        $site_url       = home_url( '/' );
+        $first_name     = $order->get_billing_first_name();
+        $last_name      = $order->get_billing_last_name();
+        $email          = $order->get_billing_email();
+        $phone          = $order->get_billing_phone();
+        $address        = $order->get_billing_address_1();
+        $city           = $order->get_billing_city();
+        $postcode       = $order->get_billing_postcode();
+        $state_raw      = $order->get_billing_state();
+        $payment_method = $order->get_payment_method_title();
+        $subtotal       = number_format( (float) $order->get_subtotal(), 2, ',', '.' );
+        $shipping_total = number_format( (float) $order->get_shipping_total(), 2, ',', '.' );
+        $order_total    = number_format( (float) $order->get_total(), 2, ',', '.' );
 
         // Convert province code to full name if WBI_Metrics_Engine is available
         if ( class_exists( 'WBI_Metrics_Engine' ) ) {
@@ -515,37 +589,105 @@ function wbiWaSend(oid, ph){
             $state = $state_raw;
         }
 
-        // Build product lines
-        $items_text = '';
+        // Build product rows HTML
+        $rows_html = '';
+        $alt       = false;
         foreach ( $order->get_items() as $item ) {
-            $product_name = $item->get_name();
-            $qty          = $item->get_quantity();
-            $line_total   = number_format( (float) $item->get_total(), 2, ',', '.' );
-            $items_text  .= '- ' . $product_name . ' x' . $qty . ' — $' . $line_total . "\n";
+            $product_name  = esc_html( $item->get_name() );
+            $qty           = intval( $item->get_quantity() );
+            $unit_price    = number_format( (float) ( $item->get_total() / max( $qty, 1 ) ), 2, ',', '.' );
+            $line_total    = number_format( (float) $item->get_total(), 2, ',', '.' );
+            $row_bg        = $alt ? ' style="background:#f9f9f9;"' : '';
+            $rows_html    .= '<tr' . $row_bg . '>';
+            $rows_html    .= '<td style="padding:10px 12px;border-bottom:1px solid #eee;">' . $product_name . '</td>';
+            $rows_html    .= '<td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:center;">' . $qty . '</td>';
+            $rows_html    .= '<td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;">$' . esc_html( $unit_price ) . '</td>';
+            $rows_html    .= '<td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;">$' . esc_html( $line_total ) . '</td>';
+            $rows_html    .= '</tr>';
+            $alt           = ! $alt;
         }
 
-        // Totals
-        $subtotal       = number_format( (float) $order->get_subtotal(), 2, ',', '.' );
-        $shipping_total = number_format( (float) $order->get_shipping_total(), 2, ',', '.' );
-        $order_total    = number_format( (float) $order->get_total(), 2, ',', '.' );
-        $payment_method = $order->get_payment_method_title();
-        $site_name      = get_bloginfo( 'name' );
-
-        $message  = '*Nuevo Pedido #' . $order_id . '*' . "\n\n";
-        $message .= '*Cliente:* ' . $first_name . ' ' . $last_name . "\n";
-        $message .= '*Email:* ' . $email . "\n";
-        $message .= '*Telefono:* ' . $phone . "\n";
-        $message .= '*Direccion:* ' . $address . ', ' . $city . ', ' . $state . "\n";
-        $message .= '*CP:* ' . $postcode . "\n\n";
-        $message .= '*Productos:*' . "\n";
-        $message .= $items_text . "\n";
-        $message .= '*Subtotal:* $' . $subtotal . "\n";
-        $message .= '*Envio:* $' . $shipping_total . "\n";
-        $message .= '*Total:* $' . $order_total . "\n\n";
-        $message .= '*Metodo de pago:* ' . $payment_method . "\n\n";
-        $message .= 'Pedido realizado desde ' . $site_name;
-
-        return $message;
+        // Output a standalone HTML page. All dynamic values below are escaped
+        // individually with esc_html() / esc_url() / intval(). The $rows_html
+        // string is pre-escaped at construction time (lines above).
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped
+        echo '<!DOCTYPE html>';
+        echo '<html lang="es">';
+        echo '<head>';
+        echo '<meta charset="UTF-8">';
+        echo '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
+        echo '<title>' . esc_html( $site_name ) . ' — Pedido #' . intval( $order_id ) . '</title>';
+        echo '<style>';
+        echo 'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f4f4f4;margin:0;padding:16px;color:#333;}';
+        echo '.receipt{max-width:600px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);}';
+        echo '.receipt-header{background:#25D366;color:#fff;padding:24px 20px;text-align:center;}';
+        echo '.receipt-header h1{margin:0 0 4px;font-size:20px;font-weight:700;}';
+        echo '.receipt-header p{margin:0;font-size:14px;opacity:0.9;}';
+        echo '.receipt-section{padding:18px 20px;border-bottom:1px solid #eee;}';
+        echo '.receipt-section h2{margin:0 0 12px;font-size:13px;font-weight:600;text-transform:uppercase;color:#888;letter-spacing:0.5px;}';
+        echo '.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;}';
+        echo '.info-item label{display:block;font-size:11px;color:#999;margin-bottom:2px;}';
+        echo '.info-item span{font-size:14px;color:#333;}';
+        echo 'table{width:100%;border-collapse:collapse;}';
+        echo 'thead th{background:#f7f7f7;padding:10px 12px;font-size:12px;font-weight:600;text-transform:uppercase;color:#888;letter-spacing:0.4px;text-align:left;border-bottom:2px solid #eee;}';
+        echo 'thead th:not(:first-child){text-align:center;}';
+        echo 'thead th:last-child{text-align:right;}';
+        echo '.totals{padding:16px 20px;}';
+        echo '.totals-row{display:flex;justify-content:space-between;padding:5px 0;font-size:14px;color:#555;}';
+        echo '.totals-row.total-final{font-size:16px;font-weight:700;color:#222;border-top:2px solid #eee;margin-top:8px;padding-top:10px;}';
+        echo '.receipt-footer{padding:16px 20px;text-align:center;font-size:12px;color:#aaa;background:#fafafa;border-top:1px solid #eee;}';
+        echo '.receipt-footer a{color:#25D366;text-decoration:none;}';
+        echo '@media(max-width:480px){.info-grid{grid-template-columns:1fr;}}';
+        echo '</style>';
+        echo '</head>';
+        echo '<body>';
+        echo '<div class="receipt">';
+        echo '<div class="receipt-header">';
+        echo '<h1>' . esc_html( $site_name ) . '</h1>';
+        echo '<p>Detalle de Pedido #' . intval( $order_id ) . '</p>';
+        echo '</div>';
+        echo '<div class="receipt-section">';
+        echo '<h2>Datos del cliente</h2>';
+        echo '<div class="info-grid">';
+        echo '<div class="info-item"><label>Nombre</label><span>' . esc_html( $first_name . ' ' . $last_name ) . '</span></div>';
+        echo '<div class="info-item"><label>Email</label><span>' . esc_html( $email ) . '</span></div>';
+        echo '<div class="info-item"><label>Tel&eacute;fono</label><span>' . esc_html( $phone ) . '</span></div>';
+        echo '<div class="info-item"><label>Direcci&oacute;n</label><span>' . esc_html( $address ) . '</span></div>';
+        echo '<div class="info-item"><label>Ciudad</label><span>' . esc_html( $city ) . '</span></div>';
+        echo '<div class="info-item"><label>Provincia</label><span>' . esc_html( $state ) . '</span></div>';
+        echo '<div class="info-item"><label>C&oacute;digo Postal</label><span>' . esc_html( $postcode ) . '</span></div>';
+        echo '</div>';
+        echo '</div>';
+        echo '<div class="receipt-section">';
+        echo '<h2>Productos</h2>';
+        echo '<table>';
+        echo '<thead><tr>';
+        echo '<th>Producto</th>';
+        echo '<th style="text-align:center;">Cant.</th>';
+        echo '<th style="text-align:right;">Precio unit.</th>';
+        echo '<th style="text-align:right;">Subtotal</th>';
+        echo '</tr></thead>';
+        echo '<tbody>';
+        echo $rows_html;
+        echo '</tbody>';
+        echo '</table>';
+        echo '</div>';
+        echo '<div class="totals">';
+        echo '<div class="totals-row"><span>Subtotal</span><span>$' . esc_html( $subtotal ) . '</span></div>';
+        echo '<div class="totals-row"><span>Env&iacute;o</span><span>$' . esc_html( $shipping_total ) . '</span></div>';
+        echo '<div class="totals-row total-final"><span>Total</span><span>$' . esc_html( $order_total ) . '</span></div>';
+        echo '</div>';
+        echo '<div class="receipt-section">';
+        echo '<h2>M&eacute;todo de pago</h2>';
+        echo '<p style="margin:0;font-size:14px;">' . esc_html( $payment_method ) . '</p>';
+        echo '</div>';
+        echo '<div class="receipt-footer">';
+        echo '<a href="' . esc_url( $site_url ) . '">' . esc_html( $site_name ) . '</a>';
+        echo '</div>';
+        echo '</div>';
+        echo '</body>';
+        echo '</html>';
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
     }
 
     /**
