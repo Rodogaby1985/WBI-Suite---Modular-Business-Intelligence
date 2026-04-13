@@ -33,6 +33,12 @@ class WBI_Suite_Loader {
         // Ensure the armador role exists
         add_action( 'init', array( $this, 'ensure_armador_role' ) );
 
+        // Filter WBI menus based on per-user permissions (runs after all modules register their menus)
+        add_action( 'admin_menu', array( $this, 'filter_wbi_menus_by_permission' ), 999 );
+
+        // Handle superadmin POST actions: save user permissions, transfer superadmin
+        add_action( 'admin_init', array( $this, 'handle_wbi_superadmin_actions' ) );
+
         // Cargar Módulos Activos según configuración
         $this->load_modules();
     }
@@ -323,6 +329,10 @@ class WBI_Suite_Loader {
         if ( $action === 'activate' ) {
             $key = sanitize_text_field( isset( $_POST['wbi_license_key'] ) ? $_POST['wbi_license_key'] : '' );
             if ( WBI_License_Manager::activate( $key ) ) {
+                // Register the activating user as WBI Superadmin if not already set
+                if ( ! get_option( 'wbi_superadmin_user_id' ) ) {
+                    update_option( 'wbi_superadmin_user_id', get_current_user_id() );
+                }
                 add_settings_error( 'wbi_license', 'activated', '✅ Licencia activada correctamente. ¡Bienvenido a wooErp!', 'success' );
             } else {
                 add_settings_error( 'wbi_license', 'invalid', '❌ Clave de licencia inválida. Verificá el formato e intentá nuevamente.', 'error' );
@@ -710,17 +720,46 @@ class WBI_Suite_Loader {
     }
 
     /**
+     * Check if a given user (defaults to current user) is the WBI Superadmin.
+     *
+     * @param int|null $user_id WordPress user ID, or null for current user.
+     * @return bool
+     */
+    public static function is_wbi_superadmin( $user_id = null ) {
+        if ( null === $user_id ) {
+            $user_id = get_current_user_id();
+        }
+        return (int) get_option( 'wbi_superadmin_user_id', 0 ) === (int) $user_id;
+    }
+
+    /**
      * Check if the current user can access a given module.
      *
      * @param string $module_slug The module slug with the 'wbi_enable_' prefix removed
      *                            (e.g. 'picking' for 'wbi_enable_picking').
      * @return bool
      */
-    public function user_can_access_module( $module_slug ) {
-        $user     = wp_get_current_user();
-        $perm_key = 'wbi_permissions_' . $module_slug;
+    public static function user_can_access_module( $module_slug, $user_id = null ) {
+        if ( null === $user_id ) {
+            $user_id = get_current_user_id();
+        }
+
+        // Superadmin always has access to every module
+        if ( self::is_wbi_superadmin( $user_id ) ) {
+            return true;
+        }
+
+        // Check per-user permissions stored by the superadmin
+        $user_perms = get_option( 'wbi_user_permissions', array() );
+        if ( isset( $user_perms[ $user_id ] ) && is_array( $user_perms[ $user_id ] ) ) {
+            return in_array( $module_slug, $user_perms[ $user_id ], true );
+        }
+
+        // Fallback: legacy role-based permissions
+        $user = get_userdata( $user_id );
+        if ( ! $user ) return false;
         $opts     = get_option( 'wbi_modules_settings', array() );
-        // Fall back to administrator-only when option is unset OR saved as empty array.
+        $perm_key = 'wbi_permissions_' . $module_slug;
         $permissions = ( isset( $opts[ $perm_key ] ) && ! empty( $opts[ $perm_key ] ) )
             ? (array) $opts[ $perm_key ]
             : array( 'administrator' );
@@ -731,6 +770,176 @@ class WBI_Suite_Loader {
         $id = $args['id'];
         $checked = isset( $this->options[$id] ) ? checked( $this->options[$id], 1, false ) : '';
         echo "<input type='checkbox' name='wbi_modules_settings[$id]' value='1' $checked /> <b>Activar</b>";
+    }
+
+    /**
+     * Returns the full list of WBI module definitions used for per-user permission controls.
+     * Each entry: [ 'slug' => string, 'name' => string, 'enable_key' => string|null ]
+     */
+    private static function get_wbi_module_list() {
+        return array(
+            array( 'slug' => 'b2b',                 'name' => 'Modo Mayorista B2B',          'enable_key' => 'wbi_enable_b2b' ),
+            array( 'slug' => 'dashboard',           'name' => 'Dashboard BI Suite',          'enable_key' => 'wbi_enable_dashboard' ),
+            array( 'slug' => 'barcode',             'name' => 'Códigos de Barra',             'enable_key' => 'wbi_enable_barcode' ),
+            array( 'slug' => 'picking',             'name' => 'Picking & Armado',            'enable_key' => 'wbi_enable_picking' ),
+            array( 'slug' => 'costs',               'name' => 'Costos y Márgenes',           'enable_key' => 'wbi_enable_costs' ),
+            array( 'slug' => 'suppliers',           'name' => 'Proveedores',                 'enable_key' => 'wbi_enable_suppliers' ),
+            array( 'slug' => 'purchase',            'name' => 'Órdenes de Compra',           'enable_key' => 'wbi_enable_purchase' ),
+            array( 'slug' => 'scoring',             'name' => 'Scoring de Clientes',         'enable_key' => 'wbi_enable_scoring' ),
+            array( 'slug' => 'pricelists',          'name' => 'Listas de Precios',           'enable_key' => 'wbi_enable_pricelists' ),
+            array( 'slug' => 'cashflow',            'name' => 'Flujo de Caja',               'enable_key' => 'wbi_enable_cashflow' ),
+            array( 'slug' => 'taxes',               'name' => 'Impuestos Avanzado',          'enable_key' => 'wbi_enable_taxes' ),
+            array( 'slug' => 'whatsapp',            'name' => 'WhatsApp',                    'enable_key' => 'wbi_enable_whatsapp' ),
+            array( 'slug' => 'notifications',       'name' => 'Notificaciones',              'enable_key' => 'wbi_enable_notifications' ),
+            array( 'slug' => 'api',                 'name' => 'API REST',                    'enable_key' => 'wbi_enable_api' ),
+            array( 'slug' => 'abandoned_carts',     'name' => 'Carritos Abandonados',        'enable_key' => 'wbi_enable_abandoned_carts' ),
+            array( 'slug' => 'accounting_reports',  'name' => 'Reportes Contables',          'enable_key' => 'wbi_enable_accounting_reports' ),
+            array( 'slug' => 'credit_notes',        'name' => 'Notas de Crédito / Débito',   'enable_key' => 'wbi_enable_credit_notes' ),
+            array( 'slug' => 'reorder',             'name' => 'Reglas de Reabastecimiento',  'enable_key' => 'wbi_enable_reorder' ),
+            array( 'slug' => 'crm',                 'name' => 'CRM / Pipeline de Ventas',    'enable_key' => 'wbi_enable_crm' ),
+            array( 'slug' => 'custom_fields',       'name' => 'Campos Personalizados',       'enable_key' => 'wbi_enable_custom_fields' ),
+            array( 'slug' => 'employees',           'name' => 'Empleados / RRHH',            'enable_key' => 'wbi_enable_employees' ),
+            array( 'slug' => 'email_marketing',     'name' => 'Email Marketing',             'enable_key' => 'wbi_enable_email_marketing' ),
+            array( 'slug' => 'documents',           'name' => 'Documentos',                  'enable_key' => null ), // active when invoice or remitos enabled
+        );
+    }
+
+    /**
+     * Map from WordPress admin page slug to WBI module slug.
+     * Used to remove inaccessible menu items for non-superadmin users.
+     */
+    private static function get_page_slug_to_module_map() {
+        return array(
+            // Each module's main submenu page
+            'wbi-dashboard-view'     => 'dashboard',
+            'wbi-sales-report'       => 'dashboard',
+            'wbi-clients-report'     => 'dashboard',
+            'wbi-products-report'    => 'dashboard',
+            'wbi-stock-alerts'       => 'dashboard',
+            'wbi-picking'            => 'picking',
+            'wbi-whatsapp'           => 'whatsapp',
+            'wbi-crm'                => 'crm',
+            'wbi-purchase'           => 'purchase',
+            'wbi-suppliers'          => 'suppliers',
+            'wbi-new-supplier'       => 'suppliers',
+            'wbi-scoring'            => 'scoring',
+            'wbi-barcodes'           => 'barcode',
+            'wbi-costs-report'       => 'costs',
+            'wbi-pricelists'         => 'pricelists',
+            'wbi-documents'          => 'documents',
+            'wbi-invoices'           => 'invoice',
+            'wbi-remitos'            => 'remitos',
+            'wbi-reorder'            => 'reorder',
+            'wbi-taxes'              => 'taxes',
+            'wbi-cashflow'           => 'cashflow',
+            'wbi-accounting-reports' => 'accounting_reports',
+            'wbi-credit-notes'       => 'credit_notes',
+            'wbi-abandoned-carts'    => 'abandoned_carts',
+            'wbi-api'                => 'api',
+            'wbi-notifications'      => 'notifications',
+            'wbi-email-marketing'    => 'email_marketing',
+            'wbi-custom-fields'      => 'custom_fields',
+            'wbi-employees'          => 'employees',
+            // Config page: superadmin only
+            'wbi-settings'           => '__superadmin_only__',
+        );
+    }
+
+    /**
+     * Remove WBI menu pages that the current non-superadmin user cannot access.
+     * Runs on admin_menu at priority 999 (after all modules have registered their menus).
+     */
+    public function filter_wbi_menus_by_permission() {
+        // Superadmin always sees everything
+        if ( self::is_wbi_superadmin() ) {
+            return;
+        }
+
+        $map = self::get_page_slug_to_module_map();
+
+        foreach ( $map as $page_slug => $module_slug ) {
+            if ( '__superadmin_only__' === $module_slug ) {
+                remove_submenu_page( 'woocommerce', $page_slug );
+                continue;
+            }
+            if ( ! self::user_can_access_module( $module_slug ) ) {
+                remove_submenu_page( 'wbi-dashboard-view', $page_slug );
+            }
+        }
+
+        // If the user has no access to any module, remove the top-level WBI dashboard menu
+        $has_any = false;
+        foreach ( $map as $module_slug ) {
+            if ( '__superadmin_only__' !== $module_slug && self::user_can_access_module( $module_slug ) ) {
+                $has_any = true;
+                break;
+            }
+        }
+        if ( ! $has_any ) {
+            remove_menu_page( 'wbi-dashboard-view' );
+        }
+    }
+
+    /**
+     * Handle POST actions for superadmin: save per-user permissions and transfer superadmin role.
+     * Hooked to admin_init.
+     */
+    public function handle_wbi_superadmin_actions() {
+        if ( ! isset( $_POST['wbi_superadmin_action'] ) ) {
+            return;
+        }
+        if ( ! self::is_wbi_superadmin() ) {
+            wp_die( esc_html__( 'No tenés permisos para realizar esta acción. Solo el Superadmin de WBI puede modificar estos ajustes.', 'wbi-suite' ) );
+        }
+        if ( ! wp_verify_nonce( isset( $_POST['_wbi_superadmin_nonce'] ) ? $_POST['_wbi_superadmin_nonce'] : '', 'wbi_superadmin_nonce' ) ) {
+            wp_die( esc_html__( 'Verificación de seguridad fallida. Intentá nuevamente.', 'wbi-suite' ) );
+        }
+
+        $action = sanitize_text_field( $_POST['wbi_superadmin_action'] );
+
+        if ( 'save_user_permissions' === $action ) {
+            $raw_perms = isset( $_POST['wbi_user_perms'] ) && is_array( $_POST['wbi_user_perms'] )
+                ? $_POST['wbi_user_perms']
+                : array();
+
+            $all_module_slugs = array_map( function( $m ) { return $m['slug']; }, self::get_wbi_module_list() );
+
+            // Fetch all eligible users (same list shown in the UI)
+            $users = get_users( array(
+                'role__in' => array( 'administrator', 'shop_manager', 'editor', 'wbi_armador' ),
+                'exclude'  => array( (int) get_option( 'wbi_superadmin_user_id', 0 ) ),
+                'fields'   => 'ID',
+            ) );
+
+            $saved = array();
+            foreach ( $users as $uid ) {
+                $uid = (int) $uid;
+                if ( isset( $raw_perms[ $uid ] ) && is_array( $raw_perms[ $uid ] ) ) {
+                    // Sanitize: keep only known module slugs
+                    $saved[ $uid ] = array_values( array_intersect(
+                        array_map( 'sanitize_key', $raw_perms[ $uid ] ),
+                        $all_module_slugs
+                    ) );
+                } else {
+                    $saved[ $uid ] = array();
+                }
+            }
+
+            update_option( 'wbi_user_permissions', $saved );
+            wp_safe_redirect( add_query_arg( array( 'page' => 'wbi-settings', 'wbi_saved' => '1' ), admin_url( 'admin.php' ) ) );
+            exit;
+
+        } elseif ( 'transfer_superadmin' === $action ) {
+            $new_id = isset( $_POST['wbi_new_superadmin_id'] ) ? (int) $_POST['wbi_new_superadmin_id'] : 0;
+            if ( $new_id > 0 ) {
+                $new_user = get_userdata( $new_id );
+                if ( $new_user && ! self::is_wbi_superadmin( $new_id ) ) {
+                    update_option( 'wbi_superadmin_user_id', $new_id );
+                }
+            }
+            wp_safe_redirect( add_query_arg( array( 'page' => 'wbi-settings', 'wbi_transferred' => '1' ), admin_url( 'admin.php' ) ) );
+            exit;
+        }
     }
 
     public function number_field( $args ) {
@@ -747,6 +956,11 @@ class WBI_Suite_Loader {
     }
 
     public function render_settings_page() {
+        // Only the WBI Superadmin can access the configuration page
+        if ( ! self::is_wbi_superadmin() ) {
+            wp_die( esc_html__( 'No tenés permisos para acceder a esta página. Solo el Superadmin de WBI puede configurar el plugin.', 'wbi-suite' ) );
+        }
+
         $opts          = $this->options ?: array();
         $active_count  = 0;
         $toggle_keys   = array(
@@ -1028,6 +1242,137 @@ class WBI_Suite_Loader {
                     <?php submit_button( 'Guardar configuración', 'primary', 'submit', false ); ?>
                 </p>
             </form>
+
+            <?php
+            // ── Permisos WBI Suite (por usuario) — solo visible para el Superadmin ──────
+            $superadmin_id   = (int) get_option( 'wbi_superadmin_user_id', 0 );
+            $superadmin_user = $superadmin_id ? get_userdata( $superadmin_id ) : false;
+            $user_perms      = get_option( 'wbi_user_permissions', array() );
+
+            // Collect all currently enabled module slugs so we only show relevant checkboxes
+            $all_modules      = self::get_wbi_module_list();
+            $active_modules   = array();
+            foreach ( $all_modules as $m ) {
+                if ( null === $m['enable_key'] ) {
+                    // Documents: active when invoice or remitos enabled
+                    if ( ! empty( $opts['wbi_enable_invoice'] ) || ! empty( $opts['wbi_enable_remitos'] ) ) {
+                        $active_modules[] = $m;
+                    }
+                } elseif ( ! empty( $opts[ $m['enable_key'] ] ) ) {
+                    $active_modules[] = $m;
+                }
+            }
+
+            // Non-superadmin users eligible for permission management
+            $eligible_users = get_users( array(
+                'role__in' => array( 'administrator', 'shop_manager', 'editor', 'wbi_armador' ),
+                'exclude'  => array( $superadmin_id ),
+                'orderby'  => 'display_name',
+            ) );
+
+            // Show notice if just saved / transferred
+            if ( isset( $_GET['wbi_saved'] ) && '1' === $_GET['wbi_saved'] ) {
+                echo '<div class="notice notice-success is-dismissible"><p>✅ Permisos guardados correctamente.</p></div>';
+            }
+            if ( isset( $_GET['wbi_transferred'] ) && '1' === $_GET['wbi_transferred'] ) {
+                echo '<div class="notice notice-success is-dismissible"><p>👑 Superadmin transferido correctamente.</p></div>';
+            }
+            ?>
+
+            <div class="wbi-perm-details" style="margin-top:24px; background:#fff; border:1px solid #c3c4c7; border-radius:6px; overflow:hidden;">
+                <div style="padding:16px 20px; font-size:15px; font-weight:bold; color:#1d2327; border-bottom:1px solid #e0e0e0; display:flex; align-items:center; gap:8px;">
+                    🔐 Permisos WBI Suite <span style="color:#50575e; font-size:12px; font-weight:normal;">— control de acceso por usuario</span>
+                </div>
+                <div style="padding:20px;">
+
+                    <!-- Superadmin info -->
+                    <div style="background:#f0f6ff; border:1px solid #b8d4ff; border-radius:6px; padding:14px 18px; margin-bottom:20px;">
+                        <p style="margin:0 0 6px; font-size:14px;">
+                            <strong>👑 Superadmin:</strong>
+                            <?php if ( $superadmin_user ) : ?>
+                                <?php echo esc_html( $superadmin_user->display_name ); ?>
+                                <span style="color:#50575e; font-size:12px;">(User ID: <?php echo esc_html( $superadmin_id ); ?> — <?php echo esc_html( $superadmin_user->user_email ); ?>)</span>
+                            <?php else : ?>
+                                <em style="color:#888;">No registrado aún</em>
+                            <?php endif; ?>
+                        </p>
+                        <p style="margin:0; font-size:12px; color:#50575e;">Acceso completo: todos los módulos + Configuración</p>
+                    </div>
+
+                    <!-- Transfer superadmin -->
+                    <?php if ( ! empty( $eligible_users ) ) : ?>
+                    <details style="margin-bottom:20px; border:1px solid #e0e0e0; border-radius:6px; overflow:hidden;">
+                        <summary style="cursor:pointer; padding:10px 14px; font-size:13px; font-weight:600; color:#1d2327; background:#fafafa; list-style:none; display:flex; align-items:center; gap:6px;">
+                            🔁 Transferir Superadmin a otro usuario
+                        </summary>
+                        <div style="padding:14px 16px; background:#fff8e1; border-top:1px solid #e0e0e0;">
+                            <p style="margin:0 0 10px; font-size:12px; color:#8a6d3b;">
+                                ⚠️ Al transferir, perderás el acceso a esta página de configuración. Solo el nuevo superadmin podrá modificarla.
+                            </p>
+                            <form method="post" onsubmit="return confirm('¿Estás seguro? Perderás el acceso a la configuración de WBI Suite.');">
+                                <?php wp_nonce_field( 'wbi_superadmin_nonce', '_wbi_superadmin_nonce' ); ?>
+                                <input type="hidden" name="wbi_superadmin_action" value="transfer_superadmin">
+                                <select name="wbi_new_superadmin_id" style="min-width:200px; margin-right:8px;">
+                                    <?php foreach ( $eligible_users as $eu ) : ?>
+                                        <option value="<?php echo esc_attr( $eu->ID ); ?>">
+                                            <?php echo esc_html( $eu->display_name . ' (' . implode( ', ', $eu->roles ) . ') — ' . $eu->user_email ); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="submit" class="button button-secondary">Transferir Superadmin</button>
+                            </form>
+                        </div>
+                    </details>
+                    <?php endif; ?>
+
+                    <!-- Per-user module permissions -->
+                    <?php if ( empty( $eligible_users ) ) : ?>
+                        <p style="color:#888; font-style:italic; font-size:13px;">No hay otros usuarios admin, shop manager, editor o armador para asignar permisos.</p>
+                    <?php elseif ( empty( $active_modules ) ) : ?>
+                        <p style="color:#888; font-style:italic; font-size:13px;">Activá al menos un módulo para poder asignar permisos.</p>
+                    <?php else : ?>
+                        <p style="margin:0 0 14px; font-size:13px; color:#50575e;">
+                            Seleccioná qué módulos puede ver cada usuario. Si un usuario no tiene ningún módulo habilitado, no verá el menú WBI Suite.
+                        </p>
+                        <form method="post">
+                            <?php wp_nonce_field( 'wbi_superadmin_nonce', '_wbi_superadmin_nonce' ); ?>
+                            <input type="hidden" name="wbi_superadmin_action" value="save_user_permissions">
+
+                            <?php foreach ( $eligible_users as $eu ) :
+                                $uid          = $eu->ID;
+                                $saved_mods   = isset( $user_perms[ $uid ] ) && is_array( $user_perms[ $uid ] ) ? $user_perms[ $uid ] : array();
+                                $role_label   = implode( ', ', $eu->roles );
+                            ?>
+                            <div style="border:1px solid #e0e0e0; border-radius:6px; padding:14px 16px; margin-bottom:14px; background:#fafafa;">
+                                <p style="margin:0 0 10px; font-size:13px; font-weight:600;">
+                                    👤 <?php echo esc_html( $eu->display_name ); ?>
+                                    <span style="color:#50575e; font-weight:normal;">(<?php echo esc_html( $role_label ); ?>) — <?php echo esc_html( $eu->user_email ); ?></span>
+                                </p>
+                                <div style="display:flex; flex-wrap:wrap; gap:8px 20px;">
+                                    <?php foreach ( $active_modules as $mod ) :
+                                        $checked = in_array( $mod['slug'], $saved_mods, true ) ? 'checked' : '';
+                                    ?>
+                                    <label style="display:flex; align-items:center; gap:4px; font-size:12px; cursor:pointer;">
+                                        <input type="checkbox"
+                                               name="wbi_user_perms[<?php echo esc_attr( $uid ); ?>][]"
+                                               value="<?php echo esc_attr( $mod['slug'] ); ?>"
+                                               <?php echo $checked; ?>>
+                                        <?php echo esc_html( $mod['name'] ); ?>
+                                    </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+
+                            <p style="margin-top:8px;">
+                                <button type="submit" class="button button-primary">💾 Guardar Permisos</button>
+                            </p>
+                        </form>
+                    <?php endif; ?>
+
+                </div>
+            </div>
+
         </div>
         <?php
     }
@@ -1038,6 +1383,13 @@ class WBI_Suite_Loader {
 
     public static function on_activate() {
         self::maybe_create_armador_role();
+        // Register the activating user as WBI Superadmin if not already set
+        if ( ! get_option( 'wbi_superadmin_user_id' ) ) {
+            $current_user_id = get_current_user_id();
+            if ( $current_user_id > 0 ) {
+                update_option( 'wbi_superadmin_user_id', $current_user_id );
+            }
+        }
     }
 
     private static function maybe_create_armador_role() {
