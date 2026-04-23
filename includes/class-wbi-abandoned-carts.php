@@ -223,7 +223,7 @@ class WBI_Abandoned_Carts_Module {
         // Popup HTML (static markup; title/body set dynamically by JS)
         $popup_html = '
 <div id="wbi-cart-popup-overlay">
-  <div id="wbi-cart-popup">
+  <div id="wbi-cart-popup" role="dialog" aria-modal="true" tabindex="-1">
     <button id="wbi-popup-close" aria-label="Cerrar">&times;</button>
     <h3 id="wbi-popup-title"></h3>
     <p id="wbi-popup-body"></p>

@@ -1,12 +1,14 @@
 #wbi-cart-popup-overlay {
     display:none; position:fixed; top:0; left:0; width:100%; height:100%;
-    background:rgba(0,0,0,.55); z-index:99999; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.55); z-index:1000001; align-items:center; justify-content:center;
+    pointer-events:auto;
 }
 #wbi-cart-popup-overlay.wbi-show { display:flex; }
 #wbi-cart-popup {
     background:#fff; border-radius:12px; padding:32px 28px 24px;
     max-width:420px; width:90%; box-shadow:0 8px 40px rgba(0,0,0,.22);
     position:relative; animation:wbiSlideIn .25s ease;
+    pointer-events:auto;
 }
 @keyframes wbiSlideIn {
     from { opacity:0; transform:translateY(-24px); }
