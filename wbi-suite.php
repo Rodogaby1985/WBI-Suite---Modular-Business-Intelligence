@@ -1010,7 +1010,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_reorder',        '🔄', 'Reglas de Reabastecimiento','Punto de reorden automático con generación de órdenes de compra',          'wbi-reorder',    'operaciones'  ),
             array( 'wbi_enable_purchase',       '🛒', 'Órdenes de Compra',        'Gestión completa de órdenes de compra y recepción de mercadería',          'wbi-purchase',   'operaciones'  ),
             array( 'wbi_enable_employees',      '👥', 'Empleados / RRHH',         'Gestión de empleados, departamentos, contratos, habilidades y reclutamiento', 'wbi-employees',  'operaciones'  ),
-            array( 'wbi_enable_pos',            '🛒', 'POS / Mostrador',          'Tomador de pedidos en caja con pagos mixtos, cuenta corriente y facturación AFIP', 'wbi-pos',    'operaciones'  ),
+            array( 'wbi_enable_pos',            '🏪', 'POS / Mostrador',          'Tomador de pedidos en caja con pagos mixtos, cuenta corriente y facturación AFIP', 'wbi-pos',    'operaciones'  ),
             array( 'wbi_enable_data',           '📁', 'Modelo de Datos Extra',    'Campos extra: origen de venta y taxonomías personalizadas',               null,             'datos'        ),
             array( 'wbi_enable_custom_fields',  '📋', 'Campos Personalizados',    'Campos custom en registro y checkout con validación de formato y duplicados', 'wbi-custom-fields', 'datos'     ),
             array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',    'finanzas'     ),

@@ -602,7 +602,7 @@
             var raw = localStorage.getItem(DRAFT_KEY);
             if (!raw) return;
             var draft = JSON.parse(raw);
-            if (!draft || (!draft.cart || draft.cart.length === 0)) {
+            if (!draft || !draft.cart || draft.cart.length === 0) {
                 clearDraft();
                 return;
             }

@@ -32,7 +32,7 @@ class WBI_POS_Module {
     public function add_submenu() {
         add_submenu_page(
             'wbi-dashboard-view',
-            '🛒 POS / Mostrador',
+            '🏪 POS / Mostrador',
             '<span class="dashicons dashicons-store" style="font-size:16px;line-height:1.5;vertical-align:middle;margin-right:4px;"></span> POS / Mostrador',
             'manage_woocommerce',
             'wbi-pos',
