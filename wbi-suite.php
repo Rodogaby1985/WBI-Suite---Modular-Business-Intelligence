@@ -290,6 +290,14 @@ class WBI_Suite_Loader {
                 new WBI_Employees_Module();
             }
         }
+
+        // 23. Módulo POS / Mostrador
+        if ( ! empty( $this->options['wbi_enable_pos'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos.php';
+                new WBI_POS_Module();
+            }
+        }
     }
 
     // --- CONFIGURACIÓN EN WP-ADMIN ---
@@ -649,6 +657,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_crm', 'CRM / Pipeline de Ventas', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_crm'] );
         add_settings_field( 'wbi_enable_custom_fields', 'Campos Personalizados (Registro/Checkout)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_custom_fields'] );
         add_settings_field( 'wbi_enable_employees', 'Módulo de Empleados / RRHH', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_employees'] );
+        add_settings_field( 'wbi_enable_pos', 'POS / Mostrador', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_pos'] );
 
         // B2B config fields (minimum order, hidden price text, registration URL)
         add_settings_field( 'wbi_b2b_minimum_order',    'B2B: Monto mínimo de compra',  array($this, 'number_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_minimum_order'] );
@@ -684,6 +693,7 @@ class WBI_Suite_Loader {
             'wbi_enable_crm'               => 'CRM / Pipeline de Ventas',
             'wbi_enable_custom_fields'     => 'Campos Personalizados',
             'wbi_enable_employees'         => 'Empleados / RRHH',
+            'wbi_enable_pos'               => 'POS / Mostrador',
         );
 
         foreach ( $module_slugs as $module_key => $module_name ) {
@@ -800,6 +810,7 @@ class WBI_Suite_Loader {
             array( 'slug' => 'custom_fields',       'name' => 'Campos Personalizados',       'enable_key' => 'wbi_enable_custom_fields' ),
             array( 'slug' => 'employees',           'name' => 'Empleados / RRHH',            'enable_key' => 'wbi_enable_employees' ),
             array( 'slug' => 'email_marketing',     'name' => 'Email Marketing',             'enable_key' => 'wbi_enable_email_marketing' ),
+            array( 'slug' => 'pos',                 'name' => 'POS / Mostrador',             'enable_key' => 'wbi_enable_pos' ),
             array( 'slug' => 'documents',           'name' => 'Documentos',                  'enable_key' => null ), // active when invoice or remitos enabled
         );
     }
@@ -840,6 +851,7 @@ class WBI_Suite_Loader {
             'wbi-email-marketing'    => 'email_marketing',
             'wbi-custom-fields'      => 'custom_fields',
             'wbi-employees'          => 'employees',
+            'wbi-pos'                => 'pos',
             // Config page: superadmin only
             'wbi-settings'           => '__superadmin_only__',
         );
@@ -971,7 +983,7 @@ class WBI_Suite_Loader {
             'wbi_enable_abandoned_carts','wbi_enable_checkout_validator',
             'wbi_enable_accounting_reports','wbi_enable_credit_notes',
             'wbi_enable_email_marketing','wbi_enable_reorder','wbi_enable_crm',
-            'wbi_enable_custom_fields','wbi_enable_employees',
+            'wbi_enable_custom_fields','wbi_enable_employees','wbi_enable_pos',
         );
         $total_modules = count( $toggle_keys );
         foreach ( $toggle_keys as $k ) {
@@ -998,6 +1010,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_reorder',        '🔄', 'Reglas de Reabastecimiento','Punto de reorden automático con generación de órdenes de compra',          'wbi-reorder',    'operaciones'  ),
             array( 'wbi_enable_purchase',       '🛒', 'Órdenes de Compra',        'Gestión completa de órdenes de compra y recepción de mercadería',          'wbi-purchase',   'operaciones'  ),
             array( 'wbi_enable_employees',      '👥', 'Empleados / RRHH',         'Gestión de empleados, departamentos, contratos, habilidades y reclutamiento', 'wbi-employees',  'operaciones'  ),
+            array( 'wbi_enable_pos',            '🛒', 'POS / Mostrador',          'Tomador de pedidos en caja con pagos mixtos, cuenta corriente y facturación AFIP', 'wbi-pos',    'operaciones'  ),
             array( 'wbi_enable_data',           '📁', 'Modelo de Datos Extra',    'Campos extra: origen de venta y taxonomías personalizadas',               null,             'datos'        ),
             array( 'wbi_enable_custom_fields',  '📋', 'Campos Personalizados',    'Campos custom en registro y checkout con validación de formato y duplicados', 'wbi-custom-fields', 'datos'     ),
             array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',    'finanzas'     ),
@@ -1163,6 +1176,7 @@ class WBI_Suite_Loader {
                     array( 'enable_key' => 'wbi_enable_crm',           'perm_key' => 'wbi_permissions_crm',           'name' => 'CRM / Pipeline de Ventas' ),
                     array( 'enable_key' => 'wbi_enable_custom_fields', 'perm_key' => 'wbi_permissions_custom_fields', 'name' => 'Campos Personalizados' ),
                     array( 'enable_key' => 'wbi_enable_employees',     'perm_key' => 'wbi_permissions_employees',     'name' => 'Empleados / RRHH' ),
+                    array( 'enable_key' => 'wbi_enable_pos',           'perm_key' => 'wbi_permissions_pos',           'name' => 'POS / Mostrador' ),
                 );
                 // Unified documents module: show when invoice or remitos is active
                 if ( ! empty( $opts['wbi_enable_invoice'] ) || ! empty( $opts['wbi_enable_remitos'] ) ) {
