@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>wooErp — ERP integrado en WooCommerce vs ERP externo | WBI Suite</title>
+  <meta name="description" content="Compará wooErp (ERP nativo en WooCommerce) vs un ERP externo que requiere sincronización. Menos fricción, menos errores, más velocidad operativa. Pensado para Argentina: AFIP (roadmap), mostrador y caja." />
+  <meta name="keywords" content="WooCommerce ERP, ERP integrado en WooCommerce, ERP externo sincronización, facturación AFIP, mostrador, control de caja, mayorista, minorista" />
+  <meta property="og:title" content="wooErp — ERP integrado en WooCommerce" />
+  <meta property="og:description" content="El ecommerce y el ERP en un solo lugar. Sin sincronización." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="wooErp — ERP integrado en WooCommerce" />
+  <meta name="twitter:description" content="Comparativa comercial: wooErp vs ERP externo con sincronización" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --color-bg:        #060814;
+      --color-bg-2:      #090d1f;
+      --color-bg-3:      #0d1230;
+      --color-surface:   #0f1535;
+      --color-surface-2: #141b3d;
+      --color-border:    rgba(99,102,241,0.18);
+      --color-primary:   #7c3aed;
+      --color-primary-2: #6366f1;
+      --color-accent:    #06b6d4;
+      --color-accent-2:  #22d3ee;
+      --color-success:   #10b981;
+      --color-danger:    #ef4444;
+      --color-text:      #e2e8f0;
+      --color-text-muted:#94a3b8;
+      --color-text-dim:  #64748b;
+      --gradient-main:   linear-gradient(135deg, #7c3aed 0%, #6366f1 40%, #06b6d4 100%);
+      --gradient-hero:   linear-gradient(135deg, #4c1d95 0%, #312e81 40%, #0e7490 100%);
+      --gradient-card:   linear-gradient(145deg, #0f1535 0%, #141b3d 100%);
+      --shadow-glow:     0 0 40px rgba(124,58,237,0.25);
+      --shadow-card:     0 8px 32px rgba(0,0,0,0.45);
+      --radius:          16px;
+      --radius-sm:       10px;
+      --transition:      all 0.35s cubic-bezier(.4,0,.2,1);
+      --font-main:       'Inter', sans-serif;
+      --font-display:    'Space Grotesk', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: var(--font-main);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+    a { color: var(--color-accent); text-decoration: none; transition: var(--transition); }
+    a:hover { color: var(--color-accent-2); }
+    button { cursor: pointer; border: none; font-family: var(--font-main); }
+    ul { list-style: none; }
+
+    /* Print */
+    @media print {
+      #navbar, .no-print { display: none !important; }
+      body { background: #fff !important; color: #000 !important; }
+      section { padding: 24px 0 !important; }
+      .module-card, .pain-card, .solution-card, .ventaja-card, .audience-card { box-shadow: none !important; }
+      .table-wrapper { box-shadow: none !important; }
+    }
+
+    #scroll-progress {
+      position: fixed;
+      top: 0; left: 0;
+      height: 3px;
+      width: 0%;
+      background: var(--gradient-main);
+      z-index: 9999;
+      transition: width 0.1s linear;
+      box-shadow: 0 0 8px rgba(124,58,237,0.6);
+    }
+
+    #navbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: var(--transition);
+    }
+    #navbar.scrolled {
+      background: rgba(6,8,20,0.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--color-border);
+      padding: 12px 32px;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.4);
+    }
+    .nav-logo {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      font-weight: 700;
+      background: var(--gradient-main);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .nav-links {
+      display: flex;
+      gap: 28px;
+      align-items: center;
+    }
+    .nav-links a {
+      color: var(--color-text-muted);
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: var(--transition);
+    }
+    .nav-links a:hover { color: var(--color-text); }
+
+    .nav-cta {
+      background: var(--gradient-main);
+      color: #fff !important;
+      padding: 8px 20px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      box-shadow: 0 4px 16px rgba(124,58,237,0.35);
+      transition: var(--transition);
+    }
+    .nav-cta:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(124,58,237,0.5);
+    }
+
+    .nav-toggle {
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      background: none;
+      padding: 4px;
+    }
+    .nav-toggle span {
+      display: block;
+      width: 24px;
+      height: 2px;
+      background: var(--color-text);
+      border-radius: 2px;
+      transition: var(--transition);
+    }
+
+    section { padding: 100px 32px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .text-center { text-align: center; }
+
+    .section-badge {
+      display: inline-block;
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.25);
+      color: #818cf8;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 5px 14px;
+      border-radius: 100px;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+
+    .section-subtitle {
+      font-size: 1.05rem;
+      color: var(--color-text-muted);
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    .gradient-text {
+      background: var(--gradient-main);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* HERO */
+    #hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      background: radial-gradient(ellipse at 20% 50%, rgba(124,58,237,0.15) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 20%, rgba(6,182,212,0.12) 0%, transparent 50%),
+                  var(--color-bg);
+      padding: 120px 32px 80px;
+      text-align: center;
+    }
+
+    .hero-grid {
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(rgba(99,102,241,0.15) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      mask-image: radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, transparent 70%);
+    }
+
+    .hero-content { position: relative; z-index: 2; max-width: 980px; margin: 0 auto; }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(124,58,237,0.12);
+      border: 1px solid rgba(124,58,237,0.3);
+      color: #a78bfa;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 6px 16px;
+      border-radius: 100px;
+      margin-bottom: 28px;
+    }
+
+    .hero-title {
+      font-family: var(--font-display);
+      font-size: clamp(2.2rem, 5vw, 4rem);
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 20px;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(1rem, 2vw, 1.25rem);
+      color: var(--color-text-muted);
+      margin-bottom: 28px;
+    }
+
+    .hero-cta-group {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 26px;
+    }
+
+    .btn-primary {
+      background: var(--gradient-main);
+      color: #fff;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-weight: 800;
+      font-size: 0.98rem;
+      box-shadow: 0 8px 32px rgba(124,58,237,0.4);
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 16px 48px rgba(124,58,237,0.55);
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--color-text);
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.98rem;
+      border: 1px solid var(--color-border);
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-secondary:hover {
+      background: var(--color-surface);
+      border-color: rgba(99,102,241,0.4);
+      transform: translateY(-2px);
+      color: var(--color-text);
+    }
+
+    .hero-pills {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+
+    .pill {
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.25);
+      color: #6ee7b7;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: 100px;
+    }
+
+    .pill.accent {
+      background: rgba(124,58,237,0.1);
+      border-color: rgba(124,58,237,0.3);
+      color: #a78bfa;
+    }
+
+    /* PROBLEMA / SOLUCIÓN */
+    #problema {
+      background: var(--color-bg-2);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .problema-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 42px;
+      align-items: start;
+      margin-top: 52px;
+    }
+
+    .problema-side h3 {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .problema-side.pain h3 { color: #f87171; }
+    .problema-side.solution h3 { color: var(--color-success); }
+
+    .pain-card, .solution-card {
+      background: var(--gradient-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      transition: var(--transition);
+    }
+
+    .pain-card:hover {
+      border-color: rgba(239,68,68,0.3);
+      box-shadow: 0 4px 20px rgba(239,68,68,0.08);
+      transform: translateX(-4px);
+    }
+
+    .solution-card:hover {
+      border-color: rgba(16,185,129,0.3);
+      box-shadow: 0 4px 20px rgba(16,185,129,0.08);
+      transform: translateX(4px);
+    }
+
+    .pain-card .card-icon, .solution-card .card-icon {
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .pain-card h4, .solution-card h4 {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 4px;
+    }
+
+    .pain-card p, .solution-card p {
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      line-height: 1.5;
+    }
+
+    /* COMPARATIVA */
+    #comparativa { background: var(--color-bg-3); }
+
+    .table-wrapper {
+      overflow-x: auto;
+      border-radius: var(--radius);
+      border: 1px solid var(--color-border);
+      box-shadow: var(--shadow-card);
+      margin-top: 48px;
+      background: var(--color-surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead th {
+      padding: 18px 20px;
+      text-align: left;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 0.95rem;
+      border-bottom: 1px solid var(--color-border);
+      background: rgba(255,255,255,0.02);
+    }
+
+    tbody td {
+      padding: 14px 20px;
+      border-bottom: 1px solid rgba(99,102,241,0.08);
+      font-size: 0.92rem;
+      vertical-align: top;
+    }
+
+    tbody tr:hover { background: rgba(99,102,241,0.06); }
+
+    .check-yes { color: var(--color-success); font-weight: 800; }
+    .check-no { color: var(--color-danger); font-weight: 800; }
+    .check-warn { color: #f59e0b; font-weight: 800; }
+
+    .muted { color: var(--color-text-muted); }
+
+    /* MÓDULOS */
+    #modulos { background: var(--color-bg-2); }
+
+    .modules-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 18px;
+      margin-top: 44px;
+    }
+
+    .module-card {
+      background: var(--gradient-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: 22px;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .module-card:hover {
+      border-color: rgba(99,102,241,0.35);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-card);
+    }
+
+    .module-icon { font-size: 1.8rem; margin-bottom: 10px; }
+
+    .module-name {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .module-desc {
+      font-size: 0.86rem;
+      color: var(--color-text-muted);
+      line-height: 1.55;
+    }
+
+    .module-badge {
+      display: inline-block;
+      background: rgba(124,58,237,0.12);
+      border: 1px solid rgba(124,58,237,0.2);
+      color: #a78bfa;
+      font-size: 0.7rem;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 6px;
+      margin-top: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    /* VENTAJAS */
+    #ventajas { background: var(--color-bg-3); }
+
+    .ventajas-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px;
+      margin-top: 48px;
+    }
+
+    .ventaja-card {
+      background: var(--gradient-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: 28px;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ventaja-card:hover {
+      transform: translateY(-6px);
+      border-color: rgba(99,102,241,0.4);
+      box-shadow: var(--shadow-card), var(--shadow-glow);
+    }
+
+    .ventaja-number {
+      font-family: var(--font-display);
+      font-size: 3.2rem;
+      font-weight: 900;
+      background: var(--gradient-main);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      opacity: 0.16;
+      position: absolute;
+      top: 14px;
+      right: 20px;
+      line-height: 1;
+    }
+
+    .ventaja-icon { font-size: 2.2rem; margin-bottom: 14px; }
+
+    .ventaja-card h3 {
+      font-family: var(--font-display);
+      font-size: 1.12rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .ventaja-card p {
+      font-size: 0.88rem;
+      color: var(--color-text-muted);
+      line-height: 1.6;
+    }
+
+    /* CTA */
+    #cta-final {
+      background: var(--color-bg-2);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cta-inner {
+      text-align: center;
+      max-width: 840px;
+      margin: 0 auto;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: 42px 28px;
+      box-shadow: var(--shadow-card);
+    }
+
+    .cta-title {
+      font-family: var(--font-display);
+      font-size: clamp(1.5rem, 3vw, 2.3rem);
+      font-weight: 900;
+      margin-bottom: 14px;
+      line-height: 1.2;
+    }
+
+    .cta-sub {
+      font-size: 1.05rem;
+      color: var(--color-text-muted);
+      margin-bottom: 26px;
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .cta-note {
+      font-size: 0.85rem;
+      color: var(--color-text-dim);
+      margin-top: 14px;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      section { padding: 72px 24px; }
+      .problema-grid { grid-template-columns: 1fr; gap: 28px; }
+    }
+
+    @media (max-width: 768px) {
+      #navbar { padding: 16px 20px; }
+      #navbar.scrolled { padding: 10px 20px; }
+      .nav-links {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(6,8,20,0.97);
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        z-index: 1000;
+      }
+      .nav-links.open { display: flex; }
+      .nav-toggle { display: flex; z-index: 1001; }
+      .ventajas-grid { grid-template-columns: 1fr; }
+    }
+
+  </style>
+</head>
+<body>
+
+  <div id="scroll-progress"></div>
+
+  <nav id="navbar" aria-label="Navegación principal">
+    <a href="#hero" class="nav-logo">wooErp</a>
+    <ul class="nav-links" id="nav-links" role="list">
+      <li><a href="#problema">Problema</a></li>
+      <li><a href="#comparativa">Comparativa</a></li>
+      <li><a href="#modulos">Qué incluye</a></li>
+      <li><a href="#ventajas">Ventajas</a></li>
+      <li><a href="#cta-final" class="nav-cta">Agendar demo</a></li>
+    </ul>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="nav-links">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+
+  <section id="hero" aria-label="Presentación">
+    <div class="hero-grid"></div>
+
+    <div class="hero-content">
+      <div class="hero-badge">🧠 ERP nativo en WooCommerce • Sin sincronización • Argentina</div>
+
+      <h1 class="hero-title">
+        <span class="gradient-text">wooErp</span> vs ERP externo<br/>
+        <span class="muted">(cuando Woo depende de sincronización)</span>
+      </h1>
+
+      <p class="hero-subtitle">
+        Si tu ecommerce está en WooCommerce, ¿por qué duplicar datos en otro sistema y vivir apagando incendios de sincronización?
+        <br/>
+        <b>wooErp</b> convierte Woo en tu backoffice: ventas, stock, compras, picking, B2B, BI y documentos, todo en un solo lugar.
+      </p>
+
+      <div class="hero-cta-group">
+        <a href="#cta-final" class="btn-primary">📅 Agendar demo</a>
+        <a href="#comparativa" class="btn-secondary">⚖️ Ver comparativa</a>
+        <button class="btn-secondary no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+      </div>
+
+      <div class="hero-pills">
+        <span class="pill">✅ Una sola fuente de verdad</span>
+        <span class="pill">✅ Menos soporte</span>
+        <span class="pill accent">🧾 AFIP (roadmap WSFE/CAE)</span>
+        <span class="pill accent">🏪 Mostrador + Caja (roadmap)</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="problema" aria-labelledby="problema-title">
+    <div class="container">
+      <div class="text-center">
+        <span class="section-badge">El problema</span>
+        <h2 class="section-title" id="problema-title">Cuando el ERP está afuera, Woo queda <span class="gradient-text">atado a sincronización</span></h2>
+        <p class="section-subtitle">
+          Los ERPs externos pueden ser muy completos, pero cuando el ecommerce vive en Woo, el día a día termina siendo:
+          duplicación de datos + latencia + conflictos + soporte.
+        </p>
+      </div>
+
+      <div class="problema-grid">
+        <div class="problema-side pain">
+          <h3>🚨 Dolor típico con ERP externo</h3>
+
+          <div class="pain-card">
+            <div class="card-icon">⏱️</div>
+            <div>
+              <h4>Latencia de stock y precios</h4>
+              <p>Actualizás en el ERP y Woo se entera después. Resultado: ventas sin stock o precios desactualizados.</p>
+            </div>
+          </div>
+
+          <div class="pain-card">
+            <div class="card-icon">🔁</div>
+            <div>
+              <h4>Doble carga y conflictos</h4>
+              <p>¿Quién manda si Woo cambia algo y el ERP también? Sin reglas claras aparecen inconsistencias.</p>
+            </div>
+          </div>
+
+          <div class="pain-card">
+            <div class="card-icon">🧯</div>
+            <div>
+              <h4>Soporte “apagafuegos”</h4>
+              <p>Jobs, colas, cron, errores de API, límites… La integración se vuelve un producto aparte.</p>
+            </div>
+          </div>
+
+          <div class="pain-card">
+            <div class="card-icon">🧩</div>
+            <div>
+              <h4>Más piezas, más puntos de falla</h4>
+              <p>Woo + ERP + conector + credenciales + monitoreo. Aumenta el costo operativo.</p>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="problema-side solution">
+          <h3>✅ La solución wooErp (Woo-first)</h3>
+
+          <div class="solution-card">
+            <div class="card-icon">🧠</div>
+            <div>
+              <h4>ERP dentro de Woo</h4>
+              <p>Todo se gestiona desde el mismo admin. Una sola base de datos. Una sola fuente de verdad.</p>
+            </div>
+          </div>
+
+          <div class="solution-card">
+            <div class="card-icon">⚡</div>
+            <div>
+              <h4>Datos en tiempo real</h4>
+              <p>Stock, precios, clientes y pedidos viven en Woo. No hay espera: el cambio es instantáneo.</p>
+            </div>
+          </div>
+
+          <div class="solution-card">
+            <div class="card-icon">🔒</div>
+            <div>
+              <h4>Permisos por módulo</h4>
+              <p>Operación segura: cada rol ve lo que necesita (depósito, ventas, administración, etc.).</p>
+            </div>
+          </div>
+
+          <div class="solution-card">
+            <div class="card-icon">🧩</div>
+            <div>
+              <h4>Suite modular</h4>
+              <p>Activás solo lo que usás (B2B, picking, compras, BI, documentos…). Crece con tu negocio.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="comparativa" aria-labelledby="comparativa-title">
+    <div class="container">
+      <div class="text-center">
+        <span class="section-badge">Comparativa</span>
+        <h2 class="section-title" id="comparativa-title">wooErp vs <span class="gradient-text">ERP externo</span> (con sincronización)</h2>
+        <p class="section-subtitle">
+          La diferencia no es “qué ERP tiene más pantallas”. Es cómo se opera el ecommerce:
+          <b>una sola fuente de verdad</b> vs <b>dos sistemas sincronizados</b>.
+        </p>
+      </div>
+
+      <div class="table-wrapper" role="region" aria-label="Tabla comparativa" tabindex="0">
+        <table>
+          <thead>
+            <tr>
+              <th>Escenario</th>
+              <th>wooErp (ERP en Woo)</th>
+              <th>ERP externo (Woo sincronizado)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Fuente de verdad</td>
+              <td><span class="check-yes">✅ Una</span> (Woo)</td>
+              <td><span class="check-warn">⚠️ Dos</span> (Woo + ERP)</td>
+            </tr>
+            <tr>
+              <td>Stock / precios</td>
+              <td><span class="check-yes">✅ Tiempo real</span></td>
+              <td><span class="check-warn">⚠️ Depende de sync</span></td>
+            </tr>
+            <tr>
+              <td>Conflictos de datos</td>
+              <td><span class="check-yes">✅ Mínimos</span> (sin duplicación)</td>
+              <td><span class="check-warn">⚠️ Frecuentes</span> (¿quién manda?)</td>
+            </tr>
+            <tr>
+              <td>Costo operativo</td>
+              <td><span class="check-yes">✅ Menor</span> (menos moving parts)</td>
+              <td><span class="check-warn">⚠️ Mayor</span> (monitoreo + soporte integración)</td>
+            </tr>
+            <tr>
+              <td>Operación B2C + B2B</td>
+              <td><span class="check-yes">✅ En el mismo Woo</span></td>
+              <td><span class="check-warn">⚠️ Depende de integración</span></td>
+            </tr>
+            <tr>
+              <td>Argentina (AFIP, mostrador, caja)</td>
+              <td><span class="check-warn">🧩 Roadmap</span> AFIP WSFE/CAE + POS + Caja</td>
+              <td><span class="check-warn">⚠️ Variable</span> (según ERP, licencias y conectores)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="muted" style="margin-top:14px;">
+        Nota: la comparación es por enfoque. Un ERP externo puede ser muy completo, pero el ecommerce queda atado a sincronización.
+      </p>
+
+    </div>
+  </section>
+
+  <section id="modulos" aria-labelledby="modulos-title">
+    <div class="container">
+      <div class="text-center">
+        <span class="section-badge">Qué incluye</span>
+        <h2 class="section-title" id="modulos-title">wooErp ya trae <span class="gradient-text">operación real</span> dentro de Woo</h2>
+        <p class="section-subtitle">
+          No es “un conector”. Es una suite modular: activás lo que necesitás.
+        </p>
+      </div>
+
+      <div class="modules-grid">
+        <div class="module-card">
+          <div class="module-icon">🏢</div>
+          <div class="module-name">B2B / Mayoristas</div>
+          <div class="module-desc">Roles mayoristas, precio oculto, aprobación y reglas para vender a empresas sin romper la tienda B2C.</div>
+          <span class="module-badge">B2B + B2C</span>
+        </div>
+
+        <div class="module-card">
+          <div class="module-icon">💲</div>
+          <div class="module-name">Listas de precios</div>
+          <div class="module-desc">Listas por cliente/rol/grupo para mayoristas y políticas comerciales diferenciadas.</div>
+          <span class="module-badge">Comercial</span>
+        </div>
+
+        <div class="module-card">
+          <div class="module-icon">📦</div>
+          <div class="module-name">Picking & armado</div>
+          <div class="module-desc">Flujo operativo para preparar pedidos con escaneo (ideal para volumen y depósitos).</div>
+          <span class="module-badge">Operación</span>
+        </div>
+
+        <div class="module-card">
+          <div class="module-icon">🛒</div>
+          <div class="module-name">Compras & reabastecimiento</div>
+          <div class="module-desc">Proveedores, órdenes de compra y punto de reorden para controlar quiebres de stock.</div>
+          <span class="module-badge">Stock</span>
+        </div>
+
+        <div class="module-card">
+          <div class="module-icon">📊</div>
+          <div class="module-name">BI: dashboard & reportes</div>
+          <div class="module-desc">Métricas, reportes por ventas/clientes/productos, exportaciones y alertas de stock.</div>
+          <span class="module-badge">BI</span>
+        </div>
+
+        <div class="module-card">
+          <div class="module-icon">📑</div>
+          <div class="module-name">Documentos (A4)</div>
+          <div class="module-desc">Orden de pedido + remito + factura (formato). Export CSV de documentos emitidos.</div>
+          <span class="module-badge">Operación</span>
+        </div>
+
+        <div class="module-card">
+          <div class="module-icon">🔔</div>
+          <div class="module-name">Notificaciones</div>
+          <div class="module-desc">Centro de alertas para operar más rápido y reducir errores humanos.</div>
+          <span class="module-badge">Automatización</span>
+        </div>
+
+        <div class="module-card">
+          <div class="module-icon">📱</div>
+          <div class="module-name">API / Integraciones</div>
+          <div class="module-desc">Endpoints REST para conectar apps externas cuando lo necesites (sin depender de un “conector” único).</div>
+          <span class="module-badge">Integraciones</span>
+        </div>
+
+      </div>
+
+      <p class="muted" style="margin-top:18px;">
+        * AFIP (WSFE/CAE), mostrador y control de caja se contemplan como roadmap para Argentina.
+      </p>
+
+    </div>
+  </section>
+
+  <section id="ventajas" aria-labelledby="ventajas-title">
+    <div class="container">
+      <div class="text-center">
+        <span class="section-badge">Por qué gana</span>
+        <h2 class="section-title" id="ventajas-title">La ventaja competitiva es <span class="gradient-text">no sincronizar</span></h2>
+        <p class="section-subtitle">
+          Si tu negocio vive en Woo, el ERP integrado reduce fricción, soporte y errores.
+        </p>
+      </div>
+
+      <div class="ventajas-grid">
+        <div class="ventaja-card">
+          <div class="ventaja-number">01</div>
+          <div class="ventaja-icon">⚡</div>
+          <h3>Operación más rápida</h3>
+          <p>Sin esperar sync: cambios de stock/precio y estado de pedidos reflejan inmediatamente.</p>
+        </div>
+
+        <div class="ventaja-card">
+          <div class="ventaja-number">02</div>
+          <div class="ventaja-icon">🧯</div>
+          <h3>Menos soporte</h3>
+          <p>Menos piezas: no hay “se cortó la integración”, “no corrió el cron”, “API rate limit”, etc.</p>
+        </div>
+
+        <div class="ventaja-card">
+          <div class="ventaja-number">03</div>
+          <div class="ventaja-icon">🧠</div>
+          <h3>Una sola fuente de verdad</h3>
+          <p>Stock, pedidos, clientes y precios en un solo lugar. Menos inconsistencias y menos discusiones internas.</p>
+        </div>
+
+        <div class="ventaja-card">
+          <div class="ventaja-number">04</div>
+          <div class="ventaja-icon">🧩</div>
+          <h3>Escala por módulos</h3>
+          <p>De minorista a mayorista: activás lo que necesitás (B2B, compras, picking, BI, etc.).</p>
+        </div>
+
+        <div class="ventaja-card">
+          <div class="ventaja-number">05</div>
+          <div class="ventaja-icon">🇦🇷</div>
+          <h3>Argentina-ready (roadmap)</h3>
+          <p>AFIP WSFE/CAE + mostrador + control de caja: base lista para convertir Woo en sistema completo.</p>
+        </div>
+
+        <div class="ventaja-card">
+          <div class="ventaja-number">06</div>
+          <div class="ventaja-icon">🔒</div>
+          <h3>Permisos por módulo</h3>
+          <p>Separación de roles: caja, depósito, administración. Menos riesgos en operación diaria.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="cta-final" aria-labelledby="cta-title">
+    <div class="container">
+      <div class="cta-inner">
+        <h2 class="cta-title" id="cta-title">Agendá una demo y veamos tu operación <span class="gradient-text">en vivo</span></h2>
+        <p class="cta-sub">
+          En 15–20 minutos podemos mapear tu flujo (B2C + B2B + depósito/armado + compras) y mostrarte cómo se opera desde Woo.
+        </p>
+
+        <div class="cta-row">
+          <!-- Reemplazar este link por tu Calendly / formulario real -->
+          <a class="btn-primary" href="#" onclick="alert('Reemplazá este link por tu agenda (Calendly / formulario).'); return false;">📅 Agendar demo</a>
+          <button class="btn-secondary no-print" onclick="window.print()">🖨️ Guardar como PDF</button>
+        </div>
+
+        <div class="cta-note">
+          Tip: también podés “Guardar como PDF” esta página y enviarla como propuesta.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // Navbar scroll state
+    const navbar = document.getElementById('navbar');
+    const progress = document.getElementById('scroll-progress');
+
+    function onScroll() {
+      const y = window.scrollY || document.documentElement.scrollTop;
+      navbar.classList.toggle('scrolled', y > 10);
+
+      const doc = document.documentElement;
+      const scrollTop = doc.scrollTop;
+      const scrollHeight = doc.scrollHeight - doc.clientHeight;
+      const pct = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+      progress.style.width = pct + '%';
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    // Mobile nav
+    const navToggle = document.getElementById('nav-toggle');
+    const navLinks = document.getElementById('nav-links');
+
+    navToggle.addEventListener('click', () => {
+      const open = navLinks.classList.toggle('open');
+      navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+
+    // Close nav on link click (mobile)
+    navLinks.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', () => {
+        if (navLinks.classList.contains('open')) {
+          navLinks.classList.remove('open');
+          navToggle.setAttribute('aria-expanded', 'false');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
