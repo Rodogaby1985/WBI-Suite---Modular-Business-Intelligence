@@ -14,24 +14,68 @@
         document.cookie = name + '=' + val + ';expires=' + d.toUTCString() + ';path=/;SameSite=Lax' + secure;
     }
 
+    function isDismissed() {
+        return getCookie('wbi_cart_contact_dismissed') === '1' ||
+               sessionStorage.getItem('wbi_cart_dismissed') === '1';
+    }
+
+    function focusFirstField() {
+        // Delay allows the popup animation to complete and the DOM to stabilize
+        // before attempting to set focus.
+        setTimeout(function(){
+            var $field = $('#wbi-popup-email');
+            if ( !$field.length || !$field.is(':visible') ) {
+                $field = $('#wbi-cart-popup').find('input:visible').first();
+            }
+            if ( $field.length ) {
+                $field[0].focus();
+                // .click() is required on iOS to trigger the virtual keyboard;
+                // .focus() alone does not reliably show the keyboard on iOS devices.
+                $field[0].click();
+            }
+        }, 50);
+    }
+
+    function neutralizeOffCanvas() {
+        var drawerSelectors = [
+            '.off-canvas-close',
+            '.offcanvas-close',
+            '.drawer-close',
+            '.close-offcanvas',
+            '[data-dismiss="offcanvas"]',
+            '.mfp-close'
+        ];
+        var i, $closeBtn;
+        for ( i = 0; i < drawerSelectors.length; i++ ) {
+            $closeBtn = $( drawerSelectors[i] + ':visible' ).first();
+            if ( $closeBtn.length ) {
+                $closeBtn.trigger('click');
+                break;
+            }
+        }
+    }
+
     function buildPopup() {
         if ( $('#wbi-cart-popup-overlay').length ) return;
         $('body').append(WBI.popupHtml);
         $overlay = $('#wbi-cart-popup-overlay');
 
-        $overlay.on('click', function(e){ if($(e.target).is($overlay)) closePopup(); });
-        $('#wbi-popup-close, #wbi-popup-skip').on('click', closePopup);
+        $overlay.on('click', function(e){ if($(e.target).is($overlay)) dismissPopup(); });
+        $('#wbi-popup-close, #wbi-popup-skip').on('click', dismissPopup);
         $('#wbi-popup-save').on('click', saveContact);
     }
 
     function openPopup(type) {
         if ( getCookie('wbi_cart_contact_captured') === '1' ) return;
+        if ( isDismissed() ) return;
+        neutralizeOffCanvas();
         buildPopup();
         var title = type === 'exit' ? WBI.titleExit : WBI.titleAdd;
         var body  = type === 'exit' ? WBI.bodyExit  : WBI.bodyAdd;
         $('#wbi-popup-title').text(title);
         $('#wbi-popup-body').text(body);
         $overlay.addClass('wbi-show');
+        focusFirstField();
         if ( type === 'exit' ) {
             sessionStorage.setItem('wbi_exit_shown','1');
         }
@@ -39,6 +83,12 @@
 
     function closePopup() {
         if ( $overlay ) $overlay.removeClass('wbi-show');
+    }
+
+    function dismissPopup() {
+        setCookie('wbi_cart_contact_dismissed', '1', 1);
+        sessionStorage.setItem('wbi_cart_dismissed', '1');
+        closePopup();
     }
 
     function refreshNonce(callback) {
