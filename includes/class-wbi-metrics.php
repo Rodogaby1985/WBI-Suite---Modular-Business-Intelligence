@@ -280,8 +280,9 @@ class WBI_Metrics_Engine {
     
     /**
      * Check if WooCommerce HPOS (High-Performance Order Storage) is active.
-     * HPOS stores orders in wp_wc_orders instead of wp_posts.
-     * Result is cached in a property to avoid repeated SHOW TABLES queries.
+     * Uses the official WooCommerce OrderUtil API (WC 7.1+) for reliable
+     * detection. Falls back to false (legacy storage) when the class is absent.
+     * Result is cached in a property to avoid repeated calls.
      *
      * @return bool
      */
@@ -289,8 +290,14 @@ class WBI_Metrics_Engine {
         if ( null !== $this->hpos_active ) {
             return $this->hpos_active;
         }
-        $table            = $this->wpdb->prefix . 'wc_orders';
-        $this->hpos_active = (bool) $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+
+        // WooCommerce official HPOS check (WC 7.1+); fallback to legacy storage.
+        if ( class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' ) ) {
+            $this->hpos_active = \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+        } else {
+            $this->hpos_active = false;
+        }
+
         return $this->hpos_active;
     }
 
