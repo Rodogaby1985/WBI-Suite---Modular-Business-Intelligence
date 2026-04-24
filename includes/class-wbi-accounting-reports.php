@@ -73,6 +73,7 @@ class WBI_Accounting_Reports_Module {
         .wbi-accrep-bar-wrap { margin: 4px 0; }
         .wbi-accrep-bar { display: inline-block; height: 14px; background: #2271b1; border-radius: 2px; vertical-align: middle; min-width: 2px; }
         .wbi-accrep-notice { padding: 12px 16px; background: #fcf9e8; border-left: 4px solid #dba617; border-radius: 2px; font-size: 13px; margin-bottom: 12px; }
+        .wbi-accrep-notice--warning { background: #fff8e1; border-left: 4px solid #ffe082; }
         </style>
         <?php
     }
@@ -1215,7 +1216,58 @@ class WBI_Accounting_Reports_Module {
             $from . ' 00:00:00', $to . ' 23:59:59'
         ) );
 
-        return compact( 'monthly', 'by_payment', 'top_customers' );
+        // Fallback: if wc_order_stats returned no rows, read directly from wp_posts + wp_postmeta.
+        $using_fallback = false;
+        if ( empty( $monthly ) ) {
+            $using_fallback = true;
+            $monthly = $wpdb->get_results( $wpdb->prepare(
+                "SELECT
+                    DATE_FORMAT(p.post_date,'%%Y-%%m')          AS ym,
+                    COUNT(*)                                     AS orders,
+                    SUM(CAST(pm.meta_value AS DECIMAL(15,2)))   AS revenue,
+                    AVG(CAST(pm.meta_value AS DECIMAL(15,2)))   AS avg_order
+                 FROM {$wpdb->posts} p
+                 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_order_total'
+                 WHERE p.post_type = 'shop_order'
+                   AND p.post_status IN ('wc-completed','wc-processing')
+                   AND p.post_date BETWEEN %s AND %s
+                 GROUP BY ym ORDER BY ym ASC",
+                $from . ' 00:00:00', $to . ' 23:59:59'
+            ) );
+
+            $by_payment = $wpdb->get_results( $wpdb->prepare(
+                "SELECT
+                    pm2.meta_value                               AS payment_method,
+                    COUNT(*)                                     AS orders,
+                    SUM(CAST(pm.meta_value AS DECIMAL(15,2)))   AS revenue
+                 FROM {$wpdb->posts} p
+                 INNER JOIN {$wpdb->postmeta} pm  ON pm.post_id  = p.ID AND pm.meta_key  = '_order_total'
+                 LEFT  JOIN {$wpdb->postmeta} pm2 ON pm2.post_id = p.ID AND pm2.meta_key = '_payment_method_title'
+                 WHERE p.post_type = 'shop_order'
+                   AND p.post_status IN ('wc-completed','wc-processing')
+                   AND p.post_date BETWEEN %s AND %s
+                 GROUP BY payment_method ORDER BY revenue DESC",
+                $from . ' 00:00:00', $to . ' 23:59:59'
+            ) );
+
+            $top_customers = $wpdb->get_results( $wpdb->prepare(
+                "SELECT
+                    CAST(pm_cu.meta_value AS UNSIGNED)           AS customer_id,
+                    COUNT(*)                                     AS orders,
+                    SUM(CAST(pm.meta_value AS DECIMAL(15,2)))   AS revenue
+                 FROM {$wpdb->posts} p
+                 INNER JOIN {$wpdb->postmeta} pm    ON pm.post_id    = p.ID AND pm.meta_key    = '_order_total'
+                 INNER JOIN {$wpdb->postmeta} pm_cu ON pm_cu.post_id = p.ID AND pm_cu.meta_key = '_customer_user'
+                 WHERE p.post_type = 'shop_order'
+                   AND p.post_status IN ('wc-completed','wc-processing')
+                   AND p.post_date BETWEEN %s AND %s
+                   AND pm_cu.meta_value > 0
+                 GROUP BY customer_id ORDER BY revenue DESC LIMIT 20",
+                $from . ' 00:00:00', $to . ' 23:59:59'
+            ) );
+        }
+
+        return compact( 'monthly', 'by_payment', 'top_customers', 'using_fallback' );
     }
 
     private function render_ventas( $from, $to ) {
@@ -1229,6 +1281,10 @@ class WBI_Accounting_Reports_Module {
         $avg_order = $total_ord > 0 ? $total_rev / $total_ord : 0.0;
         ?>
         <h2>📈 Resumen de Ventas — <?php echo esc_html( $from ); ?> al <?php echo esc_html( $to ); ?></h2>
+
+        <?php if ( $data['using_fallback'] ) : ?>
+        <?php $this->render_analytics_fallback_notice(); ?>
+        <?php endif; ?>
 
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
             <div style="background:#e8f4fd;border:1px solid #90caf9;border-radius:6px;padding:12px 20px;">
@@ -1345,6 +1401,24 @@ class WBI_Accounting_Reports_Module {
             $from . ' 00:00:00', $to . ' 23:59:59'
         ) );
 
+        // Fallback: if wc_order_stats returned no rows, read directly from wp_posts + wp_postmeta.
+        $using_fallback = false;
+        if ( empty( $monthly ) ) {
+            $using_fallback = true;
+            $monthly = $wpdb->get_results( $wpdb->prepare(
+                "SELECT
+                    DATE_FORMAT(p.post_date,'%%Y-%%m')         AS ym,
+                    SUM(CAST(pm.meta_value AS DECIMAL(15,2)))  AS income
+                 FROM {$wpdb->posts} p
+                 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_order_total'
+                 WHERE p.post_type = 'shop_order'
+                   AND p.post_status IN ('wc-completed','wc-processing')
+                   AND p.post_date BETWEEN %s AND %s
+                 GROUP BY ym ORDER BY ym ASC",
+                $from . ' 00:00:00', $to . ' 23:59:59'
+            ) );
+        }
+
         // Aggregate cashflow module expenses by month
         $expenses_by_month = array();
         if ( $has_cashflow ) {
@@ -1370,7 +1444,7 @@ class WBI_Accounting_Reports_Module {
             $proj[ date( 'Y-m', $ts ) ] = $avg;
         }
 
-        return compact( 'monthly', 'expenses_by_month', 'proj', 'has_cashflow', 'avg' );
+        return compact( 'monthly', 'expenses_by_month', 'proj', 'has_cashflow', 'avg', 'using_fallback' );
     }
 
     private function render_cashflow( $from, $to ) {
@@ -1380,6 +1454,10 @@ class WBI_Accounting_Reports_Module {
         $tcol   = array( '#1565c0', '#2e7d32', '#e65100' );
         ?>
         <h2>💧 Flujo de Caja Proyectado — <?php echo esc_html( $from ); ?> al <?php echo esc_html( $to ); ?></h2>
+
+        <?php if ( $data['using_fallback'] ) : ?>
+        <?php $this->render_analytics_fallback_notice(); ?>
+        <?php endif; ?>
 
         <?php if ( ! $data['has_cashflow'] ) : ?>
         <div class="wbi-accrep-notice">
@@ -1467,6 +1545,18 @@ class WBI_Accounting_Reports_Module {
     // -------------------------------------------------------------------------
     // NUMBER FORMATTING HELPERS
     // -------------------------------------------------------------------------
+
+    /**
+     * Render a notice informing the user that the fallback data source is active.
+     */
+    private function render_analytics_fallback_notice() {
+        ?>
+        <div class="wbi-accrep-notice wbi-accrep-notice--warning">
+            ⚠️ <strong><?php esc_html_e( 'WooCommerce Analytics parece desactualizado', 'wbi-suite' ); ?></strong>
+            <?php esc_html_e( '(Action Scheduler atrasado). Mostrando datos calculados directamente desde los pedidos.', 'wbi-suite' ); ?>
+        </div>
+        <?php
+    }
 
     /**
      * Format a number as Argentine currency string ($ 1.234,56).
