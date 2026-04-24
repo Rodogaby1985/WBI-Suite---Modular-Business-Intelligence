@@ -108,7 +108,7 @@ class WBI_Cashflow_Module {
      * @return array
      */
     private function build_cashflow_table() {
-        $statuses      = array( 'wc-completed' );
+        $statuses      = array( 'wc-completed', 'wc-processing' );
         $all_expenses  = $this->get_expenses();
 
         $months = array();
