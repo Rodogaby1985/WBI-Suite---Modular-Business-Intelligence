@@ -17,11 +17,16 @@
     var productSearchTimer = null;
     var customerSearchTimer = null;
 
+    // Seller / cash session state
+    var activeSeller  = null;   // { id, name } — selected seller
+    var cashSession   = null;   // { session_id, status, opening_cash, opened_at } or null
+
     var DRAFT_KEY = 'wbi_pos_draft';
 
     // ── Init ───────────────────────────────────────────────────────────────
     $(function () {
         bindEvents();
+        loadSellers();
         maybeRecoverDraft();
         updateTotals();
     });
@@ -112,6 +117,60 @@
         $('#pos-btn-confirm').on('click', function () {
             if ($(this).prop('disabled')) return;
             createOrder();
+        });
+
+        // Seller selector change
+        $('#pos-seller-select').on('change', function () {
+            var sellerId = parseInt($(this).val(), 10);
+            if (!sellerId) {
+                activeSeller = null;
+                cashSession  = null;
+                updateCashStatusUI();
+                updateTotals();
+                return;
+            }
+            var sellerName = $(this).find('option:selected').text();
+            activeSeller = { id: sellerId, name: sellerName };
+            cashSession  = null;
+            loadCashStatus(sellerId);
+        });
+
+        // Open cash button
+        $('#pos-btn-open-cash').on('click', function () {
+            openModal('pos-modal-open-cash');
+        });
+
+        // Close cash button
+        $('#pos-btn-close-cash').on('click', function () {
+            if (!cashSession || !cashSession.session_id) return;
+            loadCloseSummary(cashSession.session_id, function () {
+                openModal('pos-modal-close-cash');
+            });
+        });
+
+        // Confirm open cash
+        $('#pos-btn-open-cash-confirm').on('click', function () {
+            submitOpenCash();
+        });
+
+        // Confirm close cash
+        $('#pos-btn-close-cash-confirm').on('click', function () {
+            submitCloseCash();
+        });
+
+        // Modal close buttons
+        $(document).on('click', '.pos-modal-close, .pos-modal-backdrop', function () {
+            var modal = $(this).data('modal') || $(this).closest('.pos-modal').attr('id');
+            if (modal) closeModal(modal);
+        });
+
+        // ESC key closes modals
+        $(document).on('keydown', function (e) {
+            if (e.key === 'Escape') {
+                $('.pos-modal:visible').each(function () {
+                    closeModal($(this).attr('id'));
+                });
+            }
         });
     }
 
@@ -348,8 +407,9 @@
             $('.pos-balance-row').removeClass('zero');
         }
 
-        // Enable confirm button only if cart has items
-        $('#pos-btn-confirm').prop('disabled', cart.length === 0);
+        // Enable confirm button only if cart has items AND cash session is open
+        var cashOk = cashSession && cashSession.status === 'open';
+        $('#pos-btn-confirm').prop('disabled', cart.length === 0 || !cashOk);
     }
 
     // ── Customer Search ────────────────────────────────────────────────────
@@ -426,14 +486,21 @@
 
     // ── Create Order ───────────────────────────────────────────────────────
     function createOrder() {
+        if (!cashSession || cashSession.status !== 'open') {
+            showResultPanel('error', '⚠️ ' + wbiPos.i18n.noCashToConfirm);
+            return;
+        }
+
         var $btn = $('#pos-btn-confirm');
         $btn.prop('disabled', true).html('<span class="pos-spinner"></span> Procesando…');
 
         var payload = {
-            items:       cart,
-            payments:    collectPayments(),
-            customer_id: customer ? customer.id : 0,
-            note:        $('#pos-order-note').val().trim()
+            items:            cart,
+            payments:         collectPayments(),
+            customer_id:      customer ? customer.id : 0,
+            note:             $('#pos-order-note').val().trim(),
+            seller_user_id:   activeSeller ? activeSeller.id : 0,
+            cash_session_id:  cashSession ? cashSession.session_id : 0
         };
 
         // Use a standard form-encoded POST so WordPress handles it properly
@@ -463,8 +530,10 @@
      */
     function flattenPayload(payload) {
         var flat = {};
-        flat.customer_id = payload.customer_id;
-        flat.note        = payload.note;
+        flat.customer_id      = payload.customer_id;
+        flat.note             = payload.note;
+        flat.seller_user_id   = payload.seller_user_id || 0;
+        flat.cash_session_id  = payload.cash_session_id || 0;
 
         $.each(payload.items, function (i, item) {
             flat['items[' + i + '][id]']    = item.id;
@@ -560,6 +629,234 @@
             .addClass(type)
             .html(html)
             .show();
+    }
+
+    // ── Sellers ────────────────────────────────────────────────────────────
+    function loadSellers() {
+        $.ajax({
+            url: wbiPos.ajaxUrl,
+            type: 'GET',
+            data: { action: 'wbi_pos_get_sellers', nonce: wbiPos.nonce },
+            success: function (resp) {
+                if (!resp.success || !resp.data) return;
+                var $sel = $('#pos-seller-select');
+                $sel.find('option:not(:first)').remove();
+                $.each(resp.data, function (i, seller) {
+                    $sel.append('<option value="' + parseInt(seller.id, 10) + '">' + escHtml(seller.name) + '</option>');
+                });
+
+                // Auto-select if only one seller
+                if (resp.data.length === 1) {
+                    $sel.val(resp.data[0].id).trigger('change');
+                }
+            }
+        });
+    }
+
+    // ── Cash status ────────────────────────────────────────────────────────
+    function loadCashStatus(sellerId) {
+        updateCashStatusUI('loading');
+        $.ajax({
+            url: wbiPos.ajaxUrl,
+            type: 'GET',
+            data: { action: 'wbi_pos_get_cash_status', nonce: wbiPos.nonce, seller_id: sellerId },
+            success: function (resp) {
+                if (!resp.success) {
+                    cashSession = null;
+                    updateCashStatusUI('error');
+                    return;
+                }
+                cashSession = resp.data;
+                updateCashStatusUI();
+                updateTotals();
+            },
+            error: function () {
+                cashSession = null;
+                updateCashStatusUI('error');
+            }
+        });
+    }
+
+    function updateCashStatusUI(loading) {
+        var $badge = $('#pos-cash-status-badge');
+        var $open  = $('#pos-btn-open-cash');
+        var $close = $('#pos-btn-close-cash');
+
+        if (loading === 'loading') {
+            $badge.text(wbiPos.i18n.cashLoading).attr('class', 'pos-cash-badge');
+            $open.hide();
+            $close.hide();
+            return;
+        }
+
+        if (!cashSession || cashSession.status !== 'open') {
+            $badge.text(wbiPos.i18n.cashClosed).attr('class', 'pos-cash-badge cash-closed');
+            $open.show();
+            $close.hide();
+        } else {
+            var since = cashSession.opened_at ? ' (' + cashSession.opened_at.substring(11, 16) + ')' : '';
+            $badge.text(wbiPos.i18n.cashOpen + since).attr('class', 'pos-cash-badge cash-open');
+            $open.hide();
+            $close.show();
+        }
+    }
+
+    // ── Open Cash ──────────────────────────────────────────────────────────
+    function submitOpenCash() {
+        if (!activeSeller) {
+            alert(wbiPos.i18n.selectSeller);
+            return;
+        }
+        var $btn  = $('#pos-btn-open-cash-confirm');
+        var cash  = parseFloat($('#pos-open-cash-amount').val()) || 0;
+        var note  = $('#pos-open-cash-note').val().trim();
+
+        $btn.prop('disabled', true).html('<span class="pos-spinner"></span>');
+
+        $.ajax({
+            url: wbiPos.ajaxUrl,
+            type: 'POST',
+            data: {
+                action:       'wbi_pos_open_cash',
+                nonce:        wbiPos.nonce,
+                seller_id:    activeSeller.id,
+                opening_cash: cash,
+                note:         note
+            },
+            success: function (resp) {
+                $btn.prop('disabled', false).text(wbiPos.i18n.openCashBtn);
+                if (!resp.success) {
+                    alert(resp.data.message || wbiPos.i18n.cashError);
+                    return;
+                }
+                cashSession = {
+                    status:       'open',
+                    session_id:   resp.data.session_id,
+                    opening_cash: resp.data.opening_cash,
+                    opened_at:    resp.data.opened_at
+                };
+                // Reset form
+                $('#pos-open-cash-amount').val('0');
+                $('#pos-open-cash-note').val('');
+                closeModal('pos-modal-open-cash');
+                updateCashStatusUI();
+                updateTotals();
+            },
+            error: function () {
+                $btn.prop('disabled', false).text(wbiPos.i18n.openCashBtn);
+                alert(wbiPos.i18n.cashError);
+            }
+        });
+    }
+
+    // ── Close Cash ─────────────────────────────────────────────────────────
+    function loadCloseSummary(sessionId, callback) {
+        $.ajax({
+            url: wbiPos.ajaxUrl,
+            type: 'GET',
+            data: { action: 'wbi_pos_get_cash_status', nonce: wbiPos.nonce, seller_id: activeSeller ? activeSeller.id : 0 },
+            success: function () {
+                // Just render current data we have + allow entry
+                renderCloseSummaryPlaceholder();
+                if (typeof callback === 'function') callback();
+            },
+            error: function () {
+                renderCloseSummaryPlaceholder();
+                if (typeof callback === 'function') callback();
+            }
+        });
+    }
+
+    function renderCloseSummaryPlaceholder() {
+        if (!cashSession) return;
+        var html =
+            '<div class="pos-close-summary">' +
+            '<p><strong>' + wbiPos.i18n.openedAt + ':</strong> ' + escHtml(cashSession.opened_at || '—') + '</p>' +
+            '<p><strong>' + wbiPos.i18n.cashIn + ':</strong> ' + wbiPos.currency + formatNumber(cashSession.opening_cash || 0) + '</p>' +
+            '</div>';
+        $('#pos-close-cash-summary').html(html);
+    }
+
+    function submitCloseCash() {
+        if (!cashSession || !cashSession.session_id) return;
+        var $btn  = $('#pos-btn-close-cash-confirm');
+        var cash  = parseFloat($('#pos-close-cash-amount').val()) || 0;
+        var note  = $('#pos-close-cash-note').val().trim();
+
+        $btn.prop('disabled', true).html('<span class="pos-spinner"></span>');
+
+        $.ajax({
+            url: wbiPos.ajaxUrl,
+            type: 'POST',
+            data: {
+                action:       'wbi_pos_close_cash',
+                nonce:        wbiPos.nonce,
+                session_id:   cashSession.session_id,
+                closing_cash: cash,
+                note:         note
+            },
+            success: function (resp) {
+                $btn.prop('disabled', false).text(wbiPos.i18n.closeCashBtn);
+                if (!resp.success) {
+                    alert(resp.data.message || wbiPos.i18n.cashError);
+                    return;
+                }
+                // Show final summary
+                renderFinalSummary(resp.data);
+                cashSession = { status: 'closed' };
+                $('#pos-close-cash-amount').val('0');
+                $('#pos-close-cash-note').val('');
+                closeModal('pos-modal-close-cash');
+                updateCashStatusUI();
+                updateTotals();
+            },
+            error: function () {
+                $btn.prop('disabled', false).text(wbiPos.i18n.closeCashBtn);
+                alert(wbiPos.i18n.cashError);
+            }
+        });
+    }
+
+    function renderFinalSummary(data) {
+        var methods  = wbiPos.i18n.methods || {};
+        var summary  = data.summary || {};
+        var byMethod = summary.totals_by_method || {};
+
+        var rows = '';
+        $.each(byMethod, function (method, amount) {
+            var label = methods[method] || method;
+            rows += '<tr><td>' + escHtml(label) + '</td><td>' + wbiPos.currency + formatNumber(amount) + '</td></tr>';
+        });
+
+        var html =
+            '<div class="pos-close-summary-final">' +
+            '<h3>📊 ' + wbiPos.i18n.closeSummaryTitle + '</h3>' +
+            '<table class="pos-summary-table">' +
+            '<tr><td><strong>' + wbiPos.i18n.orderCount + '</strong></td><td>' + parseInt(summary.order_count || 0, 10) + '</td></tr>' +
+            '<tr><td><strong>' + wbiPos.i18n.totalSold + '</strong></td><td>' + wbiPos.currency + formatNumber(summary.total_sold || 0) + '</td></tr>' +
+            '<tr><td><strong>' + wbiPos.i18n.totalPaid + '</strong></td><td>' + wbiPos.currency + formatNumber(summary.total_paid || 0) + '</td></tr>' +
+            (parseFloat(summary.total_balance) > 0 ? '<tr><td><strong>' + wbiPos.i18n.totalBalance + '</strong></td><td>' + wbiPos.currency + formatNumber(summary.total_balance) + '</td></tr>' : '') +
+            rows +
+            '<tr><td><strong>' + wbiPos.i18n.cashIn + '</strong></td><td>' + wbiPos.currency + formatNumber(data.opening_cash || 0) + '</td></tr>' +
+            '<tr><td><strong>' + wbiPos.i18n.cashCollected + '</strong></td><td>' + wbiPos.currency + formatNumber(byMethod['cash'] || 0) + '</td></tr>' +
+            '<tr><td><strong>' + wbiPos.i18n.closingCash + '</strong></td><td>' + wbiPos.currency + formatNumber(data.closing_cash || 0) + '</td></tr>' +
+            '<tr class="' + (parseFloat(data.difference || 0) < 0 ? 'pos-diff-neg' : 'pos-diff-pos') + '"><td><strong>' + wbiPos.i18n.difference + '</strong></td><td>' + wbiPos.currency + formatNumber(data.difference || 0) + '</td></tr>' +
+            '</table>' +
+            '</div>';
+
+        showResultPanel('success', html);
+    }
+
+    // ── Modal helpers ──────────────────────────────────────────────────────
+    function openModal(id) {
+        $('#' + id).show();
+        setTimeout(function () {
+            $('#' + id).find('input[type="number"], input[type="text"], textarea').first().focus();
+        }, 50);
+    }
+
+    function closeModal(id) {
+        $('#' + id).hide();
     }
 
     // ── Reset ──────────────────────────────────────────────────────────────

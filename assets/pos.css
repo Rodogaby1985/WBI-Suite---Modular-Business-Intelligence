@@ -614,6 +614,198 @@
     to { transform: rotate(360deg); }
 }
 
+/* ── Seller selector ─────────────────────────────────────────────────── */
+.pos-seller-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.pos-seller-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #c3c4c7;
+    white-space: nowrap;
+}
+
+.pos-seller-select {
+    padding: 5px 10px;
+    border-radius: 5px;
+    border: 1px solid #50575e;
+    background: #2c3338;
+    color: #fff;
+    font-size: 13px;
+    max-width: 200px;
+    cursor: pointer;
+}
+
+.pos-seller-select:focus {
+    outline: none;
+    border-color: #2271b1;
+}
+
+/* ── Cash status ─────────────────────────────────────────────────────── */
+.pos-cash-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.pos-cash-badge {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: #50575e;
+    color: #fff;
+    white-space: nowrap;
+}
+
+.pos-cash-badge.cash-open {
+    background: #1a8a3f;
+    color: #fff;
+}
+
+.pos-cash-badge.cash-closed {
+    background: #c0392b;
+    color: #fff;
+}
+
+.pos-btn-danger {
+    background: #c0392b;
+    color: #fff;
+}
+
+.pos-btn-danger:hover:not(:disabled) {
+    background: #922b21;
+}
+
+/* ── Modals ──────────────────────────────────────────────────────────── */
+.pos-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pos-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.pos-modal-box {
+    position: relative;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25);
+    padding: 28px;
+    width: 400px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    z-index: 1;
+}
+
+.pos-modal-box-lg {
+    width: 520px;
+}
+
+.pos-modal-box h2 {
+    margin: 0 0 18px;
+    font-size: 18px;
+    color: #1d2327;
+}
+
+.pos-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.pos-modal-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.pos-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.pos-field-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #50575e;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.pos-input {
+    padding: 9px 12px;
+    font-size: 14px;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    font-family: inherit;
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.pos-input:focus {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.15);
+}
+
+/* ── Close cash summary ──────────────────────────────────────────────── */
+.pos-close-summary {
+    background: #f6f7f7;
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+
+.pos-close-summary p {
+    margin: 4px 0;
+}
+
+.pos-close-summary-final {
+    padding: 4px 0;
+}
+
+.pos-close-summary-final h3 {
+    margin: 0 0 12px;
+    font-size: 15px;
+}
+
+.pos-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+.pos-summary-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.pos-summary-table td:last-child {
+    text-align: right;
+    font-weight: 600;
+}
+
+.pos-diff-neg td:last-child { color: #c0392b; }
+.pos-diff-pos td:last-child { color: #1a8a3f; }
+
 /* ── Responsive: tablets ─────────────────────────────────────────────── */
 @media ( max-width: 900px ) {
     .pos-main {
@@ -629,5 +821,10 @@
 
     .pos-left {
         overflow-y: visible;
+    }
+
+    .pos-seller-wrap,
+    .pos-cash-status {
+        display: none;
     }
 }

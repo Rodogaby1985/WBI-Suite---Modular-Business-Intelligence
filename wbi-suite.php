@@ -30,11 +30,14 @@ class WBI_Suite_Loader {
 
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_css' ) );
 
-        // Ensure the armador role exists
-        add_action( 'init', array( $this, 'ensure_armador_role' ) );
+        // Ensure WBI roles exist
+        add_action( 'init', array( $this, 'ensure_wbi_roles' ) );
 
         // Filter WBI menus based on per-user permissions (runs after all modules register their menus)
         add_action( 'admin_menu', array( $this, 'filter_wbi_menus_by_permission' ), 999 );
+
+        // Remove all non-POS menus for wbi_cashier / wbi_vendedor roles
+        add_action( 'admin_menu', array( $this, 'restrict_pos_role_menus' ), 9999 );
 
         // Handle superadmin POST actions: save user permissions, transfer superadmin
         add_action( 'admin_init', array( $this, 'handle_wbi_superadmin_actions' ) );
@@ -918,7 +921,7 @@ class WBI_Suite_Loader {
 
             // Fetch all eligible users (same list shown in the UI)
             $users = get_users( array(
-                'role__in' => array( 'administrator', 'shop_manager', 'editor', 'wbi_armador' ),
+                'role__in' => array( 'administrator', 'shop_manager', 'editor', 'wbi_armador', 'wbi_cashier', 'wbi_vendedor' ),
                 'exclude'  => array( (int) get_option( 'wbi_superadmin_user_id', 0 ) ),
                 'fields'   => 'ID',
             ) );
@@ -1391,12 +1394,17 @@ class WBI_Suite_Loader {
         <?php
     }
 
+    public function ensure_wbi_roles() {
+        self::maybe_create_wbi_roles();
+    }
+
+    // Keep legacy method name for backwards compatibility
     public function ensure_armador_role() {
-        self::maybe_create_armador_role();
+        self::maybe_create_wbi_roles();
     }
 
     public static function on_activate() {
-        self::maybe_create_armador_role();
+        self::maybe_create_wbi_roles();
         // Register the activating user as WBI Superadmin if not already set
         if ( ! get_option( 'wbi_superadmin_user_id' ) ) {
             $current_user_id = get_current_user_id();
@@ -1406,9 +1414,53 @@ class WBI_Suite_Loader {
         }
     }
 
-    private static function maybe_create_armador_role() {
+    /**
+     * Create all WBI custom roles if they don't exist yet.
+     * - wbi_armador:  picking/warehouse staff (read only)
+     * - wbi_cashier:  POS cashier (read + wbi_pos_access)
+     * - wbi_vendedor: POS seller  (read + wbi_pos_access)
+     */
+    private static function maybe_create_wbi_roles() {
         if ( ! get_role( 'wbi_armador' ) ) {
             add_role( 'wbi_armador', 'Armador WBI', array( 'read' => true ) );
+        }
+
+        if ( ! get_role( 'wbi_cashier' ) ) {
+            add_role( 'wbi_cashier', 'Cajero POS', array(
+                'read'            => true,
+                'wbi_pos_access'  => true,
+            ) );
+        }
+
+        if ( ! get_role( 'wbi_vendedor' ) ) {
+            add_role( 'wbi_vendedor', 'Vendedor POS', array(
+                'read'            => true,
+                'wbi_pos_access'  => true,
+            ) );
+        }
+    }
+
+    /**
+     * Remove all wp-admin menu items except POS for wbi_cashier / wbi_vendedor roles.
+     * Runs at admin_menu priority 9999 (after all menus are registered).
+     */
+    public function restrict_pos_role_menus() {
+        $user = wp_get_current_user();
+        $pos_only_roles = array( 'wbi_cashier', 'wbi_vendedor' );
+
+        if ( empty( array_intersect( (array) $user->roles, $pos_only_roles ) ) ) {
+            return;
+        }
+
+        global $menu;
+
+        // We keep only the POS page (wbi-pos) and the user's own profile
+        $allowed = array( 'wbi-pos', 'profile.php' );
+
+        foreach ( (array) $menu as $item ) {
+            if ( isset( $item[2] ) && ! in_array( $item[2], $allowed, true ) ) {
+                remove_menu_page( $item[2] );
+            }
         }
     }
 }
