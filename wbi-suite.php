@@ -300,6 +300,13 @@ class WBI_Suite_Loader {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos.php';
                 new WBI_POS_Module();
             }
+
+            // 23b. Admin de Caja POS (sesiones, movimientos, exportación)
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos-cash-admin.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos-cash-movements.php';
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos-cash-admin.php';
+                new WBI_POS_Cash_Admin();
+            }
         }
     }
 
@@ -1411,6 +1418,18 @@ class WBI_Suite_Loader {
             if ( $current_user_id > 0 ) {
                 update_option( 'wbi_superadmin_user_id', $current_user_id );
             }
+        }
+
+        // Create POS cash sessions table
+        if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos-cash-sessions.php' ) ) {
+            require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos-cash-sessions.php';
+            WBI_POS_Cash_Sessions::create_table();
+        }
+
+        // Create POS cash movements table
+        if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos-cash-movements.php' ) ) {
+            require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos-cash-movements.php';
+            WBI_POS_Cash_Movements::create_table();
         }
     }
 

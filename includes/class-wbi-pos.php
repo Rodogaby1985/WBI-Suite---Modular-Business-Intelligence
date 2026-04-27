@@ -4,6 +4,9 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 // Load cash sessions helper
 require_once dirname( __FILE__ ) . '/class-wbi-pos-cash-sessions.php';
 
+// Load cash movements helper
+require_once dirname( __FILE__ ) . '/class-wbi-pos-cash-movements.php';
+
 /**
  * WBI POS Module — Tomador de Pedidos en Mostrador
  *
@@ -21,8 +24,9 @@ class WBI_POS_Module {
         add_action( 'admin_menu',            array( $this, 'add_submenu' ), 100 );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 
-        // Ensure cash sessions table exists
+        // Ensure cash sessions and movements tables exist
         WBI_POS_Cash_Sessions::maybe_create_table();
+        WBI_POS_Cash_Movements::maybe_create_table();
 
         // Map manage_woocommerce => wbi_pos_access (so admin/shop_manager can also access POS)
         add_filter( 'user_has_cap', array( $this, 'map_pos_access_cap' ), 10, 3 );
@@ -38,6 +42,10 @@ class WBI_POS_Module {
         add_action( 'wp_ajax_wbi_pos_get_cash_status',  array( $this, 'ajax_get_cash_status' ) );
         add_action( 'wp_ajax_wbi_pos_open_cash',        array( $this, 'ajax_open_cash' ) );
         add_action( 'wp_ajax_wbi_pos_close_cash',       array( $this, 'ajax_close_cash' ) );
+
+        // AJAX endpoints — manual movements (income / expense / withdrawal / deposit)
+        add_action( 'wp_ajax_wbi_pos_add_movement',     array( $this, 'ajax_add_movement' ) );
+        add_action( 'wp_ajax_wbi_pos_get_movements',    array( $this, 'ajax_get_movements' ) );
     }
 
     // =========================================================================
@@ -201,6 +209,21 @@ class WBI_POS_Module {
                 'cashCollected'      => 'Efectivo cobrado',
                 'difference'         => 'Diferencia',
                 'openedAt'           => 'Apertura',
+                // Manual movements
+                'addMovement'        => 'Ingreso/Egreso',
+                'movementTitle'      => 'Registrar movimiento de caja',
+                'movementType'       => 'Tipo de movimiento',
+                'movementTypes'      => array(
+                    'manual_income'  => '⬆️ Ingreso manual',
+                    'manual_expense' => '⬇️ Egreso manual',
+                    'withdrawal'     => '🏧 Retiro',
+                    'deposit'        => '💵 Depósito',
+                ),
+                'movementConfirm'    => 'Registrar',
+                'movementOk'         => 'Movimiento registrado correctamente.',
+                'movementError'      => 'Error al registrar el movimiento.',
+                'noCashForMovement'  => 'Debés abrir la caja antes de registrar un movimiento.',
+                'expectedCash'       => 'Efectivo esperado',
             ),
         ) );
     }
@@ -235,6 +258,9 @@ class WBI_POS_Module {
                     <span id="pos-cash-status-badge" class="pos-cash-badge">⚪ <?php esc_html_e( 'Cargando…', 'wbi-suite' ); ?></span>
                     <button id="pos-btn-open-cash" class="pos-btn pos-btn-success pos-btn-sm" style="display:none;">
                         💰 <?php esc_html_e( 'Abrir caja', 'wbi-suite' ); ?>
+                    </button>
+                    <button id="pos-btn-add-movement" class="pos-btn pos-btn-outline pos-btn-sm" style="display:none;">
+                        ↕️ <?php esc_html_e( 'Ingreso/Egreso', 'wbi-suite' ); ?>
                     </button>
                     <button id="pos-btn-close-cash" class="pos-btn pos-btn-danger pos-btn-sm" style="display:none;">
                         🔒 <?php esc_html_e( 'Cerrar caja', 'wbi-suite' ); ?>
@@ -302,6 +328,56 @@ class WBI_POS_Module {
                             🔒 <?php esc_html_e( 'Cerrar caja', 'wbi-suite' ); ?>
                         </button>
                         <button class="pos-btn pos-btn-secondary pos-modal-close" data-modal="pos-modal-close-cash">
+                            <?php esc_html_e( 'Cancelar', 'wbi-suite' ); ?>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Manual Movement Modal -->
+            <div id="pos-modal-movement" class="pos-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="pos-modal-movement-title">
+                <div class="pos-modal-backdrop"></div>
+                <div class="pos-modal-box">
+                    <h2 id="pos-modal-movement-title">↕️ <?php esc_html_e( 'Registrar movimiento de caja', 'wbi-suite' ); ?></h2>
+                    <div class="pos-modal-body">
+                        <div class="pos-field-group">
+                            <label for="pos-movement-type"><?php esc_html_e( 'Tipo de movimiento', 'wbi-suite' ); ?></label>
+                            <select id="pos-movement-type" class="pos-input">
+                                <option value="manual_income">⬆️ <?php esc_html_e( 'Ingreso manual', 'wbi-suite' ); ?></option>
+                                <option value="manual_expense">⬇️ <?php esc_html_e( 'Egreso manual', 'wbi-suite' ); ?></option>
+                                <option value="withdrawal">🏧 <?php esc_html_e( 'Retiro', 'wbi-suite' ); ?></option>
+                                <option value="deposit">💵 <?php esc_html_e( 'Depósito', 'wbi-suite' ); ?></option>
+                            </select>
+                        </div>
+                        <div class="pos-field-group">
+                            <label for="pos-movement-method"><?php esc_html_e( 'Medio', 'wbi-suite' ); ?></label>
+                            <select id="pos-movement-method" class="pos-input">
+                                <option value="cash"><?php esc_html_e( 'Efectivo', 'wbi-suite' ); ?></option>
+                                <option value="transfer"><?php esc_html_e( 'Transferencia', 'wbi-suite' ); ?></option>
+                                <option value="debit"><?php esc_html_e( 'Tarjeta Débito', 'wbi-suite' ); ?></option>
+                                <option value="credit"><?php esc_html_e( 'Tarjeta Crédito', 'wbi-suite' ); ?></option>
+                                <option value="qr"><?php esc_html_e( 'QR / MercadoPago', 'wbi-suite' ); ?></option>
+                                <option value="other"><?php esc_html_e( 'Otro', 'wbi-suite' ); ?></option>
+                            </select>
+                        </div>
+                        <div class="pos-field-group">
+                            <label for="pos-movement-amount"><?php esc_html_e( 'Monto ($)', 'wbi-suite' ); ?></label>
+                            <input type="number" id="pos-movement-amount" min="0.01" step="0.01" value="" class="pos-input">
+                        </div>
+                        <div class="pos-field-group">
+                            <label for="pos-movement-reference"><?php esc_html_e( 'Referencia (opcional)', 'wbi-suite' ); ?></label>
+                            <input type="text" id="pos-movement-reference" class="pos-input" placeholder="<?php esc_attr_e( 'Número de comprobante, etc.', 'wbi-suite' ); ?>">
+                        </div>
+                        <div class="pos-field-group">
+                            <label for="pos-movement-notes"><?php esc_html_e( 'Notas (opcional)', 'wbi-suite' ); ?></label>
+                            <textarea id="pos-movement-notes" rows="2" class="pos-input" placeholder="<?php esc_attr_e( 'Observaciones…', 'wbi-suite' ); ?>"></textarea>
+                        </div>
+                    </div>
+                    <div class="pos-modal-actions">
+                        <button id="pos-btn-movement-confirm" class="pos-btn pos-btn-primary">
+                            ✅ <?php esc_html_e( 'Registrar', 'wbi-suite' ); ?>
+                        </button>
+                        <button class="pos-btn pos-btn-secondary pos-modal-close" data-modal="pos-modal-movement">
                             <?php esc_html_e( 'Cancelar', 'wbi-suite' ); ?>
                         </button>
                     </div>
@@ -662,6 +738,21 @@ class WBI_POS_Module {
             $order_url = wc_get_order_edit_link( $order_id );
         }
 
+        // ── Record sale_income movements for each payment method ──────────────
+        if ( $cash_session_id > 0 && $paid_total > 0 ) {
+            foreach ( $clean_payments as $payment ) {
+                WBI_POS_Cash_Movements::add_movement(
+                    $cash_session_id,
+                    WBI_POS_Cash_Movements::TYPE_SALE_INCOME,
+                    $payment['method'],
+                    $payment['amount'],
+                    (string) $order_id,
+                    '',
+                    get_current_user_id()
+                );
+            }
+        }
+
         wp_send_json_success( array(
             'order_id'    => $order_id,
             'order_url'   => $order_url,
@@ -856,23 +947,138 @@ class WBI_POS_Module {
             wp_send_json_error( array( 'message' => 'No tenés permisos para cerrar esta caja.' ) );
         }
 
-        $summary = WBI_POS_Cash_Sessions::get_session_summary( $session_id );
-        $cash_in = (float) $session->opening_cash + (float) ( $summary['totals_by_method']['cash'] ?? 0 );
-        $diff    = round( $closing_cash - $cash_in, 2 );
+        $summary       = WBI_POS_Cash_Sessions::get_session_summary( $session_id );
+        $mov_totals    = WBI_POS_Cash_Movements::get_session_totals( $session_id, $session->opening_cash );
+        $expected_cash = $mov_totals['expected_cash'];
+        $diff          = round( $closing_cash - $expected_cash, 2 );
 
-        $ok = WBI_POS_Cash_Sessions::close_session( $session_id, $closing_cash, $note );
+        $ok = WBI_POS_Cash_Sessions::close_session( $session_id, $closing_cash, $note, $expected_cash );
         if ( ! $ok ) {
             wp_send_json_error( array( 'message' => 'Error al cerrar la caja.' ) );
         }
 
         wp_send_json_success( array(
-            'summary'      => $summary,
-            'opening_cash' => (float) $session->opening_cash,
-            'closing_cash' => $closing_cash,
-            'cash_in'      => round( $cash_in, 2 ),
-            'difference'   => $diff,
-            'opened_at'    => $session->opened_at,
-            'closed_at'    => current_time( 'mysql' ),
+            'summary'       => $summary,
+            'mov_totals'    => $mov_totals,
+            'opening_cash'  => (float) $session->opening_cash,
+            'closing_cash'  => $closing_cash,
+            'expected_cash' => $expected_cash,
+            'difference'    => $diff,
+            'opened_at'     => $session->opened_at,
+            'closed_at'     => current_time( 'mysql' ),
+        ) );
+    }
+
+    // =========================================================================
+    // AJAX: ADD MANUAL MOVEMENT
+    // =========================================================================
+
+    public function ajax_add_movement() {
+        check_ajax_referer( 'wbi_pos_nonce', 'nonce' );
+
+        if ( ! $this->current_user_can_pos() ) {
+            wp_send_json_error( array( 'message' => 'Sin permisos.' ), 403 );
+        }
+
+        $session_id = absint( $_POST['session_id'] ?? 0 );
+        $type       = sanitize_text_field( wp_unslash( $_POST['type']      ?? '' ) );
+        $method     = sanitize_text_field( wp_unslash( $_POST['method']    ?? 'cash' ) );
+        $amount     = (float) ( $_POST['amount'] ?? 0 );
+        $reference  = sanitize_text_field( wp_unslash( $_POST['reference'] ?? '' ) );
+        $notes      = sanitize_textarea_field( wp_unslash( $_POST['notes'] ?? '' ) );
+
+        if ( ! $session_id ) {
+            wp_send_json_error( array( 'message' => 'ID de sesión inválido.' ) );
+        }
+
+        if ( $amount <= 0 ) {
+            wp_send_json_error( array( 'message' => 'El monto debe ser mayor a cero.' ) );
+        }
+
+        $allowed_types = array(
+            WBI_POS_Cash_Movements::TYPE_MANUAL_INCOME,
+            WBI_POS_Cash_Movements::TYPE_MANUAL_EXPENSE,
+            WBI_POS_Cash_Movements::TYPE_WITHDRAWAL,
+            WBI_POS_Cash_Movements::TYPE_DEPOSIT,
+        );
+        if ( ! in_array( $type, $allowed_types, true ) ) {
+            wp_send_json_error( array( 'message' => 'Tipo de movimiento inválido.' ) );
+        }
+
+        $session = WBI_POS_Cash_Sessions::get_session( $session_id );
+        if ( ! $session || 'open' !== $session->status ) {
+            wp_send_json_error( array( 'message' => 'La sesión no existe o no está abierta.' ) );
+        }
+
+        // Only seller, operator or admin can add movements to this session
+        $current_user_id = get_current_user_id();
+        if (
+            (int) $session->seller_user_id !== $current_user_id &&
+            (int) $session->operator_user_id !== $current_user_id &&
+            ! current_user_can( 'manage_woocommerce' )
+        ) {
+            wp_send_json_error( array( 'message' => 'No tenés permisos para registrar movimientos en esta caja.' ) );
+        }
+
+        $movement_id = WBI_POS_Cash_Movements::add_movement(
+            $session_id,
+            $type,
+            $method,
+            $amount,
+            $reference,
+            $notes,
+            $current_user_id
+        );
+
+        if ( ! $movement_id ) {
+            wp_send_json_error( array( 'message' => 'Error al registrar el movimiento.' ) );
+        }
+
+        wp_send_json_success( array(
+            'movement_id' => $movement_id,
+            'type'        => $type,
+            'method'      => $method,
+            'amount'      => $amount,
+        ) );
+    }
+
+    // =========================================================================
+    // AJAX: GET MOVEMENTS
+    // =========================================================================
+
+    public function ajax_get_movements() {
+        check_ajax_referer( 'wbi_pos_nonce', 'nonce' );
+
+        if ( ! $this->current_user_can_pos() ) {
+            wp_send_json_error( array( 'message' => 'Sin permisos.' ), 403 );
+        }
+
+        $session_id = absint( $_GET['session_id'] ?? 0 );
+        if ( ! $session_id ) {
+            wp_send_json_error( array( 'message' => 'ID de sesión inválido.' ) );
+        }
+
+        $session = WBI_POS_Cash_Sessions::get_session( $session_id );
+        if ( ! $session ) {
+            wp_send_json_error( array( 'message' => 'Sesión no encontrada.' ) );
+        }
+
+        // Permission check
+        $current_user_id = get_current_user_id();
+        if (
+            (int) $session->seller_user_id !== $current_user_id &&
+            (int) $session->operator_user_id !== $current_user_id &&
+            ! current_user_can( 'manage_woocommerce' )
+        ) {
+            wp_send_json_error( array( 'message' => 'Sin permisos.' ), 403 );
+        }
+
+        $movements = WBI_POS_Cash_Movements::get_movements( $session_id );
+        $totals    = WBI_POS_Cash_Movements::get_session_totals( $session_id, $session->opening_cash );
+
+        wp_send_json_success( array(
+            'movements' => $movements,
+            'totals'    => $totals,
         ) );
     }
 }

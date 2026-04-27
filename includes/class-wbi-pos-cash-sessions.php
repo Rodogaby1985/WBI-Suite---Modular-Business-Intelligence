@@ -228,12 +228,14 @@ class WBI_POS_Cash_Sessions {
     /**
      * Close an open session.
      *
-     * @param int    $session_id
-     * @param float  $closing_cash_counted
-     * @param string $closing_note
+     * @param int        $session_id
+     * @param float      $closing_cash_counted  Cash counted at closing time.
+     * @param string     $closing_note
+     * @param float|null $expected_cash         Pre-computed expected cash (from movements).
+     *                                          If null, falls back to opening_cash + cash sales.
      * @return bool
      */
-    public static function close_session( $session_id, $closing_cash_counted = 0.0, $closing_note = '' ) {
+    public static function close_session( $session_id, $closing_cash_counted = 0.0, $closing_note = '', $expected_cash = null ) {
         global $wpdb;
         $table = $wpdb->prefix . 'wbi_pos_cash_sessions';
 
@@ -242,9 +244,13 @@ class WBI_POS_Cash_Sessions {
             return false;
         }
 
-        $summary      = self::get_session_summary( $session_id );
-        $cash_in      = (float) $session->opening_cash + (float) ( $summary['totals_by_method']['cash'] ?? 0 );
-        $difference   = round( (float) $closing_cash_counted - $cash_in, 2 );
+        // Use provided expected_cash or fall back to legacy calculation from order metas
+        if ( null === $expected_cash ) {
+            $summary      = self::get_session_summary( $session_id );
+            $expected_cash = (float) $session->opening_cash + (float) ( $summary['totals_by_method']['cash'] ?? 0 );
+        }
+
+        $difference = round( (float) $closing_cash_counted - (float) $expected_cash, 2 );
 
         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
         $result = $wpdb->update(

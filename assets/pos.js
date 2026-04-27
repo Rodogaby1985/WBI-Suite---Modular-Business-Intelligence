@@ -140,6 +140,26 @@
             openModal('pos-modal-open-cash');
         });
 
+        // Add movement button
+        $('#pos-btn-add-movement').on('click', function () {
+            if (!cashSession || cashSession.status !== 'open') {
+                alert(wbiPos.i18n.noCashForMovement);
+                return;
+            }
+            // Reset movement form
+            $('#pos-movement-type').val('manual_income');
+            $('#pos-movement-method').val('cash');
+            $('#pos-movement-amount').val('');
+            $('#pos-movement-reference').val('');
+            $('#pos-movement-notes').val('');
+            openModal('pos-modal-movement');
+        });
+
+        // Confirm add movement
+        $('#pos-btn-movement-confirm').on('click', function () {
+            submitAddMovement();
+        });
+
         // Close cash button
         $('#pos-btn-close-cash').on('click', function () {
             if (!cashSession || !cashSession.session_id) return;
@@ -678,13 +698,15 @@
     }
 
     function updateCashStatusUI(loading) {
-        var $badge = $('#pos-cash-status-badge');
-        var $open  = $('#pos-btn-open-cash');
-        var $close = $('#pos-btn-close-cash');
+        var $badge    = $('#pos-cash-status-badge');
+        var $open     = $('#pos-btn-open-cash');
+        var $movement = $('#pos-btn-add-movement');
+        var $close    = $('#pos-btn-close-cash');
 
         if (loading === 'loading') {
             $badge.text(wbiPos.i18n.cashLoading).attr('class', 'pos-cash-badge');
             $open.hide();
+            $movement.hide();
             $close.hide();
             return;
         }
@@ -692,11 +714,13 @@
         if (!cashSession || cashSession.status !== 'open') {
             $badge.text(wbiPos.i18n.cashClosed).attr('class', 'pos-cash-badge cash-closed');
             $open.show();
+            $movement.hide();
             $close.hide();
         } else {
             var since = cashSession.opened_at ? ' (' + cashSession.opened_at.substring(11, 16) + ')' : '';
             $badge.text(wbiPos.i18n.cashOpen + since).attr('class', 'pos-cash-badge cash-open');
             $open.hide();
+            $movement.show();
             $close.show();
         }
     }
@@ -751,29 +775,49 @@
 
     // ── Close Cash ─────────────────────────────────────────────────────────
     function loadCloseSummary(sessionId, callback) {
+        // Fetch movements totals to show in the close modal
         $.ajax({
             url: wbiPos.ajaxUrl,
             type: 'GET',
-            data: { action: 'wbi_pos_get_cash_status', nonce: wbiPos.nonce, seller_id: activeSeller ? activeSeller.id : 0 },
-            success: function () {
-                // Just render current data we have + allow entry
-                renderCloseSummaryPlaceholder();
+            data: { action: 'wbi_pos_get_movements', nonce: wbiPos.nonce, session_id: sessionId },
+            success: function (resp) {
+                var totals = (resp.success && resp.data && resp.data.totals) ? resp.data.totals : null;
+                renderCloseSummaryPlaceholder(totals);
                 if (typeof callback === 'function') callback();
             },
             error: function () {
-                renderCloseSummaryPlaceholder();
+                renderCloseSummaryPlaceholder(null);
                 if (typeof callback === 'function') callback();
             }
         });
     }
 
-    function renderCloseSummaryPlaceholder() {
+    function renderCloseSummaryPlaceholder(totals) {
         if (!cashSession) return;
+        var expectedCash = totals ? totals.expected_cash : null;
+        var byMethod     = totals ? (totals.by_method || {}) : {};
+        var methods      = wbiPos.i18n.methods || {};
+
+        var rows = '';
+        $.each(byMethod, function (method, amount) {
+            var label = methods[method] || method;
+            rows += '<tr><td>' + escHtml(label) + '</td><td>' + wbiPos.currency + formatNumber(amount) + '</td></tr>';
+        });
+
         var html =
             '<div class="pos-close-summary">' +
             '<p><strong>' + wbiPos.i18n.openedAt + ':</strong> ' + escHtml(cashSession.opened_at || '—') + '</p>' +
-            '<p><strong>' + wbiPos.i18n.cashIn + ':</strong> ' + wbiPos.currency + formatNumber(cashSession.opening_cash || 0) + '</p>' +
-            '</div>';
+            '<p><strong>' + wbiPos.i18n.cashIn + ':</strong> ' + wbiPos.currency + formatNumber(cashSession.opening_cash || 0) + '</p>';
+
+        if (rows) {
+            html += '<table class="pos-summary-table" style="margin:8px 0;">' + rows + '</table>';
+        }
+
+        if (expectedCash !== null) {
+            html += '<p><strong>' + (wbiPos.i18n.expectedCash || 'Efectivo esperado') + ':</strong> <strong>' + wbiPos.currency + formatNumber(expectedCash) + '</strong></p>';
+        }
+
+        html += '</div>';
         $('#pos-close-cash-summary').html(html);
     }
 
@@ -818,15 +862,18 @@
     }
 
     function renderFinalSummary(data) {
-        var methods  = wbiPos.i18n.methods || {};
-        var summary  = data.summary || {};
-        var byMethod = summary.totals_by_method || {};
+        var methods     = wbiPos.i18n.methods || {};
+        var movTotals   = data.mov_totals || {};
+        var byMethod    = movTotals.by_method || {};
+        var summary     = data.summary || {};
 
         var rows = '';
         $.each(byMethod, function (method, amount) {
             var label = methods[method] || method;
             rows += '<tr><td>' + escHtml(label) + '</td><td>' + wbiPos.currency + formatNumber(amount) + '</td></tr>';
         });
+
+        var expectedCash = parseFloat(data.expected_cash || movTotals.expected_cash || 0);
 
         var html =
             '<div class="pos-close-summary-final">' +
@@ -838,13 +885,63 @@
             (parseFloat(summary.total_balance) > 0 ? '<tr><td><strong>' + wbiPos.i18n.totalBalance + '</strong></td><td>' + wbiPos.currency + formatNumber(summary.total_balance) + '</td></tr>' : '') +
             rows +
             '<tr><td><strong>' + wbiPos.i18n.cashIn + '</strong></td><td>' + wbiPos.currency + formatNumber(data.opening_cash || 0) + '</td></tr>' +
-            '<tr><td><strong>' + wbiPos.i18n.cashCollected + '</strong></td><td>' + wbiPos.currency + formatNumber(byMethod['cash'] || 0) + '</td></tr>' +
+            '<tr><td><strong>' + (wbiPos.i18n.expectedCash || 'Efectivo esperado') + '</strong></td><td>' + wbiPos.currency + formatNumber(expectedCash) + '</td></tr>' +
             '<tr><td><strong>' + wbiPos.i18n.closingCash + '</strong></td><td>' + wbiPos.currency + formatNumber(data.closing_cash || 0) + '</td></tr>' +
             '<tr class="' + (parseFloat(data.difference || 0) < 0 ? 'pos-diff-neg' : 'pos-diff-pos') + '"><td><strong>' + wbiPos.i18n.difference + '</strong></td><td>' + wbiPos.currency + formatNumber(data.difference || 0) + '</td></tr>' +
             '</table>' +
             '</div>';
 
         showResultPanel('success', html);
+    }
+
+    // ── Add Manual Movement ────────────────────────────────────────────────
+    function submitAddMovement() {
+        if (!cashSession || cashSession.status !== 'open') {
+            alert(wbiPos.i18n.noCashForMovement);
+            return;
+        }
+
+        var $btn      = $('#pos-btn-movement-confirm');
+        var type      = $('#pos-movement-type').val();
+        var method    = $('#pos-movement-method').val();
+        var amount    = parseFloat($('#pos-movement-amount').val()) || 0;
+        var reference = $('#pos-movement-reference').val().trim();
+        var notes     = $('#pos-movement-notes').val().trim();
+
+        if (amount <= 0) {
+            alert(wbiPos.i18n.movementError || 'El monto debe ser mayor a cero.');
+            return;
+        }
+
+        $btn.prop('disabled', true).html('<span class="pos-spinner"></span>');
+
+        $.ajax({
+            url: wbiPos.ajaxUrl,
+            type: 'POST',
+            data: {
+                action:     'wbi_pos_add_movement',
+                nonce:      wbiPos.nonce,
+                session_id: cashSession.session_id,
+                type:       type,
+                method:     method,
+                amount:     amount,
+                reference:  reference,
+                notes:      notes
+            },
+            success: function (resp) {
+                $btn.prop('disabled', false).text(wbiPos.i18n.movementConfirm || 'Registrar');
+                if (!resp.success) {
+                    alert(resp.data.message || wbiPos.i18n.movementError);
+                    return;
+                }
+                closeModal('pos-modal-movement');
+                showResultPanel('success', '✅ ' + (wbiPos.i18n.movementOk || 'Movimiento registrado correctamente.'));
+            },
+            error: function () {
+                $btn.prop('disabled', false).text(wbiPos.i18n.movementConfirm || 'Registrar');
+                alert(wbiPos.i18n.movementError || 'Error al registrar el movimiento.');
+            }
+        });
     }
 
     // ── Modal helpers ──────────────────────────────────────────────────────
