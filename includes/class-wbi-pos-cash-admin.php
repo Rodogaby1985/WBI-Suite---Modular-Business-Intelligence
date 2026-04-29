@@ -54,6 +54,22 @@ class WBI_POS_Cash_Admin {
     // PAGE RENDER
     // =========================================================================
 
+    /**
+     * Outputs the shared page-title-action navigation buttons (Dashboard + Reportes Contables).
+     * Call this immediately after the opening <h1 class="wp-heading-inline"> in any sub-view.
+     */
+    private function render_navigation_buttons() {
+        ?>
+            <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-dashboard-view' ) ); ?>" class="page-title-action">
+                ← <?php esc_html_e( 'Volver al Dashboard', 'wbi-suite' ); ?>
+            </a>
+            <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-accounting-reports' ) ); ?>" class="page-title-action">
+                📊 <?php esc_html_e( 'Reportes Contables', 'wbi-suite' ); ?>
+            </a>
+            <hr class="wp-header-end">
+        <?php
+    }
+
     public function render_page() {
         if ( ! current_user_can( 'manage_woocommerce' ) && ! current_user_can( 'wbi_pos_access' ) ) {
             wp_die( esc_html__( 'Sin permisos.', 'wbi-suite' ) );
@@ -139,7 +155,8 @@ class WBI_POS_Cash_Admin {
         $base_url = admin_url( 'admin.php?page=wbi-pos-cash' );
         ?>
         <div class="wrap">
-            <h1>🏦 Caja POS — Sesiones</h1>
+            <h1 class="wp-heading-inline">🏦 <?php esc_html_e( 'Caja POS — Sesiones', 'wbi-suite' ); ?></h1>
+            <?php $this->render_navigation_buttons(); ?>
 
             <!-- ── Filters ─────────────────────────────────────────────── -->
             <form method="get" action="" style="margin-bottom:16px; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end;">
@@ -317,9 +334,10 @@ class WBI_POS_Cash_Admin {
         );
         ?>
         <div class="wrap">
-            <h1>
+            <h1 class="wp-heading-inline">
                 🏦 <?php esc_html_e( 'Caja POS — Detalle de sesión', 'wbi-suite' ); ?> #<?php echo esc_html( $session->id ); ?>
             </h1>
+            <?php $this->render_navigation_buttons(); ?>
             <a href="<?php echo esc_url( $back_url ); ?>" class="button" style="margin-bottom:16px;">
                 ← <?php esc_html_e( 'Volver al listado', 'wbi-suite' ); ?>
             </a>
