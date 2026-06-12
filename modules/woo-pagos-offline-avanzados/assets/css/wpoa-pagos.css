@@ -1,0 +1,110 @@
+/* Estilos para la página de pago y la sección en Thank You page */
+.wpoa-payment-page-container, .wpoa-payment-instructions {
+    max-width: 800px;
+    margin: 30px auto;
+    padding: 30px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+}
+
+.wpoa-page-title, .wpoa-payment-instructions h2, .wpoa-order-summary h3, .wpoa-bank-details h3, .wpoa-confirmation-section h3 {
+    text-align: center;
+    color: #2c3e50;
+    margin-bottom: 25px;
+    font-size: 1.8em;
+}
+
+.wpoa-intro {
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 1.1em;
+}
+
+.wpoa-order-summary, .wpoa-bank-details, .wpoa-confirmation-section {
+    border: 1px solid #e0e0e0;
+    border-radius: 5px;
+    padding: 20px;
+    margin-bottom: 25px;
+    background-color: #f9f9f9;
+}
+
+.wpoa-order-summary p, .wpoa-bank-details p {
+    margin-bottom: 10px;
+    font-size: 1em;
+}
+
+.wpoa-total-amount {
+    font-size: 1.3em;
+    color: #e67e22; /* Un color de acento */
+    font-weight: bold;
+}
+
+.wpoa-bank-details strong {
+    min-width: 100px;
+    display: inline-block;
+}
+
+.wpoa-bank-details .button.wpoa-copy-btn {
+    margin-left: 10px;
+    background-color: #3498db;
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.3s ease;
+}
+
+.wpoa-bank-details .button.wpoa-copy-btn:hover {
+    background-color: #2980b9;
+}
+
+.wpoa-whatsapp-button {
+    background-color: #25d366 !important; /* Verde de WhatsApp */
+    color: #fff !important;
+    padding: 15px 30px !important;
+    font-size: 1.3em !important;
+    text-decoration: none !important;
+    border-radius: 50px !important;
+    display: inline-block !important;
+    margin-top: 20px !important;
+    transition: background-color 0.3s ease !important;
+    border: none !important; /* Asegura que no haya bordes de WooCommerce */
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.wpoa-whatsapp-button:hover {
+    background-color: #1da851 !important;
+}
+
+.wpoa-whatsapp-note, .wpoa-expiration-warning {
+    text-align: center;
+    font-size: 0.9em;
+    color: #777;
+    margin-top: 10px;
+}
+
+.wpoa-expiration-warning {
+    color: #e74c3c;
+    font-weight: bold;
+    margin-top: 20px;
+}
+
+.error-message {
+    color: #e74c3c;
+    background-color: #fde8e8;
+    border: 1px solid #e74c3c;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.button.alt { /* Para sobrescribir estilos de WooCommerce si es necesario */
+    font-weight: bold;
+}

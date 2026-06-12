@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: wooErp — Suite de Gestión para WooCommerce
- * Description: Suite modular de gestión integral: B2B, BI, Stock, Facturación, Picking y más.
+ * Description: Suite modular de gestión integral: B2B, BI, Stock, Facturación, Pagos, Envíos, Picking y más.
  * Version: 9.0.34
  * Author: Rodrigo Castañera
  */
@@ -73,14 +73,14 @@ class WBI_Suite_Loader {
 
         // 3. Suite de Métricas & Reportes
         if ( ! empty( $this->options['wbi_enable_dashboard'] ) ) {
-            
+
             // A. Motor de Cálculos (Base para todo lo demás)
             require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-metrics.php';
-            
+
             // B. Dashboard Principal (Resumen Ejecutivo)
             require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-dashboard.php';
             new WBI_Dashboard_View();
-            
+
             // C. Módulo de Exportación CSV
             require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-export.php';
             new WBI_Export_Module();
@@ -230,6 +230,14 @@ class WBI_Suite_Loader {
             }
         }
 
+        // 6b. Módulo de Precio Promo
+        if ( ! empty( $this->options['wbi_enable_promo_pricing'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-promo-pricing.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-promo-pricing.php';
+                new WBI_Promo_Pricing_Module();
+            }
+        }
+
         // 7. Módulo de WhatsApp
         if ( ! empty( $this->options['wbi_enable_whatsapp'] ) ) {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-whatsapp.php' ) ) {
@@ -251,6 +259,14 @@ class WBI_Suite_Loader {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-checkout-validator.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-checkout-validator.php';
                 new WBI_Checkout_Validator();
+            }
+        }
+
+        // 8b. Módulo de Pagos Offline Avanzados
+        if ( ! empty( $this->options['wbi_enable_offline_payments'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-advanced-offline-payments.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-advanced-offline-payments.php';
+                new WBI_Advanced_Offline_Payments_Module();
             }
         }
 
@@ -306,6 +322,22 @@ class WBI_Suite_Loader {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos-cash-movements.php';
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-pos-cash-admin.php';
                 new WBI_POS_Cash_Admin();
+            }
+        }
+
+        // 24. Módulo MobApp Envíos
+        if ( ! empty( $this->options['wbi_enable_mobapp_shipping'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-mobapp-shipping.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-mobapp-shipping.php';
+                new WBI_MobApp_Shipping_Module();
+            }
+        }
+
+        // 25. Módulo Transporte Multiopciones
+        if ( ! empty( $this->options['wbi_enable_multi_shipping'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-multi-shipping.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-multi-shipping.php';
+                new WBI_Multi_Shipping_Module();
             }
         }
     }
@@ -638,9 +670,9 @@ class WBI_Suite_Loader {
 
     public function register_settings() {
         register_setting( 'wbi_group', 'wbi_modules_settings', array( 'sanitize_callback' => array( $this, 'sanitize_modules_settings' ) ) );
-        
+
         add_settings_section( 'wbi_main_section', 'Módulos Disponibles', null, 'wbi-settings' );
-        
+
         add_settings_field( 'wbi_enable_b2b', 'Modo Mayorista B2B', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_b2b'] );
         add_settings_field( 'wbi_enable_data', 'Modelo de Datos Extra (Origen)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_data'] );
         add_settings_field( 'wbi_enable_dashboard', 'Suite de BI (Dashboard + Reportes + Stock)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_dashboard'] );
@@ -668,6 +700,10 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_custom_fields', 'Campos Personalizados (Registro/Checkout)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_custom_fields'] );
         add_settings_field( 'wbi_enable_employees', 'Módulo de Empleados / RRHH', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_employees'] );
         add_settings_field( 'wbi_enable_pos', 'POS / Mostrador', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_pos'] );
+        add_settings_field( 'wbi_enable_offline_payments', 'Pagos Offline Avanzados', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_offline_payments'] );
+        add_settings_field( 'wbi_enable_promo_pricing', 'Precio Promo', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_promo_pricing'] );
+        add_settings_field( 'wbi_enable_mobapp_shipping', 'MobApp Envíos', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_mobapp_shipping'] );
+        add_settings_field( 'wbi_enable_multi_shipping', 'Transporte Multiopciones', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_multi_shipping'] );
 
         // B2B config fields (minimum order, hidden price text, registration URL)
         add_settings_field( 'wbi_b2b_minimum_order',    'B2B: Monto mínimo de compra',  array($this, 'number_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_minimum_order'] );
@@ -704,6 +740,10 @@ class WBI_Suite_Loader {
             'wbi_enable_custom_fields'     => 'Campos Personalizados',
             'wbi_enable_employees'         => 'Empleados / RRHH',
             'wbi_enable_pos'               => 'POS / Mostrador',
+            'wbi_enable_offline_payments'  => 'Pagos Offline Avanzados',
+            'wbi_enable_promo_pricing'     => 'Precio Promo',
+            'wbi_enable_mobapp_shipping'   => 'MobApp Envíos',
+            'wbi_enable_multi_shipping'    => 'Transporte Multiopciones',
         );
 
         foreach ( $module_slugs as $module_key => $module_name ) {
@@ -821,6 +861,10 @@ class WBI_Suite_Loader {
             array( 'slug' => 'employees',           'name' => 'Empleados / RRHH',            'enable_key' => 'wbi_enable_employees' ),
             array( 'slug' => 'email_marketing',     'name' => 'Email Marketing',             'enable_key' => 'wbi_enable_email_marketing' ),
             array( 'slug' => 'pos',                 'name' => 'POS / Mostrador',             'enable_key' => 'wbi_enable_pos' ),
+            array( 'slug' => 'offline_payments',    'name' => 'Pagos Offline Avanzados',    'enable_key' => 'wbi_enable_offline_payments' ),
+            array( 'slug' => 'promo_pricing',       'name' => 'Precio Promo',               'enable_key' => 'wbi_enable_promo_pricing' ),
+            array( 'slug' => 'mobapp_shipping',     'name' => 'MobApp Envíos',              'enable_key' => 'wbi_enable_mobapp_shipping' ),
+            array( 'slug' => 'multi_shipping',      'name' => 'Transporte Multiopciones',   'enable_key' => 'wbi_enable_multi_shipping' ),
             array( 'slug' => 'documents',           'name' => 'Documentos',                  'enable_key' => null ), // active when invoice or remitos enabled
         );
     }
@@ -862,6 +906,8 @@ class WBI_Suite_Loader {
             'wbi-custom-fields'      => 'custom_fields',
             'wbi-employees'          => 'employees',
             'wbi-pos'                => 'pos',
+            'wpp-settings'           => 'promo_pricing',
+            'wpoa-pagos-offline-avanzados-settings' => 'offline_payments',
             // Config page: superadmin only
             'wbi-settings'           => '__superadmin_only__',
         );
@@ -885,7 +931,11 @@ class WBI_Suite_Loader {
                 continue;
             }
             if ( ! self::user_can_access_module( $module_slug ) ) {
-                remove_submenu_page( 'wbi-dashboard-view', $page_slug );
+                if ( in_array( $page_slug, array( 'wpp-settings', 'wpoa-pagos-offline-avanzados-settings' ), true ) ) {
+                    remove_submenu_page( 'woocommerce', $page_slug );
+                } else {
+                    remove_submenu_page( 'wbi-dashboard-view', $page_slug );
+                }
             }
         }
 
@@ -994,6 +1044,7 @@ class WBI_Suite_Loader {
             'wbi_enable_accounting_reports','wbi_enable_credit_notes',
             'wbi_enable_email_marketing','wbi_enable_reorder','wbi_enable_crm',
             'wbi_enable_custom_fields','wbi_enable_employees','wbi_enable_pos',
+            'wbi_enable_offline_payments','wbi_enable_promo_pricing','wbi_enable_mobapp_shipping','wbi_enable_multi_shipping',
         );
         $total_modules = count( $toggle_keys );
         foreach ( $toggle_keys as $k ) {
@@ -1007,6 +1058,7 @@ class WBI_Suite_Loader {
         $modules = array(
             array( 'wbi_enable_b2b',           '🏢', 'Modo Mayorista B2B',       'Roles mayoristas, precios ocultos y aprobación de clientes',              null,             'comercial'    ),
             array( 'wbi_enable_pricelists',     '💲', 'Listas de Precios',        'Listas de precios por cliente, rol o grupo',                              'wbi-pricelists', 'comercial'    ),
+            array( 'wbi_enable_promo_pricing',  '🏷️', 'Precio Promo',            'Precio financiado, transferencia con descuento y ajuste automático en checkout', 'wpp-settings', 'comercial' ),
             array( 'wbi_enable_costs',          '💰', 'Costos y Márgenes',        'Costo de adquisición y cálculo de márgenes por producto',                 'wbi-costs',      'comercial'    ),
             array( 'wbi_enable_abandoned_carts','🛒', 'Carritos Abandonados',     'Recuperación de ventas perdidas con seguimiento por email y WhatsApp',    'wbi-abandoned-carts', 'comercial' ),
             array( 'wbi_enable_checkout_validator','📍', 'Validación de Checkout', 'Valida que el CP coincida con la provincia seleccionada en el checkout',   null,                  'comercial' ),
@@ -1015,6 +1067,8 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_scoring',        '⭐', 'Scoring de Clientes',      'Scoring RFM de clientes con recálculo automático diario',                 'wbi-scoring',    'inteligencia' ),
             array( 'wbi_enable_barcode',        '📊', 'Códigos de Barra',         'Gestión de códigos de barra EAN/UPC para productos',                      'wbi-barcode',    'operaciones'  ),
             array( 'wbi_enable_picking',        '📦', 'Picking & Armado',         'Armado de pedidos con escaneo de códigos de barra',                       'wbi-picking',    'operaciones'  ),
+            array( 'wbi_enable_mobapp_shipping','🚚', 'MobApp Envíos',            'Tarifas de envío para Andreani, Correo Argentino, OCA, Urbano y Flash',  null,             'operaciones'  ),
+            array( 'wbi_enable_multi_shipping', '🚌', 'Transporte Multiopciones', 'Método de envío con selección de transportista o micro personalizado',    null,             'operaciones'  ),
             array( 'wbi_enable_remitos',        '📄', 'Remitos',                  'Generación de remitos PDF vinculados a pedidos',                          'wbi-documents',  'operaciones'  ),
             array( 'wbi_enable_suppliers',      '👥', 'Proveedores',              'Gestión de proveedores y vinculación con productos',                      'wbi-suppliers',  'operaciones'  ),
             array( 'wbi_enable_reorder',        '🔄', 'Reglas de Reabastecimiento','Punto de reorden automático con generación de órdenes de compra',          'wbi-reorder',    'operaciones'  ),
@@ -1025,6 +1079,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_custom_fields',  '📋', 'Campos Personalizados',    'Campos custom en registro y checkout con validación de formato y duplicados', 'wbi-custom-fields', 'datos'     ),
             array( 'wbi_enable_invoice',        '📑', 'Facturación AFIP',         'Facturación tipo A/B/C con formato AFIP',                                 'wbi-documents',    'finanzas'     ),
             array( 'wbi_enable_credit_notes',   '💳', 'Notas de Crédito/Débito',  'Emisión de NC/ND vinculadas a facturas AFIP (tipo A/B/C)',                 'wbi-credit-notes', 'finanzas'     ),
+            array( 'wbi_enable_offline_payments','🏦', 'Pagos Offline Avanzados', 'Transferencia manual con cuentas variables, vencimiento y WhatsApp',      'wpoa-pagos-offline-avanzados-settings', 'finanzas' ),
             array( 'wbi_enable_taxes',          '🏛️','Gestión de Impuestos',      'Cálculo de IVA, percepciones e impuestos internos',                       'wbi-taxes',      'finanzas'     ),
             array( 'wbi_enable_cashflow',       '💰', 'Flujo de Caja',            'Proyección de flujo de caja y análisis financiero',                       'wbi-cashflow',   'finanzas'     ),
             array( 'wbi_enable_accounting_reports','📊','Reportes Contables',     'Libro IVA, Estado de Resultados, Posición IVA y Rentabilidad',            'wbi-accounting-reports', 'finanzas' ),
@@ -1053,7 +1108,7 @@ class WBI_Suite_Loader {
                 <span style="font-size:36px;">🧠</span>
                 <div>
                     <h1>wooErp — Configuración</h1>
-                    <p style="margin:4px 0 0; color:#50575e; font-size:13px;">Suite de Gestión para WooCommerce</p>
+                    <p style="margin:4px 0 0; color:#50575e; font-size:13px;">Suite de Gestión para WooCommerce con módulos de pagos, envíos y BI</p>
                 </div>
                 <span class="wbi-version-badge">v<?php echo esc_html( $version ); ?></span>
                 <span class="wbi-license-badge <?php echo $license_active ? 'active' : 'inactive'; ?>">
@@ -1187,6 +1242,10 @@ class WBI_Suite_Loader {
                     array( 'enable_key' => 'wbi_enable_custom_fields', 'perm_key' => 'wbi_permissions_custom_fields', 'name' => 'Campos Personalizados' ),
                     array( 'enable_key' => 'wbi_enable_employees',     'perm_key' => 'wbi_permissions_employees',     'name' => 'Empleados / RRHH' ),
                     array( 'enable_key' => 'wbi_enable_pos',           'perm_key' => 'wbi_permissions_pos',           'name' => 'POS / Mostrador' ),
+                    array( 'enable_key' => 'wbi_enable_offline_payments','perm_key' => 'wbi_permissions_offline_payments','name' => 'Pagos Offline Avanzados' ),
+                    array( 'enable_key' => 'wbi_enable_promo_pricing', 'perm_key' => 'wbi_permissions_promo_pricing', 'name' => 'Precio Promo' ),
+                    array( 'enable_key' => 'wbi_enable_mobapp_shipping','perm_key' => 'wbi_permissions_mobapp_shipping','name' => 'MobApp Envíos' ),
+                    array( 'enable_key' => 'wbi_enable_multi_shipping','perm_key' => 'wbi_permissions_multi_shipping','name' => 'Transporte Multiopciones' ),
                 );
                 // Unified documents module: show when invoice or remitos is active
                 if ( ! empty( $opts['wbi_enable_invoice'] ) || ! empty( $opts['wbi_enable_remitos'] ) ) {
