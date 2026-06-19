@@ -650,6 +650,8 @@ class WBI_Suite_Loader {
         if ( ! is_array( $input ) ) {
             return array();
         }
+        // Sanitize B2B auto-approve checkbox
+        $input['wbi_b2b_auto_approve'] = ! empty( $input['wbi_b2b_auto_approve'] ) ? 1 : 0;
         // Sanitize B2B URL field specifically
         if ( isset( $input['wbi_b2b_hidden_price_url'] ) ) {
             $input['wbi_b2b_hidden_price_url'] = esc_url_raw( $input['wbi_b2b_hidden_price_url'] );
@@ -706,6 +708,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_multi_shipping', 'Transporte Multiopciones', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_multi_shipping'] );
 
         // B2B config fields (minimum order, hidden price text, registration URL)
+        add_settings_field( 'wbi_b2b_auto_approve',     'B2B: Auto-aprobación de clientes', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_auto_approve'] );
         add_settings_field( 'wbi_b2b_minimum_order',    'B2B: Monto mínimo de compra',  array($this, 'number_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_minimum_order'] );
         add_settings_field( 'wbi_b2b_hidden_price_text','B2B: Texto precio oculto',      array($this, 'text_field'),   'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_hidden_price_text', 'default' => 'PRECIO MAYORISTA OCULTO'] );
         add_settings_field( 'wbi_b2b_hidden_price_url', 'B2B: URL registro mayorista',   array($this, 'text_field'),   'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_hidden_price_url'] );
@@ -1160,6 +1163,14 @@ class WBI_Suite_Loader {
                         <?php if ( 'wbi_enable_b2b' === $key ) : ?>
                         <div class="wbi-b2b-config" style="margin-top:12px; padding-top:10px; border-top:1px solid #e0e0e0; font-size:12px;">
                             <p style="margin:0 0 6px; font-weight:600; color:#50575e;">⚙️ Configuración B2B</p>
+                            <label style="display:block; margin-bottom:6px;">
+                                <input type="checkbox" name="wbi_modules_settings[wbi_b2b_auto_approve]" value="1"
+                                    <?php checked( ! empty( $opts['wbi_b2b_auto_approve'] ), true ); ?>>
+                                <strong>Habilitar auto-aprobación de clientes</strong>
+                                <span style="display:block; color:#888; font-size:11px; margin-top:2px;">
+                                    Cuando está activado, los nuevos clientes quedan habilitados automáticamente para ver precios y comprar sin necesitar aprobación manual. Desactivado por defecto (requiere aprobación manual).
+                                </span>
+                            </label>
                             <label style="display:block; margin-bottom:4px;">
                                 Monto mínimo ($):
                                 <input type="number" name="wbi_modules_settings[wbi_b2b_minimum_order]"

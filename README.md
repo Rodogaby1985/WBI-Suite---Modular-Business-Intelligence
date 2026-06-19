@@ -54,7 +54,7 @@ Los 31 módulos se agrupan en 7 categorías:
 
 | Módulo | Clave de activación | Descripción |
 |--------|---------------------|-------------|
-| **Modo Mayorista B2B** | `wbi_enable_b2b` | Roles mayoristas, precios ocultos al público general y aprobación manual de nuevos clientes con acceso restringido por rol. |
+| **Modo Mayorista B2B** | `wbi_enable_b2b` | Roles mayoristas, precios ocultos al público general y aprobación manual de nuevos clientes con acceso restringido por rol. Incluye opción de **auto-aprobación** (`wbi_b2b_auto_approve`) para que los clientes queden habilitados automáticamente al registrarse, sin intervención manual. |
 | **Listas de Precios** | `wbi_enable_pricelists` | Precios diferenciados por cliente, rol o grupo — ideal para distribuidores, revendedores y clientes VIP. |
 | **Precio Promo** | `wbi_enable_promo_pricing` | Precio financiado, precio con descuento por transferencia bancaria y ajuste automático en el checkout según el método de pago seleccionado. |
 | **Costos y Márgenes** | `wbi_enable_costs` | Costo de adquisición por producto con cálculo automático de margen bruto y análisis de rentabilidad. |

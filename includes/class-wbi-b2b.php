@@ -39,6 +39,9 @@ class WBI_B2B_Module {
         add_filter( 'woocommerce_loop_add_to_cart_link', array( $this, 'hide_add_to_cart_loop' ), 10, 2 );
         add_action( 'woocommerce_before_add_to_cart_form', array( $this, 'maybe_hide_add_to_cart_form' ) );
         add_filter( 'woocommerce_variation_is_purchasable', array( $this, 'restrict_variation_purchase' ), 10, 2 );
+
+        // 9. Auto-aprobación al registrarse (si está habilitada la opción)
+        add_action( 'user_register', array( $this, 'maybe_auto_approve_registration' ) );
     }
 
     /**
@@ -128,6 +131,34 @@ class WBI_B2B_Module {
 
         wp_redirect( remove_query_arg( array( 'wbi_action', 'user_id', '_wpnonce' ), wp_get_referer() ) );
         exit;
+    }
+
+    // --- AUTO-APROBACIÓN AL REGISTRARSE ---
+
+    /**
+     * Si la opción de auto-aprobación está activa, asigna el rol 'mayorista'
+     * al nuevo usuario en cuanto se registra.
+     *
+     * @param int $user_id ID del usuario recién registrado.
+     */
+    public function maybe_auto_approve_registration( $user_id ) {
+        $opts = get_option( 'wbi_modules_settings', array() );
+        if ( empty( $opts['wbi_b2b_auto_approve'] ) ) {
+            return; // Aprobación manual: comportamiento actual, no hacer nada.
+        }
+
+        $user = new WP_User( $user_id );
+
+        // Only auto-approve users with front-end customer roles; never touch
+        // privileged back-end roles (administrator, editor, shop_manager, etc.).
+        $privileged_roles = array( 'administrator', 'editor', 'author', 'contributor', 'shop_manager' );
+        foreach ( $privileged_roles as $privileged ) {
+            if ( in_array( $privileged, (array) $user->roles, true ) ) {
+                return;
+            }
+        }
+
+        $user->set_role( 'mayorista' );
     }
 
     // --- LÓGICA DE AUTORIZACIÓN ---
@@ -312,7 +343,14 @@ class WBI_B2B_Module {
             }
             return;
         }
-        echo '<div class="woocommerce-info">⏳ Tu cuenta está pendiente de activación por un administrador. Te notificaremos por email cuando sea activada.</div>';
+        $opts = get_option( 'wbi_modules_settings', array() );
+        if ( ! empty( $opts['wbi_b2b_auto_approve'] ) ) {
+            // Auto-aprobación activa pero el usuario aún no tiene el rol correcto
+            // (puede ocurrir en cuentas creadas antes de activar esta opción).
+            echo '<div class="woocommerce-info">ℹ️ Tu cuenta aún no tiene acceso mayorista. Contactá al administrador de la tienda.</div>';
+        } else {
+            echo '<div class="woocommerce-info">⏳ Tu cuenta está pendiente de activación por un administrador. Te notificaremos por email cuando sea activada.</div>';
+        }
     }
 
     // --- MONTO MÍNIMO DE COMPRA ---
