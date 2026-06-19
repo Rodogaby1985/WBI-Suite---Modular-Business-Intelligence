@@ -35,13 +35,13 @@ class WBI_B2B_Module {
         // 7. Monto mínimo de compra mayorista
         add_action( 'woocommerce_check_cart_items', array( $this, 'check_minimum_order' ) );
 
-        // 9. Auto-aprobación al registrarse (si está habilitada la opción)
-        add_action( 'user_register', array( $this, 'maybe_auto_approve_registration' ) );
-
         // 8. Ocultar botón "Agregar al carrito" para usuarios no autorizados
         add_filter( 'woocommerce_loop_add_to_cart_link', array( $this, 'hide_add_to_cart_loop' ), 10, 2 );
         add_action( 'woocommerce_before_add_to_cart_form', array( $this, 'maybe_hide_add_to_cart_form' ) );
         add_filter( 'woocommerce_variation_is_purchasable', array( $this, 'restrict_variation_purchase' ), 10, 2 );
+
+        // 9. Auto-aprobación al registrarse (si está habilitada la opción)
+        add_action( 'user_register', array( $this, 'maybe_auto_approve_registration' ) );
     }
 
     /**
@@ -148,10 +148,16 @@ class WBI_B2B_Module {
         }
 
         $user = new WP_User( $user_id );
-        // Solo aplicar a clientes, no a administradores u otros roles especiales.
-        if ( in_array( 'administrator', (array) $user->roles, true ) ) {
-            return;
+
+        // Only auto-approve users with front-end customer roles; never touch
+        // privileged back-end roles (administrator, editor, shop_manager, etc.).
+        $privileged_roles = array( 'administrator', 'editor', 'author', 'contributor', 'shop_manager' );
+        foreach ( $privileged_roles as $privileged ) {
+            if ( in_array( $privileged, (array) $user->roles, true ) ) {
+                return;
+            }
         }
+
         $user->set_role( 'mayorista' );
     }
 
