@@ -253,6 +253,20 @@ La configuración de permisos está disponible en **WooCommerce → wooErp → C
 - **Compatibilidad:** La suite no reemplaza las pantallas estándar de WooCommerce; las extiende con funcionalidades adicionales.
 - **Validación PHP:** El código puede validarse con `php -l` sobre todos los archivos `.php` del plugin.
 - **Actualizaciones:** Al actualizar la suite, los módulos externos en `modules/` pueden actualizarse de forma independiente sin tocar el código del loader.
+- Para generar clave, entrás al wp-admin de la suite y abrís la pantalla de licencias con el parámetro secreto wbi_gen=castanera2026. Luego elegís el plan en plan=.
+
+Ejemplos típicos:
+
+.../wp-admin/admin.php?page=wbi-license&wbi_gen=castanera2026&plan=T3
+.../wp-admin/admin.php?page=wbi-license&wbi_gen=castanera2026&plan=M1
+.../wp-admin/admin.php?page=wbi-license&wbi_gen=castanera2026&plan=A1
+.../wp-admin/admin.php?page=wbi-license&wbi_gen=castanera2026&plan=LF
+Planes:
+
+T3
+M1
+A1
+LF
 
 ---
 
