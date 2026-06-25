@@ -496,6 +496,33 @@ class WBI_B2B_Module {
     // -------------------------------------------------------------------------
 
     /**
+     * Obtiene y valida los valores del filtro de fechas desde $_GET.
+     * Retorna un array con claves 'desde' y 'hasta' en formato YYYY-MM-DD o vacío.
+     *
+     * @return array{ desde: string, hasta: string }
+     */
+    private function get_date_filter_params() {
+        $desde = '';
+        $hasta = '';
+
+        if ( ! empty( $_GET['wbi_fecha_desde'] ) ) {
+            $raw = sanitize_text_field( wp_unslash( $_GET['wbi_fecha_desde'] ) );
+            if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) ) {
+                $desde = $raw;
+            }
+        }
+
+        if ( ! empty( $_GET['wbi_fecha_hasta'] ) ) {
+            $raw = sanitize_text_field( wp_unslash( $_GET['wbi_fecha_hasta'] ) );
+            if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) ) {
+                $hasta = $raw;
+            }
+        }
+
+        return array( 'desde' => $desde, 'hasta' => $hasta );
+    }
+
+    /**
      * Renderiza los campos "Desde" y "Hasta" encima de la tabla de usuarios.
      */
     public function render_date_filter() {
@@ -505,21 +532,20 @@ class WBI_B2B_Module {
             return;
         }
 
-        $desde = isset( $_GET['wbi_fecha_desde'] ) ? sanitize_text_field( wp_unslash( $_GET['wbi_fecha_desde'] ) ) : '';
-        $hasta = isset( $_GET['wbi_fecha_hasta'] ) ? sanitize_text_field( wp_unslash( $_GET['wbi_fecha_hasta'] ) ) : '';
+        $dates = $this->get_date_filter_params();
         ?>
         <label style="margin-right:4px;">
             <?php esc_html_e( 'Registro desde:', 'wbi-suite' ); ?>
             <input type="date"
                    name="wbi_fecha_desde"
-                   value="<?php echo esc_attr( $desde ); ?>"
+                   value="<?php echo esc_attr( $dates['desde'] ); ?>"
                    style="margin-left:4px;">
         </label>
         <label style="margin-right:4px;">
             <?php esc_html_e( 'hasta:', 'wbi-suite' ); ?>
             <input type="date"
                    name="wbi_fecha_hasta"
-                   value="<?php echo esc_attr( $hasta ); ?>"
+                   value="<?php echo esc_attr( $dates['hasta'] ); ?>"
                    style="margin-left:4px;">
         </label>
         <?php
@@ -535,8 +561,15 @@ class WBI_B2B_Module {
             return;
         }
 
-        $desde = isset( $_GET['wbi_fecha_desde'] ) ? sanitize_text_field( wp_unslash( $_GET['wbi_fecha_desde'] ) ) : '';
-        $hasta = isset( $_GET['wbi_fecha_hasta'] ) ? sanitize_text_field( wp_unslash( $_GET['wbi_fecha_hasta'] ) ) : '';
+        // Only apply to the users list screen to avoid affecting other admin queries.
+        $screen = get_current_screen();
+        if ( ! $screen || 'users' !== $screen->id ) {
+            return;
+        }
+
+        $dates = $this->get_date_filter_params();
+        $desde = $dates['desde'];
+        $hasta = $dates['hasta'];
 
         if ( ! $desde && ! $hasta ) {
             return;
