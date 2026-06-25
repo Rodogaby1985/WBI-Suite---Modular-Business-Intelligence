@@ -21,6 +21,15 @@ class WBI_B2B_Module {
         add_filter( 'manage_users_custom_column', array( $this, 'show_status_column_content' ), 10, 3 );
         add_filter( 'user_row_actions', array( $this, 'add_approval_actions' ), 10, 2 );
 
+        // Columna Fecha de Registro + orden
+        add_filter( 'manage_users_columns',          array( $this, 'add_registration_date_column' ) );
+        add_filter( 'manage_users_custom_column',    array( $this, 'show_registration_date_column' ), 10, 3 );
+        add_filter( 'manage_users_sortable_columns', array( $this, 'sortable_registration_date_column' ) );
+
+        // Filtro por rango de fechas
+        add_action( 'restrict_manage_users',         array( $this, 'render_date_filter' ) );
+        add_filter( 'pre_get_users',                 array( $this, 'apply_date_filter' ) );
+
         // 4. Procesar la acción de activar/desactivar
         add_action( 'admin_init', array( $this, 'process_approval_action' ) );
 
@@ -444,5 +453,113 @@ class WBI_B2B_Module {
         }
         // 3. Fallback: admin email de WordPress
         return get_option( 'admin_email' );
+    }
+
+    // -------------------------------------------------------------------------
+    // COLUMNA FECHA DE REGISTRO
+    // -------------------------------------------------------------------------
+
+    /**
+     * Agrega la columna "Fecha de Registro" en la tabla de usuarios.
+     */
+    public function add_registration_date_column( $columns ) {
+        $columns['wbi_registered'] = __( 'Fecha de Registro', 'wbi-suite' );
+        return $columns;
+    }
+
+    /**
+     * Muestra el valor de la columna "Fecha de Registro".
+     */
+    public function show_registration_date_column( $value, $column_name, $user_id ) {
+        if ( 'wbi_registered' !== $column_name ) {
+            return $value;
+        }
+        $user = get_userdata( $user_id );
+        if ( ! $user ) {
+            return '—';
+        }
+        return '<span title="' . esc_attr( $user->user_registered ) . '">'
+             . esc_html( date_i18n( 'd/m/Y H:i', strtotime( $user->user_registered ) ) )
+             . '</span>';
+    }
+
+    /**
+     * Hace la columna "Fecha de Registro" ordenable (clic en encabezado).
+     */
+    public function sortable_registration_date_column( $columns ) {
+        $columns['wbi_registered'] = 'registered';
+        return $columns;
+    }
+
+    // -------------------------------------------------------------------------
+    // FILTRO POR RANGO DE FECHAS
+    // -------------------------------------------------------------------------
+
+    /**
+     * Renderiza los campos "Desde" y "Hasta" encima de la tabla de usuarios.
+     */
+    public function render_date_filter() {
+        // Solo en la pantalla de lista de usuarios
+        $screen = get_current_screen();
+        if ( ! $screen || 'users' !== $screen->id ) {
+            return;
+        }
+
+        $desde = isset( $_GET['wbi_fecha_desde'] ) ? sanitize_text_field( wp_unslash( $_GET['wbi_fecha_desde'] ) ) : '';
+        $hasta = isset( $_GET['wbi_fecha_hasta'] ) ? sanitize_text_field( wp_unslash( $_GET['wbi_fecha_hasta'] ) ) : '';
+        ?>
+        <label style="margin-right:4px;">
+            <?php esc_html_e( 'Registro desde:', 'wbi-suite' ); ?>
+            <input type="date"
+                   name="wbi_fecha_desde"
+                   value="<?php echo esc_attr( $desde ); ?>"
+                   style="margin-left:4px;">
+        </label>
+        <label style="margin-right:4px;">
+            <?php esc_html_e( 'hasta:', 'wbi-suite' ); ?>
+            <input type="date"
+                   name="wbi_fecha_hasta"
+                   value="<?php echo esc_attr( $hasta ); ?>"
+                   style="margin-left:4px;">
+        </label>
+        <?php
+    }
+
+    /**
+     * Aplica el filtro de fechas al query de usuarios.
+     *
+     * @param WP_User_Query $query
+     */
+    public function apply_date_filter( $query ) {
+        if ( ! is_admin() ) {
+            return;
+        }
+
+        $desde = isset( $_GET['wbi_fecha_desde'] ) ? sanitize_text_field( wp_unslash( $_GET['wbi_fecha_desde'] ) ) : '';
+        $hasta = isset( $_GET['wbi_fecha_hasta'] ) ? sanitize_text_field( wp_unslash( $_GET['wbi_fecha_hasta'] ) ) : '';
+
+        if ( ! $desde && ! $hasta ) {
+            return;
+        }
+
+        $date_query = array( 'relation' => 'AND' );
+
+        if ( $desde ) {
+            $date_query[] = array(
+                'column'    => 'user_registered',
+                'after'     => $desde . ' 00:00:00',
+                'inclusive' => true,
+            );
+        }
+
+        if ( $hasta ) {
+            $date_query[] = array(
+                'column'    => 'user_registered',
+                'before'    => $hasta . ' 23:59:59',
+                'inclusive' => true,
+            );
+        }
+
+        $query->set( 'date_query', $date_query );
     }
 }
