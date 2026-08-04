@@ -663,6 +663,18 @@ class WBI_Suite_Loader {
         }
         // Sanitize B2B auto-approve checkbox
         $input['wbi_b2b_auto_approve'] = ! empty( $input['wbi_b2b_auto_approve'] ) ? 1 : 0;
+        // Sanitize PWOQ checkboxes (absent from POST when unchecked → explicitly set to 0)
+        $input['wbi_enable_public_wholesale_quick_order'] = ! empty( $input['wbi_enable_public_wholesale_quick_order'] ) ? 1 : 0;
+        $input['wbi_pwoq_show_sku']               = ! empty( $input['wbi_pwoq_show_sku'] ) ? 1 : 0;
+        $input['wbi_pwoq_show_dimensions']        = ! empty( $input['wbi_pwoq_show_dimensions'] ) ? 1 : 0;
+        $input['wbi_pwoq_show_color_count']       = ! empty( $input['wbi_pwoq_show_color_count'] ) ? 1 : 0;
+        $input['wbi_pwoq_enforce_min_qty']        = ! empty( $input['wbi_pwoq_enforce_min_qty'] ) ? 1 : 0;
+        $input['wbi_pwoq_enforce_pack_multiples'] = ! empty( $input['wbi_pwoq_enforce_pack_multiples'] ) ? 1 : 0;
+        if ( isset( $input['wbi_pwoq_variant_selector_mode'] ) ) {
+            $input['wbi_pwoq_variant_selector_mode'] = in_array( $input['wbi_pwoq_variant_selector_mode'], array( 'inline', 'modal' ), true )
+                ? $input['wbi_pwoq_variant_selector_mode']
+                : 'modal';
+        }
         // Sanitize B2B URL field specifically
         if ( isset( $input['wbi_b2b_hidden_price_url'] ) ) {
             $input['wbi_b2b_hidden_price_url'] = esc_url_raw( $input['wbi_b2b_hidden_price_url'] );
@@ -1079,6 +1091,7 @@ class WBI_Suite_Loader {
             'wbi_enable_email_marketing','wbi_enable_reorder','wbi_enable_crm',
             'wbi_enable_custom_fields','wbi_enable_employees','wbi_enable_pos',
             'wbi_enable_offline_payments','wbi_enable_promo_pricing','wbi_enable_mobapp_shipping','wbi_enable_multi_shipping',
+            'wbi_enable_public_wholesale_quick_order',
         );
         $total_modules = count( $toggle_keys );
         foreach ( $toggle_keys as $k ) {
@@ -1121,6 +1134,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_api',            '📱', 'API REST',                 'Endpoints REST para integración con apps externas',                       'wbi-api',        'integraciones'),
             array( 'wbi_enable_notifications',  '🔔', 'Notificaciones',           'Centro de alertas unificado con badge en admin',                          'wbi-notifications','integraciones'),
             array( 'wbi_enable_email_marketing','📧', 'Email Marketing',          'Campañas masivas de email, templates, suscriptores y métricas',           'wbi-email-marketing','integraciones'),
+            array( 'wbi_enable_public_wholesale_quick_order', '⚡', 'Pedido Rápido Mayorista', 'Compra rápida desde catálogo para clientes mayoristas, con variantes inline o modal', null, 'comercial' ),
         );
 
         $groups = array(
@@ -1248,6 +1262,43 @@ class WBI_Suite_Loader {
                                 <?php endforeach; ?>
                                 </div>
                                 <span style="color:#888; font-size:11px;">Solo estos roles podrán ver precios y comprar. El resto verá "Precio oculto".</span>
+                            </label>
+                        </div>
+                        <?php endif; ?>
+                        <?php if ( 'wbi_enable_public_wholesale_quick_order' === $key ) : ?>
+                        <div class="wbi-pwoq-config" style="margin-top:12px; padding-top:10px; border-top:1px solid #e0e0e0; font-size:12px;">
+                            <p style="margin:0 0 6px; font-weight:600; color:#50575e;">⚙️ Configuración del módulo</p>
+                            <label style="display:block; margin-bottom:6px;">
+                                Selector de variantes:
+                                <select name="wbi_modules_settings[wbi_pwoq_variant_selector_mode]" style="margin-left:4px;">
+                                    <option value="modal"<?php selected( $opts['wbi_pwoq_variant_selector_mode'] ?? 'modal', 'modal' ); ?>>Modal (ventana ligera)</option>
+                                    <option value="inline"<?php selected( $opts['wbi_pwoq_variant_selector_mode'] ?? 'modal', 'inline' ); ?>>Inline (en la card)</option>
+                                </select>
+                            </label>
+                            <label style="display:block; margin-bottom:4px;">
+                                <input type="checkbox" name="wbi_modules_settings[wbi_pwoq_show_sku]" value="1"
+                                    <?php checked( ! empty( $opts['wbi_pwoq_show_sku'] ), true ); ?>>
+                                Mostrar SKU en la card
+                            </label>
+                            <label style="display:block; margin-bottom:4px;">
+                                <input type="checkbox" name="wbi_modules_settings[wbi_pwoq_show_dimensions]" value="1"
+                                    <?php checked( ! empty( $opts['wbi_pwoq_show_dimensions'] ), true ); ?>>
+                                Mostrar dimensiones del producto
+                            </label>
+                            <label style="display:block; margin-bottom:4px;">
+                                <input type="checkbox" name="wbi_modules_settings[wbi_pwoq_show_color_count]" value="1"
+                                    <?php checked( ! empty( $opts['wbi_pwoq_show_color_count'] ), true ); ?>>
+                                Mostrar cantidad de colores/variantes
+                            </label>
+                            <label style="display:block; margin-bottom:4px;">
+                                <input type="checkbox" name="wbi_modules_settings[wbi_pwoq_enforce_min_qty]" value="1"
+                                    <?php checked( isset( $opts['wbi_pwoq_enforce_min_qty'] ) ? (bool) $opts['wbi_pwoq_enforce_min_qty'] : true, true ); ?>>
+                                Forzar cantidad mínima de compra
+                            </label>
+                            <label style="display:block;">
+                                <input type="checkbox" name="wbi_modules_settings[wbi_pwoq_enforce_pack_multiples]" value="1"
+                                    <?php checked( isset( $opts['wbi_pwoq_enforce_pack_multiples'] ) ? (bool) $opts['wbi_pwoq_enforce_pack_multiples'] : true, true ); ?>>
+                                Forzar múltiplos de empaque
                             </label>
                         </div>
                         <?php endif; ?>
