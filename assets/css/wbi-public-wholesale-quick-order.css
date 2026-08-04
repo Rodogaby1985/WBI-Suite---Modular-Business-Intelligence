@@ -72,7 +72,62 @@
   pointer-events: none;
 }
 
-/* ---- Row: qty + button ---- */
+/* ---- Quantity stepper ([-] input [+]) ---- */
+.wbi-pwoq__stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid #c3c4c7;
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.wbi-pwoq__stepper-dec,
+.wbi-pwoq__stepper-inc {
+  width: 36px;
+  min-height: 40px;
+  background: #f6f7f7;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: #50575e;
+  transition: background .1s, color .1s;
+  flex: 0 0 auto;
+  padding: 0;
+}
+
+.wbi-pwoq__stepper-dec:hover:not(:disabled),
+.wbi-pwoq__stepper-inc:hover:not(:disabled) {
+  background: #e8e8e8;
+  color: #1d2327;
+}
+
+.wbi-pwoq__stepper-dec:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+.wbi-pwoq__stepper .wbi-pwoq__qty {
+  width: 56px;
+  min-height: 40px;
+  padding: 0 4px;
+  border: none;
+  border-left: 1px solid #c3c4c7;
+  border-right: 1px solid #c3c4c7;
+  border-radius: 0;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.wbi-pwoq__stepper .wbi-pwoq__qty::-webkit-inner-spin-button,
+.wbi-pwoq__stepper .wbi-pwoq__qty::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ---- Row: stepper + button ---- */
 .wbi-pwoq__row {
   display: flex;
   gap: 8px;
