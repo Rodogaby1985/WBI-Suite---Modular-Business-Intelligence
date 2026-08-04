@@ -15,10 +15,13 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   wbi_pwoq_show_color_count       bool
  *   wbi_pwoq_enforce_min_qty        bool
  *   wbi_pwoq_enforce_pack_multiples bool
+ *   wbi_pwoq_global_add_enabled     bool
+ *   wbi_pwoq_initial_qty_zero       bool
+ *   wbi_pwoq_hide_native_add_to_cart bool
  */
 class WBI_Public_Wholesale_Quick_Order_Module {
 
-    const ASSET_VERSION = '1.1.0';
+    const ASSET_VERSION = '1.2.0';
 
     /** @var array Cached module settings */
     private $settings;
@@ -29,6 +32,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         add_action( 'wp_enqueue_scripts',                             array( $this, 'enqueue_assets' ) );
         add_action( 'woocommerce_after_shop_loop_item',               array( $this, 'render_quick_order_ui' ), 15 );
         add_action( 'wp_footer',                                      array( $this, 'render_feedback_shell' ) );
+        add_filter( 'woocommerce_loop_add_to_cart_link',               array( $this, 'maybe_hide_native_add_to_cart' ), 10, 3 );
         add_action( 'wp_ajax_wbi_public_quick_order_add',             array( $this, 'ajax_add_to_cart' ) );
         add_action( 'wp_ajax_nopriv_wbi_public_quick_order_add',      array( $this, 'ajax_add_to_cart' ) );
         add_action( 'wp_ajax_wbi_public_quick_order_variants',        array( $this, 'ajax_get_variants' ) );
@@ -48,6 +52,9 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             'show_color_count'       => ! empty( $opts['wbi_pwoq_show_color_count'] ),
             'enforce_min_qty'        => isset( $opts['wbi_pwoq_enforce_min_qty'] ) ? (bool) $opts['wbi_pwoq_enforce_min_qty'] : true,
             'enforce_pack_multiples' => isset( $opts['wbi_pwoq_enforce_pack_multiples'] ) ? (bool) $opts['wbi_pwoq_enforce_pack_multiples'] : true,
+            'global_add_enabled'     => ! empty( $opts['wbi_pwoq_global_add_enabled'] ),
+            'initial_qty_zero'       => ! empty( $opts['wbi_pwoq_initial_qty_zero'] ),
+            'hide_native_add_to_cart' => ! empty( $opts['wbi_pwoq_hide_native_add_to_cart'] ),
         );
     }
 
@@ -85,6 +92,8 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                 'nonce'               => wp_create_nonce( 'wbi_public_quick_order' ),
                 'currencySymbol'      => get_woocommerce_currency_symbol(),
                 'variantSelectorMode' => $this->settings['variant_selector_mode'],
+                'globalAddEnabled'    => $this->settings['global_add_enabled'],
+                'initialQtyZero'      => $this->settings['initial_qty_zero'],
                 'i18n'                => array(
                     'adding'           => 'Agregando…',
                     'defaultButton'    => 'Agregar al pedido',
@@ -104,6 +113,9 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                     'packMultiple'     => 'Múltiplos de %d',
                     'noStock'          => 'Sin stock',
                     'close'            => 'Cerrar',
+                    'globalAdd'        => 'AGREGAR SELECCIONADOS AL CARRITO',
+                    'globalEmpty'      => 'Seleccioná cantidades para agregar al carrito.',
+                    'globalSuccess'    => 'Se agregaron %1$s productos por %2$s unidades.',
                 ),
             )
         );
@@ -165,7 +177,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                     type="number"
                     min="<?php echo esc_attr( $default_variant['min_qty'] ); ?>"
                     step="<?php echo esc_attr( $default_variant['step_qty'] ); ?>"
-                    value="<?php echo esc_attr( $default_variant['default_qty'] ); ?>"
+                    value="<?php echo esc_attr( $this->get_initial_quantity_value( $default_variant ) ); ?>"
                     inputmode="numeric"
                 />
 
@@ -219,6 +231,12 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             <?php echo esc_html( $summary['label'] ); ?>
         </div>
 
+        <?php if ( $this->settings['global_add_enabled'] ) : ?>
+        <div class="wbi-pwoq-global-bar" hidden>
+            <button type="button" class="button alt wbi-pwoq-global-bar__button">AGREGAR SELECCIONADOS AL CARRITO</button>
+        </div>
+        <?php endif; ?>
+
         <?php if ( 'modal' === $mode ) : ?>
         <div class="wbi-pwoq-modal" hidden role="dialog" aria-modal="true" aria-label="Elegí variantes">
             <div class="wbi-pwoq-modal__backdrop"></div>
@@ -228,7 +246,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                 <div class="wbi-pwoq-modal__attrs"></div>
                 <div class="wbi-pwoq-modal__qty-row">
                     <label class="wbi-pwoq-modal__qty-label">Cantidad</label>
-                    <input class="wbi-pwoq-modal__qty" type="number" min="1" step="1" value="1" inputmode="numeric" />
+                    <input class="wbi-pwoq-modal__qty" type="number" min="1" step="1" value="<?php echo esc_attr( $this->settings['initial_qty_zero'] ? 0 : 1 ); ?>" inputmode="numeric" />
                 </div>
                 <div class="wbi-pwoq-modal__rules" aria-live="polite"></div>
                 <button type="button" class="button alt wbi-pwoq-modal__confirm">Agregar al pedido</button>
@@ -393,6 +411,18 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             'step_qty'    => $step_qty,
             'default_qty' => $default_qty,
         );
+    }
+
+    private function get_initial_quantity_value( array $rules ) {
+        return $this->settings['initial_qty_zero'] ? 0 : $rules['default_qty'];
+    }
+
+    public function maybe_hide_native_add_to_cart( $html, $product, $args ) {
+        if ( ! $this->should_load_assets() || ! $this->settings['hide_native_add_to_cart'] ) {
+            return $html;
+        }
+
+        return '';
     }
 
     private function read_numeric_meta( WC_Product $product, array $keys ) {
