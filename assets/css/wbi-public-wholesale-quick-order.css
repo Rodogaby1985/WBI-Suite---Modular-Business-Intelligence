@@ -128,7 +128,7 @@
 .wbi-pwoq-toast {
   position: fixed;
   right: 16px;
-  bottom: 76px;
+  bottom: 96px;
   z-index: 9999;
   max-width: 320px;
   padding: 12px 16px;
@@ -287,57 +287,127 @@
 
 /* ---- Responsive ---- */
 @media (max-width: 600px) {
-  .wbi-pwoq-summary,
-  .wbi-pwoq-toast {
+  .wbi-pwoq-summary {
     left: 16px;
     right: 16px;
   }
 }
 
 
+/* ---- Global quick-order bar — full-width fixed overlay ---- */
 .wbi-pwoq-global-bar {
   position: fixed;
-  left: 50%;
-  bottom: 16px;
-  z-index: 9999;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  background: rgba(255, 255, 255, .82);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+          backdrop-filter: blur(14px) saturate(1.6);
+  border-top: 1px solid rgba(0, 0, 0, .10);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, .10);
+  padding: 12px 16px;
+  /* safe area for notch/home-bar devices */
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+.wbi-pwoq-global-bar__inner {
+  max-width: 1200px;
+  margin: 0 auto;
   display: flex;
-  justify-content: center;
-  width: min(calc(100% - 32px), 760px);
-  transform: translateX(-50%);
-  pointer-events: none;
+  align-items: center;
+  gap: 16px;
 }
 
+/* Left: compact summary */
+.wbi-pwoq-global-bar__summary {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d2327;
+  white-space: nowrap;
+}
+
+/* Middle: optional detail */
+.wbi-pwoq-global-bar__detail {
+  flex: 1 1 auto;
+  font-size: 13px;
+  color: #50575e;
+  line-height: 1.4;
+}
+
+/* Right: CTA button */
 .wbi-pwoq-global-bar__button {
-  width: 100%;
-  min-height: 52px;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 24px;
+  font-size: 14px;
   font-weight: 700;
-  pointer-events: auto;
-  border: 0;
-  border-radius: 16px;
+  letter-spacing: .03em;
+  white-space: nowrap;
+  border-radius: 10px;
   background: #b32d2e;
-  box-shadow: 0 16px 32px rgba(0, 0, 0, .20);
+  border: none;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(179, 45, 46, .30);
+  transition: background .15s, box-shadow .15s, opacity .15s;
 }
 
-.wbi-pwoq-summary.wbi-pwoq-summary--with-global-bar {
-  bottom: 92px;
+.wbi-pwoq-global-bar__button:hover:not(:disabled) {
+  background: #99191a;
+  box-shadow: 0 6px 18px rgba(179, 45, 46, .38);
 }
 
+.wbi-pwoq-global-bar__button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Spacing added to page body when bar is visible */
 body.wbi-pwoq-has-global-bar-space {
-  padding-bottom: 108px;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
 }
 
-@media (max-width: 600px) {
-  .wbi-pwoq-global-bar {
-    width: calc(100% - 24px);
-    bottom: 12px;
+/* ---- Mobile: two-row stacked layout ---- */
+@media (max-width: 640px) {
+  .wbi-pwoq-global-bar__inner {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .wbi-pwoq-global-bar__summary {
+    flex: 1 1 auto;
+    font-size: 13px;
+  }
+
+  .wbi-pwoq-global-bar__detail {
+    /* hide on very small screens to keep it clean */
+    display: none;
   }
 
   .wbi-pwoq-global-bar__button {
+    flex: 1 1 100%;
+    width: 100%;
     min-height: 48px;
-    border-radius: 14px;
+    font-size: 15px;
+    border-radius: 12px;
   }
 
   body.wbi-pwoq-has-global-bar-space {
-    padding-bottom: 96px;
+    padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .wbi-pwoq-toast {
+    left: 16px;
+    right: 16px;
+    max-width: none;
+    bottom: calc(120px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* ---- Floating cart summary pill (keep visible above bar on desktop) ---- */
+.wbi-pwoq-summary.wbi-pwoq-summary--with-global-bar {
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+

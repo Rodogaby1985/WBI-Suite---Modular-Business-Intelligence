@@ -121,21 +121,48 @@
     if (!globalAddEnabled) return;
     var bar = document.querySelector('.wbi-pwoq-global-bar');
     var button = bar ? bar.querySelector('.wbi-pwoq-global-bar__button') : null;
+    var summaryEl = bar ? bar.querySelector('.wbi-pwoq-global-bar__summary') : null;
+    var detailEl  = bar ? bar.querySelector('.wbi-pwoq-global-bar__detail')  : null;
     if (!bar || !button) return;
     var selections = getBatchSelections();
-    var summary = document.querySelector('.wbi-pwoq-summary');
+    var floatSummary = document.querySelector('.wbi-pwoq-summary');
     if (!selections.length) {
       bar.hidden = true;
       toggleGlobalBarSpacing(false);
-      if (summary) summary.classList.remove('wbi-pwoq-summary--with-global-bar');
-      button.disabled = false;
+      if (floatSummary) floatSummary.classList.remove('wbi-pwoq-summary--with-global-bar');
+      button.disabled = true;
       button.textContent = i18n.globalAdd;
+      if (summaryEl) summaryEl.textContent = '';
+      if (detailEl)  detailEl.textContent  = '';
       return;
     }
     bar.hidden = false;
     toggleGlobalBarSpacing(true);
-    if (summary) summary.classList.add('wbi-pwoq-summary--with-global-bar');
+    if (floatSummary) floatSummary.classList.add('wbi-pwoq-summary--with-global-bar');
+    button.disabled = false;
     button.textContent = i18n.globalAdd;
+
+    // Build left-zone summary text: "N producto(s) · M unidad(es)"
+    var totalProducts = selections.length;
+    var totalUnits    = selections.reduce(function (sum, s) { return sum + s.quantity; }, 0);
+    var tpl = totalProducts === 1 ? (i18n.counterSingular || '%1$s producto · %2$s unidad')
+                                  : (i18n.counterPlural   || '%1$s productos · %2$s unidades');
+    var summaryText = tpl.replace('%1$s', totalProducts).replace('%2$s', totalUnits);
+    if (summaryEl) summaryEl.textContent = summaryText;
+
+    // Middle-zone detail: list product names (up to 3, then "+N más")
+    if (detailEl) {
+      var names = selections.map(function (s) {
+        var data = parseProductData(s.container);
+        return data.product_name || '';
+      }).filter(Boolean);
+      var maxNames = 3;
+      var detail = names.slice(0, maxNames).join(', ');
+      if (names.length > maxNames) {
+        detail += ' +' + (names.length - maxNames) + ' más';
+      }
+      detailEl.textContent = detail;
+    }
   }
 
   function addSelectionsSequentially(selections, button) {

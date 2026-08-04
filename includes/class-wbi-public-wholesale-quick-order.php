@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class WBI_Public_Wholesale_Quick_Order_Module {
 
-    const ASSET_VERSION = '1.2.1';
+    const ASSET_VERSION = '1.3.0';
 
     /** @var array Cached module settings */
     private $settings;
@@ -232,8 +232,12 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         </div>
 
         <?php if ( $this->settings['global_add_enabled'] ) : ?>
-        <div class="wbi-pwoq-global-bar" hidden>
-            <button type="button" class="button alt wbi-pwoq-global-bar__button">AGREGAR SELECCIONADOS AL CARRITO</button>
+        <div class="wbi-pwoq-global-bar" hidden aria-live="polite">
+            <div class="wbi-pwoq-global-bar__inner">
+                <div class="wbi-pwoq-global-bar__summary" aria-atomic="true"></div>
+                <div class="wbi-pwoq-global-bar__detail"></div>
+                <button type="button" class="button alt wbi-pwoq-global-bar__button" disabled>AGREGAR SELECCIONADOS AL CARRITO</button>
+            </div>
         </div>
         <?php endif; ?>
 
