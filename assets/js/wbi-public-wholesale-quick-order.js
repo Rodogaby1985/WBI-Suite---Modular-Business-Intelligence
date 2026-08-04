@@ -1,4 +1,21 @@
+/**
+ * WBI Public Wholesale Quick Order — front-end controller
+ *
+ * Supports two variant-selector modes (configured server-side):
+ *   "inline"  — chip selectors rendered directly inside each card
+ *   "modal"   — lightweight modal opened on "Agregar al pedido" click
+ */
 (function () {
+  'use strict';
+
+  var cfg = window.WBIPublicQuickOrder || {};
+  var i18n = cfg.i18n || {};
+  var mode = cfg.variantSelectorMode || 'modal';
+
+  // -------------------------------------------------------------------------
+  // Utilities
+  // -------------------------------------------------------------------------
+
   function parseProductData(container) {
     try {
       return JSON.parse(container.getAttribute('data-product') || '{}');
@@ -7,113 +24,467 @@
     }
   }
 
-  function updateVariantState(container, variantId) {
-    const data = parseProductData(container);
-    const variants = Array.isArray(data.variants) ? data.variants : [];
-    const selected = variants.find((item) => String(item.id) === String(variantId)) || variants[0];
-    if (!selected) return;
-
-    const qtyInput = container.querySelector('.wbi-public-quick-order__qty');
-    const rules = container.querySelector('.wbi-public-quick-order__rules');
-    const status = container.querySelector('.wbi-public-quick-order__status');
-
-    qtyInput.min = selected.min_qty;
-    qtyInput.step = selected.step_qty;
-    qtyInput.value = selected.default_qty;
-    rules.textContent = selected.rule_text || '';
-    status.textContent = '';
+  function showToast(message, isError) {
+    var toast = document.querySelector('.wbi-pwoq-toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.hidden = false;
+    toast.classList.toggle('is-error', !!isError);
+    toast.classList.add('is-visible');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(function () {
+      toast.classList.remove('is-visible');
+      setTimeout(function () { toast.hidden = true; }, 200);
+    }, 3000);
   }
 
   function updateSummary(summary) {
-    const el = document.querySelector('.wbi-public-quick-order-summary');
+    var el = document.querySelector('.wbi-pwoq-summary');
     if (!el || !summary) return;
     el.dataset.items = summary.items;
     el.dataset.units = summary.units;
     el.textContent = summary.label;
   }
 
-  function showToast(message, isError) {
-    const toast = document.querySelector('.wbi-public-quick-order-toast');
-    if (!toast) return;
-    toast.textContent = message;
-    toast.hidden = false;
-    toast.classList.toggle('is-error', !!isError);
-    toast.classList.add('is-visible');
-    window.clearTimeout(showToast._timer);
-    showToast._timer = window.setTimeout(() => {
-      toast.classList.remove('is-visible');
-      window.setTimeout(() => { toast.hidden = true; }, 180);
-    }, 2800);
+  function setStatus(el, message, isError) {
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.toggle('is-error', !!isError);
   }
 
-  function bindQuickOrder(container) {
-    const data = parseProductData(container);
-    const button = container.querySelector('.wbi-public-quick-order__button');
-    const qtyInput = container.querySelector('.wbi-public-quick-order__qty');
-    const variantSelect = container.querySelector('.wbi-public-quick-order__variant');
-    const status = container.querySelector('.wbi-public-quick-order__status');
-
-    if (variantSelect && variantSelect.tagName === 'SELECT') {
-      variantSelect.addEventListener('change', function () {
-        updateVariantState(container, variantSelect.value);
+  /**
+   * Find the matching variant given the current attribute selections.
+   * Returns null if no unique match is found (or if a required attr is missing).
+   */
+  function resolveVariant(variants, selectedAttrs) {
+    var matches = variants.filter(function (v) {
+      if (!v.in_stock) return false;
+      var attrs = v.attributes || {};
+      return Object.keys(selectedAttrs).every(function (attrKey) {
+        var varAttrKey = 'attribute_' + attrKey;
+        // An empty string on the variation side means "any" (catch-all)
+        return attrs[varAttrKey] === '' || attrs[varAttrKey] === selectedAttrs[attrKey];
       });
-    }
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
 
-    button.addEventListener('click', function () {
-      const currentData = parseProductData(container);
-      const variants = Array.isArray(currentData.variants) ? currentData.variants : [];
-      const variant = variants.find((item) => String(item.id) === String(variantSelect && variantSelect.value ? variantSelect.value : 0)) || variants[0];
+  /**
+   * Build a map { attrName: selectedValue } from chips inside a given root.
+   */
+  function getSelectedAttrs(root) {
+    var result = {};
+    root.querySelectorAll('.wbi-pwoq__attr-group').forEach(function (group) {
+      var attrName = group.dataset.attr;
+      var selected = group.querySelector('.wbi-pwoq__chip.is-selected');
+      if (selected) result[attrName] = selected.dataset.value;
+    });
+    return result;
+  }
 
-      if (!variant) {
-        status.textContent = WBIPublicQuickOrder.i18n.selectVariation;
-        return;
-      }
+  /**
+   * Disable chips whose combination with current selections is fully out of stock.
+   */
+  function refreshChipAvailability(root, variants) {
+    var currentAttrs = getSelectedAttrs(root);
 
-      const originalLabel = button.textContent;
-      button.disabled = true;
-      button.textContent = WBIPublicQuickOrder.i18n.adding;
-      status.textContent = '';
+    root.querySelectorAll('.wbi-pwoq__attr-group').forEach(function (group) {
+      var attrName = group.dataset.attr;
+      group.querySelectorAll('.wbi-pwoq__chip').forEach(function (chip) {
+        // Build a hypothetical selection with this chip chosen
+        var testAttrs = Object.assign({}, currentAttrs);
+        testAttrs[attrName] = chip.dataset.value;
 
-      const body = new URLSearchParams();
-      body.append('action', 'wbi_public_quick_order_add');
-      body.append('nonce', WBIPublicQuickOrder.nonce);
-      body.append('product_id', currentData.product_id || 0);
-      body.append('variation_id', variant.id || 0);
-      body.append('quantity', qtyInput.value || variant.default_qty || 1);
-
-      fetch(WBIPublicQuickOrder.ajaxUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-        },
-        body: body.toString(),
-        credentials: 'same-origin'
-      })
-        .then((response) => response.json())
-        .then((payload) => {
-          if (!payload || !payload.success) {
-            const message = payload && payload.data && payload.data.message ? payload.data.message : WBIPublicQuickOrder.i18n.errorGeneric;
-            status.textContent = message;
-            showToast(message, true);
-            return;
-          }
-
-          status.textContent = payload.data.message;
-          showToast(payload.data.message, false);
-          updateSummary(payload.data.summary);
-        })
-        .catch(() => {
-          status.textContent = WBIPublicQuickOrder.i18n.errorGeneric;
-          showToast(WBIPublicQuickOrder.i18n.errorGeneric, true);
-        })
-        .finally(() => {
-          button.disabled = false;
-          button.textContent = originalLabel || WBIPublicQuickOrder.i18n.defaultButton;
+        // Is there at least one in-stock variant compatible with this selection?
+        var possible = variants.some(function (v) {
+          if (!v.in_stock) return false;
+          var attrs = v.attributes || {};
+          return Object.keys(testAttrs).every(function (k) {
+            var key = 'attribute_' + k;
+            return attrs[key] === '' || attrs[key] === testAttrs[k];
+          });
         });
+
+        chip.classList.toggle('is-disabled', !possible);
+      });
     });
   }
 
+  /**
+   * Bind chip-click interactions on a given root element.
+   * When a chip is selected, update qty constraints and refresh availability.
+   * `onVariantResolved(variant)` is called each time a unique variant is matched.
+   */
+  function bindChips(root, variants, onVariantResolved) {
+    // Auto-select the single valid option per attribute when possible
+    var attrGroups = root.querySelectorAll('.wbi-pwoq__attr-group');
+    attrGroups.forEach(function (group) {
+      var chips = group.querySelectorAll('.wbi-pwoq__chip:not(.is-disabled)');
+      if (chips.length === 1) chips[0].classList.add('is-selected');
+    });
+
+    refreshChipAvailability(root, variants);
+
+    root.addEventListener('click', function (e) {
+      var chip = e.target.closest('.wbi-pwoq__chip');
+      if (!chip || chip.classList.contains('is-disabled')) return;
+
+      var group = chip.closest('.wbi-pwoq__attr-group');
+      if (!group) return;
+
+      // Deselect siblings
+      group.querySelectorAll('.wbi-pwoq__chip').forEach(function (c) {
+        c.classList.remove('is-selected');
+      });
+      chip.classList.add('is-selected');
+
+      refreshChipAvailability(root, variants);
+
+      var selectedAttrs = getSelectedAttrs(root);
+      var resolved = resolveVariant(variants, selectedAttrs);
+      if (resolved && onVariantResolved) onVariantResolved(resolved);
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // AJAX helpers
+  // -------------------------------------------------------------------------
+
+  function doAddToCart(params, onSuccess, onError, onFinally) {
+    var body = new URLSearchParams();
+    body.append('action', 'wbi_public_quick_order_add');
+    body.append('nonce', cfg.nonce);
+    body.append('product_id', params.productId || 0);
+    body.append('variation_id', params.variationId || 0);
+    body.append('quantity', params.quantity || 1);
+
+    fetch(cfg.ajaxUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      body: body.toString(),
+      credentials: 'same-origin'
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (payload) {
+        if (!payload || !payload.success) {
+          var msg = (payload && payload.data && payload.data.message) ? payload.data.message : i18n.errorGeneric;
+          if (onError) onError(msg);
+          return;
+        }
+        if (onSuccess) onSuccess(payload.data);
+      })
+      .catch(function () {
+        if (onError) onError(i18n.errorGeneric);
+      })
+      .finally(function () {
+        if (onFinally) onFinally();
+      });
+  }
+
+  // -------------------------------------------------------------------------
+  // Modal variant selector
+  // -------------------------------------------------------------------------
+
+  var modal = null;
+  var modalCurrentData = null;
+  var modalCurrentVariant = null;
+
+  function openModal(productData) {
+    modal = document.querySelector('.wbi-pwoq-modal');
+    if (!modal) return;
+
+    modalCurrentData = productData;
+    modalCurrentVariant = null;
+
+    // Fill product name
+    var nameEl = modal.querySelector('.wbi-pwoq-modal__product-name');
+    if (nameEl) nameEl.textContent = productData.product_name || '';
+
+    // Clear previous attrs & status
+    var attrsEl = modal.querySelector('.wbi-pwoq-modal__attrs');
+    var statusEl = modal.querySelector('.wbi-pwoq-modal__status');
+    var rulesEl = modal.querySelector('.wbi-pwoq-modal__rules');
+    if (attrsEl) attrsEl.innerHTML = '';
+    if (statusEl) { statusEl.textContent = ''; statusEl.classList.remove('is-error'); }
+    if (rulesEl) rulesEl.textContent = '';
+
+    var qtyInput = modal.querySelector('.wbi-pwoq-modal__qty');
+
+    // Build attribute chip groups
+    var attributes = productData.attributes || {};
+    Object.keys(attributes).forEach(function (attrName) {
+      var values = attributes[attrName];
+      var group = document.createElement('div');
+      group.className = 'wbi-pwoq__attr-group';
+      group.dataset.attr = attrName;
+
+      var label = document.createElement('span');
+      label.className = 'wbi-pwoq__attr-label';
+      label.textContent = attrName.replace(/^pa_/, '').replace(/[-_]/g, ' ');
+      label.textContent = label.textContent.charAt(0).toUpperCase() + label.textContent.slice(1);
+      group.appendChild(label);
+
+      var chipsRow = document.createElement('div');
+      chipsRow.className = 'wbi-pwoq__attr-chips';
+      values.forEach(function (val) {
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'wbi-pwoq__chip';
+        chip.dataset.value = val;
+        chip.textContent = val;
+        chipsRow.appendChild(chip);
+      });
+      group.appendChild(chipsRow);
+      if (attrsEl) attrsEl.appendChild(group);
+    });
+
+    var variants = productData.variants || [];
+
+    bindChips(modal, variants, function (variant) {
+      modalCurrentVariant = variant;
+      if (qtyInput) {
+        qtyInput.min = variant.min_qty || 1;
+        qtyInput.step = variant.step_qty || 1;
+        qtyInput.value = variant.default_qty || variant.min_qty || 1;
+      }
+      if (rulesEl) rulesEl.textContent = variant.rule_text || '';
+    });
+
+    // Auto-select single valid option per attr
+    var autoSelectId = productData.auto_select;
+    if (autoSelectId !== null && autoSelectId !== undefined) {
+      var autoVariant = variants.find(function (v) { return String(v.id) === String(autoSelectId); });
+      if (autoVariant) {
+        modalCurrentVariant = autoVariant;
+        if (qtyInput) {
+          qtyInput.min = autoVariant.min_qty || 1;
+          qtyInput.step = autoVariant.step_qty || 1;
+          qtyInput.value = autoVariant.default_qty || autoVariant.min_qty || 1;
+        }
+        if (rulesEl) rulesEl.textContent = autoVariant.rule_text || '';
+      }
+    }
+
+    // Set default qty if no variation yet
+    if (!modalCurrentVariant && variants.length === 1) {
+      modalCurrentVariant = variants[0];
+      if (qtyInput) {
+        qtyInput.min = variants[0].min_qty || 1;
+        qtyInput.step = variants[0].step_qty || 1;
+        qtyInput.value = variants[0].default_qty || variants[0].min_qty || 1;
+      }
+      if (rulesEl) rulesEl.textContent = variants[0].rule_text || '';
+    }
+
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    if (modal) {
+      modal.hidden = true;
+      document.body.style.overflow = '';
+    }
+    modalCurrentData = null;
+    modalCurrentVariant = null;
+  }
+
+  function initModal() {
+    var m = document.querySelector('.wbi-pwoq-modal');
+    if (!m) return;
+
+    // Close button
+    var closeBtn = m.querySelector('.wbi-pwoq-modal__close');
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+    // Backdrop
+    var backdrop = m.querySelector('.wbi-pwoq-modal__backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeModal);
+
+    // Keyboard ESC
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && modal && !modal.hidden) closeModal();
+    });
+
+    // Confirm button
+    var confirmBtn = m.querySelector('.wbi-pwoq-modal__confirm');
+    var statusEl   = m.querySelector('.wbi-pwoq-modal__status');
+    var qtyInput   = m.querySelector('.wbi-pwoq-modal__qty');
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', function () {
+        if (!modalCurrentData) return;
+
+        if (modalCurrentData.has_variations && !modalCurrentVariant) {
+          setStatus(statusEl, i18n.selectOption, true);
+          return;
+        }
+
+        var variantId  = modalCurrentVariant ? modalCurrentVariant.id : 0;
+        var qty        = qtyInput ? parseInt(qtyInput.value, 10) || 1 : 1;
+
+        var originalLabel = confirmBtn.textContent;
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = i18n.adding;
+        setStatus(statusEl, '', false);
+
+        doAddToCart(
+          { productId: modalCurrentData.product_id, variationId: variantId, quantity: qty },
+          function (data) {
+            setStatus(statusEl, data.message, false);
+            showToast(data.message, false);
+            updateSummary(data.summary);
+            setTimeout(function () { closeModal(); }, 1200);
+          },
+          function (msg) {
+            setStatus(statusEl, msg, true);
+            showToast(msg, true);
+          },
+          function () {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = originalLabel || i18n.confirmAdd;
+          }
+        );
+      });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Card binding (inline mode)
+  // -------------------------------------------------------------------------
+
+  function bindInlineCard(container) {
+    var data = parseProductData(container);
+    var variants = data.variants || [];
+    var button   = container.querySelector('.wbi-pwoq__button');
+    var qtyInput = container.querySelector('.wbi-pwoq__qty');
+    var rulesEl  = container.querySelector('.wbi-pwoq__rules-line');
+    var statusEl = container.querySelector('.wbi-pwoq__status');
+    var currentVariant = null;
+
+    if (data.has_variations) {
+      bindChips(container, variants, function (variant) {
+        currentVariant = variant;
+        if (qtyInput) {
+          qtyInput.min   = variant.min_qty || 1;
+          qtyInput.step  = variant.step_qty || 1;
+          qtyInput.value = variant.default_qty || variant.min_qty || 1;
+        }
+        if (rulesEl) rulesEl.textContent = variant.rule_text || '';
+        setStatus(statusEl, '', false);
+      });
+
+      // Auto-select single variant
+      if (data.auto_select !== null && data.auto_select !== undefined) {
+        var auto = variants.find(function (v) { return String(v.id) === String(data.auto_select); });
+        if (auto) {
+          currentVariant = auto;
+          if (qtyInput) {
+            qtyInput.min   = auto.min_qty || 1;
+            qtyInput.step  = auto.step_qty || 1;
+            qtyInput.value = auto.default_qty || auto.min_qty || 1;
+          }
+          if (rulesEl) rulesEl.textContent = auto.rule_text || '';
+        }
+      }
+    } else {
+      currentVariant = variants[0] || null;
+    }
+
+    if (!button) return;
+
+    button.addEventListener('click', function () {
+      if (data.has_variations && !currentVariant) {
+        setStatus(statusEl, i18n.selectOption, true);
+        return;
+      }
+
+      var variantId = currentVariant ? currentVariant.id : 0;
+      var qty       = qtyInput ? parseInt(qtyInput.value, 10) || 1 : 1;
+
+      var originalLabel = button.textContent;
+      button.disabled   = true;
+      button.textContent = i18n.adding;
+      setStatus(statusEl, '', false);
+
+      doAddToCart(
+        { productId: data.product_id, variationId: variantId, quantity: qty },
+        function (responseData) {
+          setStatus(statusEl, responseData.message, false);
+          showToast(responseData.message, false);
+          updateSummary(responseData.summary);
+        },
+        function (msg) {
+          setStatus(statusEl, msg, true);
+          showToast(msg, true);
+        },
+        function () {
+          button.disabled = false;
+          button.textContent = originalLabel || i18n.defaultButton;
+        }
+      );
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Card binding (modal mode)
+  // -------------------------------------------------------------------------
+
+  function bindModalCard(container) {
+    var data    = parseProductData(container);
+    var button  = container.querySelector('.wbi-pwoq__button');
+    var qtyInput = container.querySelector('.wbi-pwoq__qty');
+    var statusEl = container.querySelector('.wbi-pwoq__status');
+
+    if (!button) return;
+
+    button.addEventListener('click', function () {
+      if (data.has_variations) {
+        openModal(data);
+      } else {
+        // Simple product — add directly
+        var qty = qtyInput ? parseInt(qtyInput.value, 10) || 1 : 1;
+        var variants = data.variants || [];
+        var originalLabel = button.textContent;
+        button.disabled   = true;
+        button.textContent = i18n.adding;
+        setStatus(statusEl, '', false);
+
+        doAddToCart(
+          { productId: data.product_id, variationId: 0, quantity: qty },
+          function (responseData) {
+            setStatus(statusEl, responseData.message, false);
+            showToast(responseData.message, false);
+            updateSummary(responseData.summary);
+          },
+          function (msg) {
+            setStatus(statusEl, msg, true);
+            showToast(msg, true);
+          },
+          function () {
+            button.disabled = false;
+            button.textContent = originalLabel || i18n.defaultButton;
+          }
+        );
+      }
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Init
+  // -------------------------------------------------------------------------
+
   document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.wbi-public-quick-order').forEach(bindQuickOrder);
+    if (mode === 'modal') {
+      initModal();
+    }
+
+    document.querySelectorAll('.wbi-pwoq').forEach(function (container) {
+      if (mode === 'inline') {
+        bindInlineCard(container);
+      } else {
+        bindModalCard(container);
+      }
+    });
   });
 })();
