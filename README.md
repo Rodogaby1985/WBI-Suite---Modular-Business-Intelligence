@@ -55,6 +55,7 @@ Los 31 módulos se agrupan en 7 categorías:
 | Módulo | Clave de activación | Descripción |
 |--------|---------------------|-------------|
 | **Modo Mayorista B2B** | `wbi_enable_b2b` | Roles mayoristas, precios ocultos al público general y aprobación manual de nuevos clientes con acceso restringido por rol. Incluye opción de **auto-aprobación** (`wbi_b2b_auto_approve`) para que los clientes queden habilitados automáticamente al registrarse, sin intervención manual. |
+| **Pedido rápido mayorista público** | `wbi_enable_public_wholesale_quick_order` | Permite elegir variante, cantidad y agregar al pedido directamente desde el catálogo. Respeta mínimos y múltiplos de empaque cuando existan metas como `_wbi_min_qty` y `_wbi_pack_multiple`, y muestra feedback inmediato con resumen flotante del pedido. |
 | **Listas de Precios** | `wbi_enable_pricelists` | Precios diferenciados por cliente, rol o grupo — ideal para distribuidores, revendedores y clientes VIP. |
 | **Precio Promo** | `wbi_enable_promo_pricing` | Precio financiado, precio con descuento por transferencia bancaria y ajuste automático en el checkout según el método de pago seleccionado. |
 | **Costos y Márgenes** | `wbi_enable_costs` | Costo de adquisición por producto con cálculo automático de margen bruto y análisis de rentabilidad. |
@@ -180,6 +181,7 @@ includes/
   class-wbi-picking.php              ← Picking & Armado
   class-wbi-mobapp-shipping.php      ← MobApp Envíos (wrapper)
   class-wbi-multi-shipping.php       ← Transporte Multiopciones (wrapper)
+  class-wbi-public-wholesale-quick-order.php ← Pedido rápido mayorista público
   class-wbi-remitos.php              ← Remitos
   class-wbi-suppliers.php            ← Proveedores
   class-wbi-reorder.php              ← Reglas de reabastecimiento
@@ -201,6 +203,7 @@ includes/
   class-wbi-data.php                 ← Modelo de datos extra
   class-wbi-custom-fields.php        ← Campos personalizados
 modules/
+  public-wholesale-quick-order/      ← Módulo público de pedido rápido mayorista
   woo-pagos-offline-avanzados/       ← Plugin fuente: Pagos Offline Avanzados
   woo-precio-promo/                  ← Plugin fuente: Precio Promo
   mobapp-envios/                     ← Plugin fuente: MobApp Envíos
@@ -218,6 +221,14 @@ El archivo `wbi-suite.php` contiene la clase `WBI_Suite_Loader` que:
 1. **Verifica la licencia** antes de cargar cualquier módulo. Sin licencia activa, solo muestra la pantalla de activación.
 2. **Lee las opciones** guardadas en `wbi_modules_settings` (WordPress options).
 3. **Carga condicionalmente** cada módulo según su toggle de configuración.
+
+### Verificación manual del módulo de pedido rápido
+
+1. Activar **Pedido rápido mayorista público** desde **WooCommerce → wooErp → Configuración**.
+2. Abrir el catálogo y confirmar que cada producto comprable muestre selector de variante (si aplica), cantidad y botón **Agregar al pedido**.
+3. Para validar reglas mayoristas, configurar metadatos `_wbi_min_qty` y/o `_wbi_pack_multiple` en un producto o variación.
+4. Intentar agregar una cantidad menor al mínimo o fuera del múltiplo para confirmar los mensajes al cliente final.
+5. Agregar varios productos desde el catálogo y verificar el toast de confirmación y el contador flotante de productos/unidades.
 4. **Registra los campos de configuración** y el menú de administración bajo WooCommerce.
 5. **Expone la lista de módulos** vía `get_wbi_module_list()` para el sistema de permisos por usuario.
 
