@@ -13,6 +13,7 @@
   var mode = cfg.variantSelectorMode || 'modal';
   var globalAddEnabled = !!cfg.globalAddEnabled;
   var initialQtyZero = !!cfg.initialQtyZero;
+  var globalBarSpaceClass = 'wbi-pwoq-has-global-bar-space';
 
   // -------------------------------------------------------------------------
   // Utilities
@@ -68,6 +69,31 @@
     input.value = initialQtyZero ? 0 : (variant.default_qty || variant.min_qty || 1);
   }
 
+  function setChipSelected(chip, selected) {
+    if (!chip) return;
+    chip.classList.toggle('is-selected', !!selected);
+    chip.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    if (selected) {
+      chip.dataset.selected = 'true';
+    } else {
+      delete chip.dataset.selected;
+    }
+  }
+
+  function setCurrentVariant(container, variant) {
+    if (!container) return;
+    var variantId = variant && variant.id ? parseInt(variant.id, 10) || 0 : 0;
+    container.dataset.currentVariantId = String(variantId);
+  }
+
+  function hasValidVariantSelection(data, variantId) {
+    return !data.has_variations || !!variantId;
+  }
+
+  function getMissingVariationMessage() {
+    return i18n.selectVariation || i18n.selectOption;
+  }
+
   function getBatchSelections() {
     var selections = [];
     document.querySelectorAll('.wbi-pwoq').forEach(function (container) {
@@ -87,6 +113,10 @@
     return selections;
   }
 
+  function toggleGlobalBarSpacing(enabled) {
+    document.body.classList.toggle(globalBarSpaceClass, !!enabled);
+  }
+
   function updateGlobalBar() {
     if (!globalAddEnabled) return;
     var bar = document.querySelector('.wbi-pwoq-global-bar');
@@ -96,12 +126,14 @@
     var summary = document.querySelector('.wbi-pwoq-summary');
     if (!selections.length) {
       bar.hidden = true;
+      toggleGlobalBarSpacing(false);
       if (summary) summary.classList.remove('wbi-pwoq-summary--with-global-bar');
       button.disabled = false;
       button.textContent = i18n.globalAdd;
       return;
     }
     bar.hidden = false;
+    toggleGlobalBarSpacing(true);
     if (summary) summary.classList.add('wbi-pwoq-summary--with-global-bar');
     button.textContent = i18n.globalAdd;
   }
@@ -236,15 +268,15 @@
 
       // Deselect siblings
       group.querySelectorAll('.wbi-pwoq__chip').forEach(function (c) {
-        c.classList.remove('is-selected');
+        setChipSelected(c, false);
       });
-      chip.classList.add('is-selected');
+      setChipSelected(chip, true);
 
       refreshChipAvailability(root, variants);
 
       var selectedAttrs = getSelectedAttrs(root);
       var resolved = resolveVariant(variants, selectedAttrs);
-      if (resolved && onVariantResolved) onVariantResolved(resolved);
+      if (onVariantResolved) onVariantResolved(resolved || null);
     });
   }
 
@@ -345,11 +377,9 @@
     bindChips(modal, variants, function (variant) {
       modalCurrentVariant = variant;
       if (qtyInput) {
-        qtyInput.min = variant.min_qty || 1;
-        qtyInput.step = variant.step_qty || 1;
-        qtyInput.value = variant.default_qty || variant.min_qty || 1;
+        resetQtyInput(qtyInput, variant || {});
       }
-      if (rulesEl) rulesEl.textContent = variant.rule_text || '';
+      if (rulesEl) rulesEl.textContent = variant && variant.rule_text ? variant.rule_text : '';
     });
 
     // Auto-select single valid option per attr
@@ -359,9 +389,7 @@
       if (autoVariant) {
         modalCurrentVariant = autoVariant;
         if (qtyInput) {
-          qtyInput.min = autoVariant.min_qty || 1;
-          qtyInput.step = autoVariant.step_qty || 1;
-          qtyInput.value = autoVariant.default_qty || autoVariant.min_qty || 1;
+          resetQtyInput(qtyInput, autoVariant);
         }
         if (rulesEl) rulesEl.textContent = autoVariant.rule_text || '';
       }
@@ -371,9 +399,7 @@
     if (!modalCurrentVariant && variants.length === 1) {
       modalCurrentVariant = variants[0];
       if (qtyInput) {
-        qtyInput.min = variants[0].min_qty || 1;
-        qtyInput.step = variants[0].step_qty || 1;
-        qtyInput.value = variants[0].default_qty || variants[0].min_qty || 1;
+        resetQtyInput(qtyInput, variants[0]);
       }
       if (rulesEl) rulesEl.textContent = variants[0].rule_text || '';
     }
@@ -417,8 +443,8 @@
       confirmBtn.addEventListener('click', function () {
         if (!modalCurrentData) return;
 
-        if (modalCurrentData.has_variations && !modalCurrentVariant) {
-          setStatus(statusEl, i18n.selectOption, true);
+        if (modalCurrentData.has_variations && !modalCurrentVariant && getNormalizedQty(qtyInput) > 0) {
+          setStatus(statusEl, getMissingVariationMessage(), true);
           return;
         }
 
@@ -467,11 +493,11 @@
     if (data.has_variations) {
       bindChips(container, variants, function (variant) {
         currentVariant = variant;
-        if (qtyInput) {
+        if (variant && qtyInput) {
           resetQtyInput(qtyInput, variant);
         }
-        if (rulesEl) rulesEl.textContent = variant.rule_text || '';
-        container.dataset.currentVariantId = variant.id || 0;
+        if (rulesEl) rulesEl.textContent = variant && variant.rule_text ? variant.rule_text : '';
+        setCurrentVariant(container, variant);
         setStatus(statusEl, '', false);
         updateGlobalBar();
       });
@@ -485,26 +511,26 @@
             resetQtyInput(qtyInput, auto);
           }
           if (rulesEl) rulesEl.textContent = auto.rule_text || '';
-          container.dataset.currentVariantId = auto.id || 0;
+          setCurrentVariant(container, auto);
         }
       }
     } else {
       currentVariant = variants[0] || null;
-      container.dataset.currentVariantId = currentVariant ? (currentVariant.id || 0) : 0;
+      setCurrentVariant(container, currentVariant);
     }
 
     if (!button) return;
 
     if (currentVariant) {
-      container.dataset.currentVariantId = currentVariant.id || 0;
+      setCurrentVariant(container, currentVariant);
     }
 
     button.addEventListener('click', function () {
       if (globalAddEnabled) {
         updateGlobalBar();
       }
-      if (data.has_variations && !currentVariant) {
-        setStatus(statusEl, i18n.selectOption, true);
+      if (!hasValidVariantSelection(data, currentVariant ? currentVariant.id : 0) && getNormalizedQty(qtyInput) > 0) {
+        setStatus(statusEl, getMissingVariationMessage(), true);
         return;
       }
 
@@ -546,10 +572,6 @@
     var statusEl = container.querySelector('.wbi-pwoq__status');
 
     if (!button) return;
-
-    if (currentVariant) {
-      container.dataset.currentVariantId = currentVariant.id || 0;
-    }
 
     button.addEventListener('click', function () {
       if (globalAddEnabled) {

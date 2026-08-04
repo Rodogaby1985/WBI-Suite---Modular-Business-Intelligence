@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class WBI_Public_Wholesale_Quick_Order_Module {
 
-    const ASSET_VERSION = '1.2.0';
+    const ASSET_VERSION = '1.2.1';
 
     /** @var array Cached module settings */
     private $settings;
@@ -463,6 +463,13 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         $product_id   = isset( $_POST['product_id'] )   ? absint( wp_unslash( $_POST['product_id'] ) )   : 0;
         $variation_id = isset( $_POST['variation_id'] ) ? absint( wp_unslash( $_POST['variation_id'] ) ) : 0;
         $quantity     = isset( $_POST['quantity'] )     ? (int) wp_unslash( $_POST['quantity'] )         : 0;
+
+        if ( $variation_id <= 0 ) {
+            $parent_product = wc_get_product( $product_id );
+            if ( $parent_product instanceof WC_Product && $parent_product->is_type( 'variable' ) ) {
+                wp_send_json_error( array( 'message' => 'Elegí una variante válida antes de agregar este producto.' ), 400 );
+            }
+        }
 
         $product = $variation_id ? wc_get_product( $variation_id ) : wc_get_product( $product_id );
         if ( ! $product instanceof WC_Product || ! $product->is_purchasable() || ! $product->is_in_stock() ) {
