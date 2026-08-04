@@ -40,6 +40,9 @@ Cuando un producto variable es procesado:
 | `wbi_pwoq_show_color_count` | boolean | Muestra cantidad de colores (atributo `pa_color`) |
 | `wbi_pwoq_enforce_min_qty` | boolean | Aplica validación de mínimo |
 | `wbi_pwoq_enforce_pack_multiples` | boolean | Aplica validación de múltiplos de empaque |
+| `wbi_pwoq_global_add_enabled` | boolean | Muestra una barra fija inferior para agregar todas las selecciones al carrito |
+| `wbi_pwoq_initial_qty_zero` | boolean | Inicializa las cantidades visibles en 0 |
+| `wbi_pwoq_hide_native_add_to_cart` | boolean | Oculta los botones nativos de WooCommerce en el loop |
 
 Si `wbi_enable_public_wholesale_quick_order = false`, el módulo no carga y el catálogo mantiene su comportamiento estándar.
 
@@ -48,7 +51,7 @@ Si `wbi_enable_public_wholesale_quick_order = false`, el módulo no carga y el c
 ### Producto simple (sin variantes)
 1. Habilitar el módulo en *WooErp > Configuración*.
 2. Ir al catálogo de la tienda.
-3. Verificar que aparece el campo de cantidad y el botón "Agregar al pedido".
+3. Verificar que aparece el campo de cantidad y el botón "Agregar al pedido". Si `wbi_pwoq_initial_qty_zero` está activo, la cantidad debe iniciar en 0.
 4. Ingresar una cantidad válida y hacer clic en el botón.
 5. Confirmar toast de éxito y actualización del contador flotante.
 
@@ -83,3 +86,14 @@ Si `wbi_enable_public_wholesale_quick_order = false`, el módulo no carga y el c
 - `assets/css/wbi-public-wholesale-quick-order.css` — Estilos de la card, chips, modal y toast.
 - `assets/js/wbi-public-wholesale-quick-order.js` — Comportamiento interactivo del cliente.
 - `modules/public-wholesale-quick-order/public-wholesale-quick-order.php` — Bootstrap del módulo.
+
+### Barra global
+1. Activar `wbi_pwoq_global_add_enabled`.
+2. Cargar cantidades válidas en múltiples cards del catálogo.
+3. Verificar que aparece la barra fija inferior con el CTA "AGREGAR SELECCIONADOS AL CARRITO".
+4. Confirmar que agrega cada selección respetando mínimo, múltiplos y selector de variantes activo.
+
+### Ocultar botón nativo
+1. Activar `wbi_pwoq_hide_native_add_to_cart`.
+2. Ir al shop/categoría con el módulo habilitado.
+3. Verificar que el loop solo muestra la UI del pedido rápido y no el botón nativo de WooCommerce.
