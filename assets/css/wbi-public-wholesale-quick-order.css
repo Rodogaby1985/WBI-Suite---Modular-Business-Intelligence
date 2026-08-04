@@ -78,18 +78,19 @@
   align-items: center;
   gap: 0;
   border: 1px solid #c3c4c7;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
   flex: 0 0 auto;
+  min-height: 36px;
 }
 
 .wbi-pwoq__stepper-dec,
 .wbi-pwoq__stepper-inc {
-  width: 36px;
-  min-height: 40px;
+  width: 30px;
+  min-height: 36px;
   background: #f6f7f7;
   border: none;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
   color: #50575e;
@@ -110,8 +111,8 @@
 }
 
 .wbi-pwoq__stepper .wbi-pwoq__qty {
-  width: 56px;
-  min-height: 40px;
+  width: 52px;
+  min-height: 36px;
   padding: 0 4px;
   border: none;
   border-left: 1px solid #c3c4c7;
@@ -132,7 +133,7 @@
   display: flex;
   gap: 8px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .wbi-pwoq__variant-static {
@@ -156,7 +157,12 @@
 
 .wbi-pwoq__button {
   white-space: nowrap;
-  min-height: 40px;
+  min-height: 36px;
+  line-height: 1.1;
+  padding: 0 12px;
+  font-size: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* ---- Rules & status ---- */
@@ -465,4 +471,3 @@ body.wbi-pwoq-has-global-bar-space {
 .wbi-pwoq-summary.wbi-pwoq-summary--with-global-bar {
   bottom: calc(80px + env(safe-area-inset-bottom, 0px));
 }
-
