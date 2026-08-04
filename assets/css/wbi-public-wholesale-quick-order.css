@@ -1,63 +1,131 @@
-.wbi-public-quick-order {
+/* ==========================================================================
+   WBI Public Wholesale Quick Order — Catalog card UI
+   ========================================================================== */
+
+/* ---- Card wrapper ---- */
+.wbi-pwoq {
   margin-top: 12px;
   padding: 12px;
-  border: 1px solid rgba(0,0,0,.08);
+  border: 1px solid rgba(0, 0, 0, .08);
   border-radius: 10px;
   background: #fff;
 }
 
-.wbi-public-quick-order__row {
+/* ---- Secondary meta line (SKU, dimensions, color count) ---- */
+.wbi-pwoq__meta-line {
+  font-size: 12px;
+  color: #6c757d;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+/* ---- Inline attribute selector ---- */
+.wbi-pwoq__inline-selector {
+  margin-bottom: 10px;
+}
+
+.wbi-pwoq__attr-group {
+  margin-bottom: 8px;
+}
+
+.wbi-pwoq__attr-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #50575e;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.wbi-pwoq__attr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wbi-pwoq__chip {
+  padding: 4px 12px;
+  border: 1px solid #c3c4c7;
+  border-radius: 999px;
+  background: #f6f7f7;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color .12s, background .12s, color .12s;
+  line-height: 1.5;
+}
+
+.wbi-pwoq__chip:hover {
+  border-color: #2271b1;
+  background: #f0f6fc;
+}
+
+.wbi-pwoq__chip.is-selected {
+  border-color: #2271b1;
+  background: #2271b1;
+  color: #fff;
+}
+
+.wbi-pwoq__chip.is-disabled {
+  opacity: .4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ---- Row: qty + button ---- */
+.wbi-pwoq__row {
   display: flex;
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.wbi-public-quick-order__variant,
-.wbi-public-quick-order__qty {
-  min-height: 40px;
-  border-radius: 8px;
-}
-
-.wbi-public-quick-order__variant {
+.wbi-pwoq__variant-static {
   flex: 1 1 180px;
-}
-
-.wbi-public-quick-order__variant--static {
+  min-height: 40px;
   display: flex;
   align-items: center;
   padding: 0 12px;
   background: #f6f7f7;
-}
-
-.wbi-public-quick-order__qty {
-  width: 96px;
-  padding: 0 10px;
-}
-
-.wbi-public-quick-order__button {
-  white-space: nowrap;
-}
-
-.wbi-public-quick-order__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 8px;
+  border-radius: 8px;
   font-size: 13px;
-  line-height: 1.4;
-}
-
-.wbi-public-quick-order__rules {
   color: #50575e;
 }
 
-.wbi-public-quick-order__status {
-  color: #0a7a35;
-  text-align: right;
+.wbi-pwoq__qty {
+  width: 96px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 8px;
 }
 
-.wbi-public-quick-order-toast {
+.wbi-pwoq__button {
+  white-space: nowrap;
+  min-height: 40px;
+}
+
+/* ---- Rules & status ---- */
+.wbi-pwoq__rules-line {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #50575e;
+  line-height: 1.4;
+}
+
+.wbi-pwoq__status {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #0a7a35;
+  line-height: 1.4;
+  min-height: 1em;
+}
+
+.wbi-pwoq__status.is-error {
+  color: #b32d2e;
+}
+
+/* ---- Toast notification ---- */
+.wbi-pwoq-toast {
   position: fixed;
   right: 16px;
   bottom: 76px;
@@ -67,22 +135,25 @@
   border-radius: 10px;
   background: #1d2327;
   color: #fff;
-  box-shadow: 0 10px 25px rgba(0,0,0,.18);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, .18);
   opacity: 0;
   transform: translateY(12px);
   transition: opacity .18s ease, transform .18s ease;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
-.wbi-public-quick-order-toast.is-visible {
+.wbi-pwoq-toast.is-visible {
   opacity: 1;
   transform: translateY(0);
 }
 
-.wbi-public-quick-order-toast.is-error {
+.wbi-pwoq-toast.is-error {
   background: #b32d2e;
 }
 
-.wbi-public-quick-order-summary {
+/* ---- Floating cart summary pill ---- */
+.wbi-pwoq-summary {
   position: fixed;
   right: 16px;
   bottom: 16px;
@@ -93,20 +164,131 @@
   color: #fff;
   font-size: 13px;
   font-weight: 600;
-  box-shadow: 0 10px 25px rgba(34,113,177,.24);
+  box-shadow: 0 10px 25px rgba(34, 113, 177, .24);
+  transition: background .15s;
 }
 
+/* ---- Modal overlay ---- */
+.wbi-pwoq-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+@media (min-width: 600px) {
+  .wbi-pwoq-modal {
+    align-items: center;
+  }
+}
+
+.wbi-pwoq-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .45);
+  cursor: pointer;
+}
+
+.wbi-pwoq-modal__box {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 480px;
+  padding: 24px 20px 28px;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 32px rgba(0, 0, 0, .12);
+}
+
+@media (min-width: 600px) {
+  .wbi-pwoq-modal__box {
+    border-radius: 16px;
+  }
+}
+
+.wbi-pwoq-modal__close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #50575e;
+  line-height: 1;
+  padding: 4px;
+}
+
+.wbi-pwoq-modal__product-name {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  padding-right: 32px;
+  line-height: 1.3;
+}
+
+.wbi-pwoq-modal__attrs {
+  margin-bottom: 16px;
+}
+
+.wbi-pwoq-modal__attrs .wbi-pwoq__attr-group {
+  margin-bottom: 12px;
+}
+
+.wbi-pwoq-modal__qty-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.wbi-pwoq-modal__qty-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #50575e;
+  white-space: nowrap;
+}
+
+.wbi-pwoq-modal__qty {
+  width: 96px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 8px;
+}
+
+.wbi-pwoq-modal__rules {
+  font-size: 13px;
+  color: #50575e;
+  margin-bottom: 14px;
+  min-height: 1em;
+  line-height: 1.4;
+}
+
+.wbi-pwoq-modal__confirm {
+  width: 100%;
+  min-height: 44px;
+  font-size: 15px;
+}
+
+.wbi-pwoq-modal__status {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #0a7a35;
+  text-align: center;
+  min-height: 1em;
+  line-height: 1.4;
+}
+
+.wbi-pwoq-modal__status.is-error {
+  color: #b32d2e;
+}
+
+/* ---- Responsive ---- */
 @media (max-width: 600px) {
-  .wbi-public-quick-order__meta {
-    flex-direction: column;
-  }
-
-  .wbi-public-quick-order__status {
-    text-align: left;
-  }
-
-  .wbi-public-quick-order-summary,
-  .wbi-public-quick-order-toast {
+  .wbi-pwoq-summary,
+  .wbi-pwoq-toast {
     left: 16px;
     right: 16px;
   }

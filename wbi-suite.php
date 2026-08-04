@@ -719,6 +719,14 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_multi_shipping', 'Transporte Multiopciones', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_multi_shipping'] );
         add_settings_field( 'wbi_enable_public_wholesale_quick_order', 'Pedido rápido mayorista público', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_public_wholesale_quick_order'] );
 
+        // Wholesale Quick Order sub-settings
+        add_settings_field( 'wbi_pwoq_variant_selector_mode', 'Pedido rápido: selector de variantes', array($this, 'pwoq_selector_mode_field'), 'wbi-settings', 'wbi_main_section', [] );
+        add_settings_field( 'wbi_pwoq_show_sku',               'Pedido rápido: mostrar SKU',           array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_pwoq_show_sku'] );
+        add_settings_field( 'wbi_pwoq_show_dimensions',        'Pedido rápido: mostrar dimensiones',   array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_pwoq_show_dimensions'] );
+        add_settings_field( 'wbi_pwoq_show_color_count',       'Pedido rápido: mostrar cant. colores', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_pwoq_show_color_count'] );
+        add_settings_field( 'wbi_pwoq_enforce_min_qty',        'Pedido rápido: aplicar mínimo',        array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_pwoq_enforce_min_qty'] );
+        add_settings_field( 'wbi_pwoq_enforce_pack_multiples', 'Pedido rápido: aplicar múltiplos',     array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_pwoq_enforce_pack_multiples'] );
+
         // B2B config fields (minimum order, hidden price text, registration URL)
         add_settings_field( 'wbi_b2b_auto_approve',     'B2B: Auto-aprobación de clientes', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_auto_approve'] );
         add_settings_field( 'wbi_b2b_minimum_order',    'B2B: Monto mínimo de compra',  array($this, 'number_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_minimum_order'] );
@@ -846,6 +854,15 @@ class WBI_Suite_Loader {
         $id = $args['id'];
         $checked = isset( $this->options[$id] ) ? checked( $this->options[$id], 1, false ) : '';
         echo "<input type='checkbox' name='wbi_modules_settings[$id]' value='1' $checked /> <b>Activar</b>";
+    }
+
+    public function pwoq_selector_mode_field() {
+        $current = isset( $this->options['wbi_pwoq_variant_selector_mode'] ) ? $this->options['wbi_pwoq_variant_selector_mode'] : 'modal';
+        echo '<select name="wbi_modules_settings[wbi_pwoq_variant_selector_mode]">';
+        echo '<option value="modal"'  . selected( $current, 'modal',  false ) . '>Modal (ventana ligera)</option>';
+        echo '<option value="inline"' . selected( $current, 'inline', false ) . '>Inline (en la card)</option>';
+        echo '</select>';
+        echo '<p class="description">Define cómo se muestra el selector de variantes en el catálogo.</p>';
     }
 
     /**
