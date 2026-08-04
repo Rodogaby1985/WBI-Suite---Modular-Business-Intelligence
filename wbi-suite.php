@@ -340,6 +340,17 @@ class WBI_Suite_Loader {
                 new WBI_Multi_Shipping_Module();
             }
         }
+
+        // T. Módulo público de pedido rápido mayorista
+        if ( ! empty( $this->options['wbi_enable_public_wholesale_quick_order'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-public-wholesale-quick-order.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-public-wholesale-quick-order.php';
+                $module_file = plugin_dir_path( __FILE__ ) . 'modules/public-wholesale-quick-order/public-wholesale-quick-order.php';
+                if ( file_exists( $module_file ) ) {
+                    require_once $module_file;
+                }
+            }
+        }
     }
 
     // --- CONFIGURACIÓN EN WP-ADMIN ---
@@ -706,6 +717,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_promo_pricing', 'Precio Promo', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_promo_pricing'] );
         add_settings_field( 'wbi_enable_mobapp_shipping', 'MobApp Envíos', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_mobapp_shipping'] );
         add_settings_field( 'wbi_enable_multi_shipping', 'Transporte Multiopciones', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_multi_shipping'] );
+        add_settings_field( 'wbi_enable_public_wholesale_quick_order', 'Pedido rápido mayorista público', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_public_wholesale_quick_order'] );
 
         // B2B config fields (minimum order, hidden price text, registration URL)
         add_settings_field( 'wbi_b2b_auto_approve',     'B2B: Auto-aprobación de clientes', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_auto_approve'] );
@@ -747,6 +759,7 @@ class WBI_Suite_Loader {
             'wbi_enable_promo_pricing'     => 'Precio Promo',
             'wbi_enable_mobapp_shipping'   => 'MobApp Envíos',
             'wbi_enable_multi_shipping'    => 'Transporte Multiopciones',
+            'wbi_enable_public_wholesale_quick_order' => 'Pedido rápido mayorista público',
         );
 
         foreach ( $module_slugs as $module_key => $module_name ) {
@@ -868,6 +881,7 @@ class WBI_Suite_Loader {
             array( 'slug' => 'promo_pricing',       'name' => 'Precio Promo',               'enable_key' => 'wbi_enable_promo_pricing' ),
             array( 'slug' => 'mobapp_shipping',     'name' => 'MobApp Envíos',              'enable_key' => 'wbi_enable_mobapp_shipping' ),
             array( 'slug' => 'multi_shipping',      'name' => 'Transporte Multiopciones',   'enable_key' => 'wbi_enable_multi_shipping' ),
+            array( 'slug' => 'public_wholesale_quick_order', 'name' => 'Pedido rápido mayorista público', 'enable_key' => 'wbi_enable_public_wholesale_quick_order' ),
             array( 'slug' => 'documents',           'name' => 'Documentos',                  'enable_key' => null ), // active when invoice or remitos enabled
         );
     }
