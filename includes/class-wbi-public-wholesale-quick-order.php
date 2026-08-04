@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class WBI_Public_Wholesale_Quick_Order_Module {
 
-    const ASSET_VERSION = '1.3.0';
+    const ASSET_VERSION = '1.4.0';
 
     /** @var array Cached module settings */
     private $settings;
@@ -52,9 +52,10 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             'show_color_count'       => ! empty( $opts['wbi_pwoq_show_color_count'] ),
             'enforce_min_qty'        => isset( $opts['wbi_pwoq_enforce_min_qty'] ) ? (bool) $opts['wbi_pwoq_enforce_min_qty'] : true,
             'enforce_pack_multiples' => isset( $opts['wbi_pwoq_enforce_pack_multiples'] ) ? (bool) $opts['wbi_pwoq_enforce_pack_multiples'] : true,
-            'global_add_enabled'     => ! empty( $opts['wbi_pwoq_global_add_enabled'] ),
-            'initial_qty_zero'       => ! empty( $opts['wbi_pwoq_initial_qty_zero'] ),
-            'hide_native_add_to_cart' => ! empty( $opts['wbi_pwoq_hide_native_add_to_cart'] ),
+            'global_add_enabled'              => ! empty( $opts['wbi_pwoq_global_add_enabled'] ),
+            'initial_qty_zero'                => ! empty( $opts['wbi_pwoq_initial_qty_zero'] ),
+            'hide_native_add_to_cart'         => ! empty( $opts['wbi_pwoq_hide_native_add_to_cart'] ),
+            'force_reload_on_fragment_fail'   => ! empty( $opts['wbi_pwoq_force_reload_on_fragment_fail'] ),
         );
     }
 
@@ -88,15 +89,16 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             'wbi-public-wholesale-quick-order',
             'WBIPublicQuickOrder',
             array(
-                'ajaxUrl'             => admin_url( 'admin-ajax.php' ),
-                'nonce'               => wp_create_nonce( 'wbi_public_quick_order' ),
-                'currencySymbol'      => get_woocommerce_currency_symbol(),
-                'variantSelectorMode' => $this->settings['variant_selector_mode'],
-                'globalAddEnabled'    => $this->settings['global_add_enabled'],
-                'initialQtyZero'      => $this->settings['initial_qty_zero'],
-                'i18n'                => array(
+                'ajaxUrl'                     => admin_url( 'admin-ajax.php' ),
+                'nonce'                       => wp_create_nonce( 'wbi_public_quick_order' ),
+                'currencySymbol'              => get_woocommerce_currency_symbol(),
+                'variantSelectorMode'         => $this->settings['variant_selector_mode'],
+                'globalAddEnabled'            => $this->settings['global_add_enabled'],
+                'initialQtyZero'              => $this->settings['initial_qty_zero'],
+                'forceReloadOnFragmentFail'   => $this->settings['force_reload_on_fragment_fail'],
+                'i18n'                        => array(
                     'adding'           => 'Agregando…',
-                    'defaultButton'    => 'Agregar al pedido',
+                    'defaultButton'    => 'AGREGAR AL PEDIDO',
                     'added'            => 'Agregado al pedido',
                     'errorGeneric'     => 'No pudimos agregar este producto. Intentá nuevamente.',
                     'successSingle'    => 'Agregaste %1$s unidad de %2$s.',
@@ -105,7 +107,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                     'counterPlural'    => '%1$s productos · %2$s unidades',
                     'selectOption'     => 'Seleccioná una opción',
                     'selectVariation'  => 'Elegí una variante para continuar.',
-                    'confirmAdd'       => 'Agregar al pedido',
+                    'confirmAdd'       => 'AGREGAR AL PEDIDO',
                     'cancel'           => 'Cancelar',
                     'quantity'         => 'Cantidad',
                     'minQty'           => 'Mínimo: %d unidades',
@@ -171,18 +173,22 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                 <?php endif; ?>
 
                 <label class="screen-reader-text" for="wbi-pwoq-qty-<?php echo esc_attr( $product->get_id() ); ?>">Cantidad</label>
-                <input
-                    id="wbi-pwoq-qty-<?php echo esc_attr( $product->get_id() ); ?>"
-                    class="wbi-pwoq__qty"
-                    type="number"
-                    min="<?php echo esc_attr( $default_variant['min_qty'] ); ?>"
-                    step="<?php echo esc_attr( $default_variant['step_qty'] ); ?>"
-                    value="<?php echo esc_attr( $this->get_initial_quantity_value( $default_variant ) ); ?>"
-                    inputmode="numeric"
-                />
+                <div class="wbi-pwoq__stepper">
+                    <button type="button" class="wbi-pwoq__stepper-dec" aria-label="Reducir cantidad">&#8722;</button>
+                    <input
+                        id="wbi-pwoq-qty-<?php echo esc_attr( $product->get_id() ); ?>"
+                        class="wbi-pwoq__qty"
+                        type="number"
+                        min="<?php echo esc_attr( $default_variant['min_qty'] ); ?>"
+                        step="<?php echo esc_attr( $default_variant['step_qty'] ); ?>"
+                        value="<?php echo esc_attr( $this->get_initial_quantity_value( $default_variant ) ); ?>"
+                        inputmode="numeric"
+                    />
+                    <button type="button" class="wbi-pwoq__stepper-inc" aria-label="Aumentar cantidad">&#43;</button>
+                </div>
 
                 <button type="button" class="button alt wbi-pwoq__button">
-                    Agregar al pedido
+                    AGREGAR AL PEDIDO
                 </button>
             </div>
 
@@ -253,7 +259,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                     <input class="wbi-pwoq-modal__qty" type="number" min="1" step="1" value="<?php echo esc_attr( $this->settings['initial_qty_zero'] ? 0 : 1 ); ?>" inputmode="numeric" />
                 </div>
                 <div class="wbi-pwoq-modal__rules" aria-live="polite"></div>
-                <button type="button" class="button alt wbi-pwoq-modal__confirm">Agregar al pedido</button>
+                <button type="button" class="button alt wbi-pwoq-modal__confirm">AGREGAR AL PEDIDO</button>
                 <div class="wbi-pwoq-modal__status" aria-live="polite"></div>
             </div>
         </div>

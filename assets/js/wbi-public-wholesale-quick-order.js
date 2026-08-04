@@ -13,6 +13,7 @@
   var mode = cfg.variantSelectorMode || 'modal';
   var globalAddEnabled = !!cfg.globalAddEnabled;
   var initialQtyZero = !!cfg.initialQtyZero;
+  var forceReloadOnFragmentFail = !!cfg.forceReloadOnFragmentFail;
   var globalBarSpaceClass = 'wbi-pwoq-has-global-bar-space';
 
   // -------------------------------------------------------------------------
@@ -67,6 +68,8 @@
     input.min = variant.min_qty || 1;
     input.step = variant.step_qty || 1;
     input.value = initialQtyZero ? 0 : (variant.default_qty || variant.min_qty || 1);
+    // Sync stepper button states
+    syncStepperButtons(input);
   }
 
   function setChipSelected(chip, selected) {
@@ -116,6 +119,120 @@
   function toggleGlobalBarSpacing(enabled) {
     document.body.classList.toggle(globalBarSpaceClass, !!enabled);
   }
+
+  // -------------------------------------------------------------------------
+  // WooCommerce fragment / mini-cart refresh
+  // -------------------------------------------------------------------------
+
+  /**
+   * Trigger WooCommerce fragment refresh so the header cart count and
+   * mini-cart update without a page reload.
+   * Fires both the standard wc_fragment_refresh and added_to_cart events
+   * (the latter is expected by some Flatsome/WooCommerce integrations).
+   *
+   * If forceReloadOnFragmentFail is enabled, after 1.5 s we check whether
+   * the header cart count has changed. If not, reload as last resort.
+   */
+  function triggerWooFragmentRefresh() {
+    if (typeof jQuery === 'undefined') return;
+
+    var $body = jQuery(document.body);
+
+    // Capture current cart count before refresh (best-effort)
+    var countBefore = getHeaderCartCount();
+
+    $body.trigger('wc_fragment_refresh');
+    $body.trigger('added_to_cart', [[], '', null]);
+
+    if (forceReloadOnFragmentFail) {
+      setTimeout(function () {
+        var countAfter = getHeaderCartCount();
+        if (countAfter === countBefore) {
+          window.location.reload();
+        }
+      }, 1500);
+    }
+  }
+
+  function getHeaderCartCount() {
+    // Try common Flatsome/WooCommerce selectors for cart item count
+    var selectors = [
+      '.cart-count',
+      '.woocommerce-mini-cart-item-count',
+      '.header-cart .count',
+      'a.cart-contents .count',
+      '[class*="cart-count"]'
+    ];
+    for (var i = 0; i < selectors.length; i++) {
+      var el = document.querySelector(selectors[i]);
+      if (el) {
+        var num = parseInt(el.textContent.replace(/\D/g, ''), 10);
+        if (!Number.isNaN(num)) return num;
+      }
+    }
+    return -1; // unknown — treat as changed so reload is not triggered
+  }
+
+  // -------------------------------------------------------------------------
+  // Stepper buttons
+  // -------------------------------------------------------------------------
+
+  function syncStepperButtons(qtyInput) {
+    if (!qtyInput) return;
+    var min = parseFloat(qtyInput.min) || 0;
+    var val = parseFloat(qtyInput.value) || 0;
+    var dec = qtyInput.closest('.wbi-pwoq__stepper');
+    if (!dec) return;
+    var decBtn = dec.querySelector('.wbi-pwoq__stepper-dec');
+    if (decBtn) decBtn.disabled = val <= min;
+  }
+
+  function bindStepper(qtyInput) {
+    if (!qtyInput) return;
+    var stepperEl = qtyInput.closest('.wbi-pwoq__stepper');
+    if (!stepperEl) return;
+
+    var decBtn = stepperEl.querySelector('.wbi-pwoq__stepper-dec');
+    var incBtn = stepperEl.querySelector('.wbi-pwoq__stepper-inc');
+
+    if (decBtn) {
+      decBtn.addEventListener('click', function () {
+        var step = parseInt(qtyInput.step, 10) || 1;
+        var min  = parseInt(qtyInput.min, 10) || 0;
+        var val  = parseInt(qtyInput.value, 10) || 0;
+        var next = val - step;
+        if (next < min) next = min;
+        qtyInput.value = next;
+        qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+        syncStepperButtons(qtyInput);
+      });
+    }
+
+    if (incBtn) {
+      incBtn.addEventListener('click', function () {
+        var step = parseInt(qtyInput.step, 10) || 1;
+        var val  = parseInt(qtyInput.value, 10) || 0;
+        qtyInput.value = val + step;
+        qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+        syncStepperButtons(qtyInput);
+      });
+    }
+
+    // Sanitise manual input: clamp to min, not below 0
+    qtyInput.addEventListener('change', function () {
+      var min  = parseInt(qtyInput.min, 10) || 0;
+      var val  = parseInt(qtyInput.value, 10);
+      if (Number.isNaN(val) || val < 0) qtyInput.value = 0;
+      else if (val < min && val !== 0) qtyInput.value = min;
+      syncStepperButtons(qtyInput);
+    });
+
+    syncStepperButtons(qtyInput);
+  }
+
+  // -------------------------------------------------------------------------
+  // Global bar
+  // -------------------------------------------------------------------------
 
   function updateGlobalBar() {
     if (!globalAddEnabled) return;
@@ -170,6 +287,7 @@
     var totalUnits = 0;
     var totalProducts = 0;
     var lastSummary = null;
+    var anySuccess = false;
 
     function runNext() {
       if (index >= selections.length) {
@@ -177,7 +295,10 @@
         showToast(i18n.globalSuccess.replace('%1$s', totalProducts).replace('%2$s', totalUnits), false);
         selections.forEach(function (item) {
           var qtyInput = item.container.querySelector('.wbi-pwoq__qty');
-          if (qtyInput) qtyInput.value = 0;
+          if (qtyInput) {
+            qtyInput.value = 0;
+            syncStepperButtons(qtyInput);
+          }
           setStatus(item.container.querySelector('.wbi-pwoq__status'), '', false);
         });
         if (button) {
@@ -185,6 +306,10 @@
           button.textContent = i18n.globalAdd;
         }
         updateGlobalBar();
+        // Refresh WooCommerce header/mini-cart fragments
+        if (anySuccess) {
+          triggerWooFragmentRefresh();
+        }
         return;
       }
 
@@ -194,6 +319,7 @@
         function (data) {
           totalUnits += item.quantity;
           totalProducts += 1;
+          anySuccess = true;
           lastSummary = data.summary;
           setStatus(item.container.querySelector('.wbi-pwoq__status'), data.message, false);
           runNext();
@@ -232,6 +358,7 @@
 
   /**
    * Build a map { attrName: selectedValue } from chips inside a given root.
+   * Values come from chip.dataset.value (raw slug/value used in attributes map).
    */
   function getSelectedAttrs(root) {
     var result = {};
@@ -303,8 +430,37 @@
 
       var selectedAttrs = getSelectedAttrs(root);
       var resolved = resolveVariant(variants, selectedAttrs);
+
+      // Sync any hidden attribute inputs (Woo-style: attribute_pa_xxx)
+      syncHiddenAttributeInputs(root, selectedAttrs, resolved);
+
       if (onVariantResolved) onVariantResolved(resolved || null);
     });
+  }
+
+  /**
+   * Sync hidden WooCommerce-style attribute inputs and variation_id input
+   * that may be present in the DOM (e.g., in Flatsome product blocks).
+   * This ensures native Woo JS also has the correct state when PWOQ resolves
+   * a variant combination.
+   */
+  function syncHiddenAttributeInputs(root, selectedAttrs, resolvedVariant) {
+    // Sync attribute selects / hidden inputs
+    Object.keys(selectedAttrs).forEach(function (attrKey) {
+      var value = selectedAttrs[attrKey];
+      // attribute_pa_xxx or attribute_xxx
+      var inputName = 'attribute_' + attrKey;
+      var inputEl = root.querySelector('[name="' + inputName + '"]');
+      if (inputEl) {
+        inputEl.value = value;
+      }
+    });
+
+    // Sync variation_id hidden input if present
+    var variationIdInput = root.querySelector('[name="variation_id"]');
+    if (variationIdInput) {
+      variationIdInput.value = resolvedVariant ? resolvedVariant.id : 0;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -489,6 +645,7 @@
             setStatus(statusEl, data.message, false);
             showToast(data.message, false);
             updateSummary(data.summary);
+            triggerWooFragmentRefresh();
             setTimeout(function () { closeModal(); }, 1200);
           },
           function (msg) {
@@ -516,6 +673,9 @@
     var rulesEl  = container.querySelector('.wbi-pwoq__rules-line');
     var statusEl = container.querySelector('.wbi-pwoq__status');
     var currentVariant = null;
+
+    // Init stepper
+    bindStepper(qtyInput);
 
     if (data.has_variations) {
       bindChips(container, variants, function (variant) {
@@ -575,6 +735,7 @@
           setStatus(statusEl, responseData.message, false);
           showToast(responseData.message, false);
           updateSummary(responseData.summary);
+          triggerWooFragmentRefresh();
         },
         function (msg) {
           setStatus(statusEl, msg, true);
@@ -598,6 +759,9 @@
     var qtyInput = container.querySelector('.wbi-pwoq__qty');
     var statusEl = container.querySelector('.wbi-pwoq__status');
 
+    // Init stepper
+    bindStepper(qtyInput);
+
     if (!button) return;
 
     button.addEventListener('click', function () {
@@ -609,7 +773,6 @@
       } else {
         // Simple product — add directly
         var qty = qtyInput ? getNormalizedQty(qtyInput) : 1;
-        var variants = data.variants || [];
         var originalLabel = button.textContent;
         button.disabled   = true;
         button.textContent = i18n.adding;
@@ -621,6 +784,7 @@
             setStatus(statusEl, responseData.message, false);
             showToast(responseData.message, false);
             updateSummary(responseData.summary);
+            triggerWooFragmentRefresh();
           },
           function (msg) {
             setStatus(statusEl, msg, true);

@@ -670,9 +670,10 @@ class WBI_Suite_Loader {
         $input['wbi_pwoq_show_color_count']       = ! empty( $input['wbi_pwoq_show_color_count'] ) ? 1 : 0;
         $input['wbi_pwoq_enforce_min_qty']        = ! empty( $input['wbi_pwoq_enforce_min_qty'] ) ? 1 : 0;
         $input['wbi_pwoq_enforce_pack_multiples'] = ! empty( $input['wbi_pwoq_enforce_pack_multiples'] ) ? 1 : 0;
-        $input['wbi_pwoq_global_add_enabled']     = ! empty( $input['wbi_pwoq_global_add_enabled'] ) ? 1 : 0;
-        $input['wbi_pwoq_initial_qty_zero']       = ! empty( $input['wbi_pwoq_initial_qty_zero'] ) ? 1 : 0;
-        $input['wbi_pwoq_hide_native_add_to_cart'] = ! empty( $input['wbi_pwoq_hide_native_add_to_cart'] ) ? 1 : 0;
+        $input['wbi_pwoq_global_add_enabled']           = ! empty( $input['wbi_pwoq_global_add_enabled'] ) ? 1 : 0;
+        $input['wbi_pwoq_initial_qty_zero']             = ! empty( $input['wbi_pwoq_initial_qty_zero'] ) ? 1 : 0;
+        $input['wbi_pwoq_hide_native_add_to_cart']      = ! empty( $input['wbi_pwoq_hide_native_add_to_cart'] ) ? 1 : 0;
+        $input['wbi_pwoq_force_reload_on_fragment_fail'] = ! empty( $input['wbi_pwoq_force_reload_on_fragment_fail'] ) ? 1 : 0;
         if ( isset( $input['wbi_pwoq_variant_selector_mode'] ) ) {
             $input['wbi_pwoq_variant_selector_mode'] = in_array( $input['wbi_pwoq_variant_selector_mode'], array( 'inline', 'modal' ), true )
                 ? $input['wbi_pwoq_variant_selector_mode']
@@ -743,7 +744,8 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_pwoq_enforce_pack_multiples', 'Pedido rápido: aplicar múltiplos',     array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_pwoq_enforce_pack_multiples'] );
         add_settings_field( 'wbi_pwoq_global_add_enabled',     'Pedido rápido: botón global al carrito', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_pwoq_global_add_enabled'] );
         add_settings_field( 'wbi_pwoq_initial_qty_zero',       'Pedido rápido: cantidad inicial en 0',   array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_pwoq_initial_qty_zero'] );
-        add_settings_field( 'wbi_pwoq_hide_native_add_to_cart','Pedido rápido: ocultar botón nativo',    array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_pwoq_hide_native_add_to_cart'] );
+        add_settings_field( 'wbi_pwoq_hide_native_add_to_cart',         'Pedido rápido: ocultar botón nativo',          array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_pwoq_hide_native_add_to_cart'] );
+        add_settings_field( 'wbi_pwoq_force_reload_on_fragment_fail',  'Pedido rápido: recargar si falla fragmento',   array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_pwoq_force_reload_on_fragment_fail'] );
 
         // B2B config fields (minimum order, hidden price text, registration URL)
         add_settings_field( 'wbi_b2b_auto_approve',     'B2B: Auto-aprobación de clientes', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_auto_approve'] );
@@ -1320,6 +1322,11 @@ class WBI_Suite_Loader {
                                 <input type="checkbox" name="wbi_modules_settings[wbi_pwoq_hide_native_add_to_cart]" value="1"
                                     <?php checked( ! empty( $opts['wbi_pwoq_hide_native_add_to_cart'] ), true ); ?>>
                                 Ocultar botones nativos de WooCommerce en el loop
+                            </label>
+                            <label style="display:block;">
+                                <input type="checkbox" name="wbi_modules_settings[wbi_pwoq_force_reload_on_fragment_fail]" value="1"
+                                    <?php checked( ! empty( $opts['wbi_pwoq_force_reload_on_fragment_fail'] ), true ); ?>>
+                                Recargar página si los fragmentos del mini-carrito no se actualizan (fallback)
                             </label>
                         </div>
                         <?php endif; ?>
