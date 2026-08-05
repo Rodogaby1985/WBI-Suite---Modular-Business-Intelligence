@@ -28,6 +28,41 @@
     }
   }
 
+  function normalizeAttributeKey(attrKey) {
+    return String(attrKey || '').replace(/^attribute_/, '').toLowerCase();
+  }
+
+  function normalizeAttributeValue(value) {
+    return String(value == null ? '' : value).trim().toLowerCase();
+  }
+
+  function getChipSelectionValue(chip) {
+    if (!chip) return '';
+    return chip.dataset.slug || chip.dataset.value || '';
+  }
+
+  function attributeMatchesSelection(attrKey, attrValue, selection) {
+    var variationValue = normalizeAttributeValue(attrValue);
+    if (variationValue === '') return true;
+    if (!selection) return false;
+    if (selection.raw && variationValue === normalizeAttributeValue(selection.raw)) return true;
+    if (selection.slug && variationValue === normalizeAttributeValue(selection.slug)) return true;
+    return false;
+  }
+
+  function findVariationAttributeValue(attrs, attrKey) {
+    var normalizedTarget = normalizeAttributeKey(attrKey);
+    var matchedKey = null;
+    Object.keys(attrs || {}).some(function (key) {
+      if (normalizeAttributeKey(key) === normalizedTarget) {
+        matchedKey = key;
+        return true;
+      }
+      return false;
+    });
+    return matchedKey ? attrs[matchedKey] : undefined;
+  }
+
   function showToast(message, isError) {
     var toast = document.querySelector('.wbi-pwoq-toast');
     if (!toast) return;
@@ -99,13 +134,21 @@
 
   function getBatchSelections() {
     var selections = [];
+    var invalidSelections = [];
     document.querySelectorAll('.wbi-pwoq').forEach(function (container) {
       var qtyInput = container.querySelector('.wbi-pwoq__qty');
       var qty = getNormalizedQty(qtyInput);
       if (qty <= 0) return;
       var data = parseProductData(container);
       var variantId = container.dataset.currentVariantId ? parseInt(container.dataset.currentVariantId, 10) || 0 : 0;
-      if (data.has_variations && !variantId) return;
+      if (data.has_variations && !variantId) {
+        invalidSelections.push({
+          container: container,
+          productName: data.product_name || '',
+          message: getMissingVariationMessage()
+        });
+        return;
+      }
       selections.push({
         container: container,
         productId: data.product_id,
@@ -113,7 +156,10 @@
         quantity: qty
       });
     });
-    return selections;
+    return {
+      valid: selections,
+      invalid: invalidSelections
+    };
   }
 
   function toggleGlobalBarSpacing(enabled) {
@@ -241,9 +287,11 @@
     var summaryEl = bar ? bar.querySelector('.wbi-pwoq-global-bar__summary') : null;
     var detailEl  = bar ? bar.querySelector('.wbi-pwoq-global-bar__detail')  : null;
     if (!bar || !button) return;
-    var selections = getBatchSelections();
+    var selectionState = getBatchSelections();
+    var selections = selectionState.valid;
+    var invalidSelections = selectionState.invalid;
     var floatSummary = document.querySelector('.wbi-pwoq-summary');
-    if (!selections.length) {
+    if (!selections.length && !invalidSelections.length) {
       bar.hidden = true;
       toggleGlobalBarSpacing(false);
       if (floatSummary) floatSummary.classList.remove('wbi-pwoq-summary--with-global-bar');
@@ -256,7 +304,7 @@
     bar.hidden = false;
     toggleGlobalBarSpacing(true);
     if (floatSummary) floatSummary.classList.add('wbi-pwoq-summary--with-global-bar');
-    button.disabled = false;
+    button.disabled = !selections.length;
     button.textContent = i18n.globalAdd;
 
     // Build left-zone summary text: "N producto(s) · M unidad(es)"
@@ -277,6 +325,9 @@
       var detail = names.slice(0, maxNames).join(', ');
       if (names.length > maxNames) {
         detail += ' +' + (names.length - maxNames) + ' más';
+      }
+      if (invalidSelections.length) {
+        detail += (detail ? ' · ' : '') + i18n.globalSkipped.replace('%1$s', invalidSelections.length);
       }
       detailEl.textContent = detail;
     }
@@ -348,9 +399,8 @@
       if (!v.in_stock) return false;
       var attrs = v.attributes || {};
       return Object.keys(selectedAttrs).every(function (attrKey) {
-        var varAttrKey = 'attribute_' + attrKey;
-        // An empty string on the variation side means "any" (catch-all)
-        return attrs[varAttrKey] === '' || attrs[varAttrKey] === selectedAttrs[attrKey];
+        var attrValue = findVariationAttributeValue(attrs, attrKey);
+        return attributeMatchesSelection(attrKey, attrValue, selectedAttrs[attrKey]);
       });
     });
     return matches.length === 1 ? matches[0] : null;
@@ -365,7 +415,13 @@
     root.querySelectorAll('.wbi-pwoq__attr-group').forEach(function (group) {
       var attrName = group.dataset.attr;
       var selected = group.querySelector('.wbi-pwoq__chip.is-selected');
-      if (selected) result[attrName] = selected.dataset.value;
+      if (selected) {
+        result[attrName] = {
+          key: attrName,
+          raw: selected.dataset.value || '',
+          slug: getChipSelectionValue(selected)
+        };
+      }
     });
     return result;
   }
@@ -381,15 +437,19 @@
       group.querySelectorAll('.wbi-pwoq__chip').forEach(function (chip) {
         // Build a hypothetical selection with this chip chosen
         var testAttrs = Object.assign({}, currentAttrs);
-        testAttrs[attrName] = chip.dataset.value;
+        testAttrs[attrName] = {
+          key: attrName,
+          raw: chip.dataset.value || '',
+          slug: getChipSelectionValue(chip)
+        };
 
         // Is there at least one in-stock variant compatible with this selection?
         var possible = variants.some(function (v) {
           if (!v.in_stock) return false;
           var attrs = v.attributes || {};
           return Object.keys(testAttrs).every(function (k) {
-            var key = 'attribute_' + k;
-            return attrs[key] === '' || attrs[key] === testAttrs[k];
+            var attrValue = findVariationAttributeValue(attrs, k);
+            return attributeMatchesSelection(k, attrValue, testAttrs[k]);
           });
         });
 
@@ -445,15 +505,12 @@
    * a variant combination.
    */
   function syncHiddenAttributeInputs(root, selectedAttrs, resolvedVariant) {
-    // Sync attribute selects / hidden inputs
-    Object.keys(selectedAttrs).forEach(function (attrKey) {
-      var value = selectedAttrs[attrKey];
-      // attribute_pa_xxx or attribute_xxx
-      var inputName = 'attribute_' + attrKey;
-      var inputEl = root.querySelector('[name="' + inputName + '"]');
-      if (inputEl) {
-        inputEl.value = value;
-      }
+    root.querySelectorAll('[name^="attribute_"]').forEach(function (inputEl) {
+      var inputAttrKey = normalizeAttributeKey(inputEl.name);
+      var matchingKey = Object.keys(selectedAttrs).find(function (attrKey) {
+        return normalizeAttributeKey(attrKey) === inputAttrKey;
+      });
+      inputEl.value = matchingKey ? (selectedAttrs[matchingKey].slug || selectedAttrs[matchingKey].raw || '') : '';
     });
 
     // Sync variation_id hidden input if present
@@ -547,8 +604,9 @@
         var chip = document.createElement('button');
         chip.type = 'button';
         chip.className = 'wbi-pwoq__chip';
-        chip.dataset.value = val;
-        chip.textContent = val;
+        chip.dataset.value = val.value || val;
+        chip.dataset.slug = val.slug || val.value || val;
+        chip.textContent = val.value || val;
         chipsRow.appendChild(chip);
       });
       group.appendChild(chipsRow);
@@ -827,14 +885,23 @@
       if (globalButton) {
         globalButton.addEventListener('click', function () {
           var selections = getBatchSelections();
-          if (!selections.length) {
+          if (!selections.valid.length && !selections.invalid.length) {
             showToast(i18n.globalEmpty, true);
             return;
           }
-          globalButton.disabled = true;
-          globalButton.textContent = i18n.adding;
-          addSelectionsSequentially(selections, globalButton);
-        });
+            var invalidSelections = selections.invalid;
+            var validSelections = selections.valid;
+            invalidSelections.forEach(function (item) {
+              setStatus(item.container.querySelector('.wbi-pwoq__status'), item.message, true);
+            });
+            if (!validSelections.length) {
+              showToast(i18n.globalInvalidOnly || getMissingVariationMessage(), true);
+              return;
+            }
+            globalButton.disabled = true;
+            globalButton.textContent = i18n.adding;
+            addSelectionsSequentially(validSelections, globalButton);
+          });
       }
       updateGlobalBar();
     }
