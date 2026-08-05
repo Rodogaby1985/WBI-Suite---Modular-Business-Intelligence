@@ -165,13 +165,15 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             </div>
             <?php endif; ?>
 
-            <div class="wbi-pwoq__row">
-                <?php if ( ! $has_variations ) : ?>
+            <?php if ( ! $has_variations ) : ?>
+            <div class="wbi-pwoq__presentation-row">
                 <div class="wbi-pwoq__variant-static">
                     <?php echo esc_html( $default_variant['label'] ); ?>
                 </div>
-                <?php endif; ?>
+            </div>
+            <?php endif; ?>
 
+            <div class="wbi-pwoq__action-row">
                 <label class="screen-reader-text" for="wbi-pwoq-qty-<?php echo esc_attr( $product->get_id() ); ?>">Cantidad</label>
                 <div class="wbi-pwoq__stepper">
                     <button type="button" class="wbi-pwoq__stepper-dec" aria-label="Reducir cantidad">&#8722;</button>
@@ -188,7 +190,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                 </div>
 
                 <button type="button" class="button alt wbi-pwoq__button">
-                    AGREGAR AL PEDIDO
+                    AGREGAR
                 </button>
             </div>
 
