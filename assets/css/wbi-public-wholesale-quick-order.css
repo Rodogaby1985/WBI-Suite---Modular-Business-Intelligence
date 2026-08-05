@@ -75,27 +75,32 @@
 /* ---- Quantity stepper ([-] input [+]) ---- */
 .wbi-pwoq__stepper {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 0;
   border: 1px solid #c3c4c7;
   border-radius: 6px;
   overflow: hidden;
   flex: 0 0 auto;
-  min-height: 36px;
+  height: 38px;
+  box-sizing: border-box;
 }
 
 .wbi-pwoq__stepper-dec,
 .wbi-pwoq__stepper-inc {
-  width: 30px;
-  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 38px;
+  box-sizing: border-box;
   background: #f6f7f7;
   border: none;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
   cursor: pointer;
   color: #50575e;
   transition: background .1s, color .1s;
-  flex: 0 0 auto;
+  flex: 0 0 34px;
   padding: 0;
 }
 
@@ -111,8 +116,9 @@
 }
 
 .wbi-pwoq__stepper .wbi-pwoq__qty {
-  width: 52px;
-  min-height: 36px;
+  width: 44px;
+  height: 38px;
+  box-sizing: border-box;
   padding: 0 4px;
   border: none;
   border-left: 1px solid #c3c4c7;
@@ -120,6 +126,8 @@
   border-radius: 0;
   text-align: center;
   -moz-appearance: textfield;
+  font-size: 14px;
+  line-height: 38px;
 }
 
 .wbi-pwoq__stepper .wbi-pwoq__qty::-webkit-inner-spin-button,
@@ -131,10 +139,10 @@
 /* ---- Row: stepper + button ---- */
 .wbi-pwoq__action-row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
 }
 
 .wbi-pwoq__presentation-row {
@@ -162,35 +170,38 @@
 }
 
 .wbi-pwoq__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   white-space: nowrap;
-  min-height: 42px;
-  height: 42px;
-  line-height: 1.1;
+  height: 38px;
+  box-sizing: border-box;
+  line-height: 1;
   padding: 0 16px;
   font-size: 12px;
-  flex: 1 1 118px;
-  min-width: 118px;
+  flex: 1 1 auto;
+  min-width: 100px;
   max-width: 100%;
 }
 
 .wbi-pwoq__action-row .wbi-pwoq__stepper {
-  width: 132px;
-  min-width: 132px;
-  height: 42px;
-  min-height: 42px;
+  width: 112px;
+  min-width: 112px;
+  height: 38px;
+  flex: 0 0 112px;
 }
 
 .wbi-pwoq__action-row .wbi-pwoq__stepper-dec,
 .wbi-pwoq__action-row .wbi-pwoq__stepper-inc {
-  width: 44px;
-  min-height: 42px;
-  height: 42px;
+  width: 34px;
+  height: 38px;
+  flex: 0 0 34px;
 }
 
 .wbi-pwoq__action-row .wbi-pwoq__stepper .wbi-pwoq__qty {
   width: 44px;
-  min-height: 42px;
-  height: 42px;
+  height: 38px;
+  box-sizing: border-box;
   flex: 0 0 44px;
 }
 
