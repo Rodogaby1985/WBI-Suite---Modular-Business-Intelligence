@@ -117,6 +117,8 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                     'close'            => 'Cerrar',
                     'globalAdd'        => 'AGREGAR SELECCIONADOS AL CARRITO',
                     'globalEmpty'      => 'Seleccioná cantidades para agregar al carrito.',
+                    'globalSkipped'    => '%1$s sin variante válida',
+                    'globalInvalidOnly'=> 'Elegí una variante válida antes de agregar los productos seleccionados.',
                     'globalSuccess'    => 'Se agregaron %1$s productos por %2$s unidades.',
                 ),
             )
@@ -217,8 +219,10 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             $out  .= '<div class="wbi-pwoq__attr-group" data-attr="' . esc_attr( $attr_name ) . '">';
             $out  .= '<span class="wbi-pwoq__attr-label">' . esc_html( $label ) . '</span>';
             $out  .= '<div class="wbi-pwoq__attr-chips">';
-            foreach ( $attr_values as $value ) {
-                $out .= '<button type="button" class="wbi-pwoq__chip" data-value="' . esc_attr( $value ) . '">' . esc_html( $value ) . '</button>';
+            foreach ( $attr_values as $attr_value ) {
+                $chip_label = is_array( $attr_value ) && isset( $attr_value['value'] ) ? $attr_value['value'] : $attr_value;
+                $chip_slug  = is_array( $attr_value ) && isset( $attr_value['slug'] ) ? $attr_value['slug'] : $chip_label;
+                $out       .= '<button type="button" class="wbi-pwoq__chip" data-value="' . esc_attr( $chip_label ) . '" data-slug="' . esc_attr( $chip_slug ) . '">' . esc_html( $chip_label ) . '</button>';
             }
             $out .= '</div>';
             $out .= '</div>';
@@ -303,8 +307,12 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                     }
                     $term = get_term_by( 'slug', $attr_value, $clean_key );
                     $display_value = ( $term && ! is_wp_error( $term ) ) ? $term->name : $attr_value;
-                    if ( ! in_array( $display_value, $attributes[ $clean_key ], true ) ) {
-                        $attributes[ $clean_key ][] = $display_value;
+                    $chip_value    = array(
+                        'value' => $display_value,
+                        'slug'  => $attr_value,
+                    );
+                    if ( ! in_array( $chip_value, $attributes[ $clean_key ], true ) ) {
+                        $attributes[ $clean_key ][] = $chip_value;
                     }
                 }
 

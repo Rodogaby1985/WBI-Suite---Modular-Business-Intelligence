@@ -64,6 +64,13 @@
   border-color: #2271b1;
   background: #2271b1;
   color: #fff;
+  box-shadow: 0 0 0 2px rgba(34, 113, 177, .22);
+  font-weight: 600;
+}
+
+.wbi-pwoq__chip:focus-visible {
+  outline: 2px solid #2271b1;
+  outline-offset: 2px;
 }
 
 .wbi-pwoq__chip.is-disabled {
