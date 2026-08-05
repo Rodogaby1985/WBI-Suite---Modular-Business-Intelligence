@@ -129,15 +129,21 @@
 }
 
 /* ---- Row: stepper + button ---- */
-.wbi-pwoq__row {
+.wbi-pwoq__action-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
-  flex-wrap: nowrap;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.wbi-pwoq__presentation-row {
+  width: 100%;
+  margin-bottom: 10px;
 }
 
 .wbi-pwoq__variant-static {
-  flex: 1 1 180px;
+  width: 100%;
   min-height: 40px;
   display: flex;
   align-items: center;
@@ -157,12 +163,35 @@
 
 .wbi-pwoq__button {
   white-space: nowrap;
-  min-height: 36px;
+  min-height: 42px;
+  height: 42px;
   line-height: 1.1;
-  padding: 0 12px;
+  padding: 0 16px;
   font-size: 12px;
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 1 1 118px;
+  min-width: 118px;
+  max-width: 100%;
+}
+
+.wbi-pwoq__action-row .wbi-pwoq__stepper {
+  width: 132px;
+  min-width: 132px;
+  height: 42px;
+  min-height: 42px;
+}
+
+.wbi-pwoq__action-row .wbi-pwoq__stepper-dec,
+.wbi-pwoq__action-row .wbi-pwoq__stepper-inc {
+  width: 44px;
+  min-height: 42px;
+  height: 42px;
+}
+
+.wbi-pwoq__action-row .wbi-pwoq__stepper .wbi-pwoq__qty {
+  width: 44px;
+  min-height: 42px;
+  height: 42px;
+  flex: 0 0 44px;
 }
 
 /* ---- Rules & status ---- */
