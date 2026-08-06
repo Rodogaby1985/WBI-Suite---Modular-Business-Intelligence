@@ -178,8 +178,34 @@ class WBI_B2B_Module {
      *
      * @return array Array de slugs de roles autorizados.
      */
-    private function get_authorized_roles() {
+    private function get_settings() {
         $opts = get_option( 'wbi_modules_settings', array() );
+
+        return is_array( $opts ) ? $opts : array();
+    }
+
+    private function hide_prices_feature_enabled() {
+        $opts = $this->get_settings();
+
+        if ( array_key_exists( 'wbi_b2b_enable_hide_prices', $opts ) ) {
+            return ! empty( $opts['wbi_b2b_enable_hide_prices'] );
+        }
+
+        return ! empty( $opts['wbi_enable_b2b'] );
+    }
+
+    private function minimum_order_feature_enabled() {
+        $opts = $this->get_settings();
+
+        if ( array_key_exists( 'wbi_b2b_enable_minimum_order_amount', $opts ) ) {
+            return ! empty( $opts['wbi_b2b_enable_minimum_order_amount'] );
+        }
+
+        return ! empty( $opts['wbi_b2b_minimum_order'] ) && floatval( $opts['wbi_b2b_minimum_order'] ) > 0;
+    }
+
+    private function get_authorized_roles() {
+        $opts = $this->get_settings();
         if ( ! empty( $opts['wbi_b2b_authorized_roles'] ) && is_array( $opts['wbi_b2b_authorized_roles'] ) ) {
             $roles = $opts['wbi_b2b_authorized_roles'];
             if ( ! in_array( 'administrator', $roles, true ) ) {
@@ -206,6 +232,7 @@ class WBI_B2B_Module {
     }
 
     private function is_authorized() {
+        if ( ! $this->hide_prices_feature_enabled() ) return true;
         if ( ! is_user_logged_in() ) return false;
         return $this->user_is_authorized();
     }
@@ -226,7 +253,11 @@ class WBI_B2B_Module {
     }
 
     public function hide_prices( $price, $product ) {
-        $opts        = get_option( 'wbi_modules_settings', array() );
+        if ( ! $this->hide_prices_feature_enabled() ) {
+            return $price;
+        }
+
+        $opts        = $this->get_settings();
         $hidden_text = esc_html( ! empty( $opts['wbi_b2b_hidden_price_text'] ) ? $opts['wbi_b2b_hidden_price_text'] : 'PRECIO MAYORISTA OCULTO' );
         $hidden_span = '<span class="price-hidden" style="color:#d63638; font-weight:bold;">' . $hidden_text . '</span>';
 
@@ -306,6 +337,9 @@ class WBI_B2B_Module {
     }
 
     public function restrict_purchase( $purchasable, $product ) {
+        if ( ! $this->hide_prices_feature_enabled() ) {
+            return $purchasable;
+        }
         return $this->is_authorized() ? $purchasable : false;
     }
 
@@ -313,6 +347,9 @@ class WBI_B2B_Module {
      * Oculta el botón "Agregar al carrito" en el loop de productos.
      */
     public function hide_add_to_cart_loop( $html, $product ) {
+        if ( ! $this->hide_prices_feature_enabled() ) {
+            return $html;
+        }
         if ( ! $this->is_authorized() ) {
             return '';
         }
@@ -324,6 +361,9 @@ class WBI_B2B_Module {
      * Inyecta CSS para ocultar el form si el usuario no está autorizado.
      */
     public function maybe_hide_add_to_cart_form() {
+        if ( ! $this->hide_prices_feature_enabled() ) {
+            return;
+        }
         if ( ! $this->is_authorized() ) {
             echo '<style>
                 form.cart,
@@ -341,10 +381,16 @@ class WBI_B2B_Module {
      * Restricción de compra para variaciones.
      */
     public function restrict_variation_purchase( $purchasable, $variation ) {
+        if ( ! $this->hide_prices_feature_enabled() ) {
+            return $purchasable;
+        }
         return $this->is_authorized() ? $purchasable : false;
     }
 
     public function show_status_message() {
+        if ( ! $this->hide_prices_feature_enabled() ) {
+            return;
+        }
         $user = wp_get_current_user();
         if ( $this->user_is_authorized( $user ) ) {
             if ( in_array( 'mayorista', (array) $user->roles, true ) ) {
@@ -352,7 +398,7 @@ class WBI_B2B_Module {
             }
             return;
         }
-        $opts = get_option( 'wbi_modules_settings', array() );
+        $opts = $this->get_settings();
         if ( ! empty( $opts['wbi_b2b_auto_approve'] ) ) {
             // Auto-aprobación activa pero el usuario aún no tiene el rol correcto
             // (puede ocurrir en cuentas creadas antes de activar esta opción).
@@ -364,13 +410,15 @@ class WBI_B2B_Module {
 
     // --- MONTO MÍNIMO DE COMPRA ---
     public function check_minimum_order() {
+        if ( ! $this->minimum_order_feature_enabled() ) return;
         if ( ! is_user_logged_in() ) return;
         $user = wp_get_current_user();
         if ( ! in_array( 'mayorista', (array) $user->roles, true ) ) return;
 
-        $opts    = get_option( 'wbi_modules_settings', array() );
+        $opts    = $this->get_settings();
         $minimum = floatval( ! empty( $opts['wbi_b2b_minimum_order'] ) ? $opts['wbi_b2b_minimum_order'] : 0 );
         if ( $minimum <= 0 ) return;
+        if ( ! function_exists( 'WC' ) || ! WC() || ! isset( WC()->cart ) || ! WC()->cart ) return;
 
         $cart_total = floatval( WC()->cart->get_subtotal() );
         if ( $cart_total < $minimum ) {
