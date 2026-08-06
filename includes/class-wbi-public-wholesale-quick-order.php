@@ -30,9 +30,11 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         $this->settings = $this->load_settings();
 
         add_action( 'wp_enqueue_scripts',                             array( $this, 'enqueue_assets' ) );
+        add_action( 'wp_enqueue_scripts',                             array( $this, 'enqueue_quantity_sync_js' ), 20 );
         add_action( 'woocommerce_after_shop_loop_item',               array( $this, 'render_quick_order_ui' ), 15 );
         add_action( 'wp_footer',                                      array( $this, 'render_feedback_shell' ) );
         add_filter( 'woocommerce_loop_add_to_cart_link',               array( $this, 'maybe_hide_native_add_to_cart' ), 10, 3 );
+        add_filter( 'woocommerce_product_single_add_to_cart_text',    array( $this, 'maybe_change_single_add_to_cart_text' ), 10, 2 );
         add_action( 'wp_ajax_wbi_public_quick_order_add',             array( $this, 'ajax_add_to_cart' ) );
         add_action( 'wp_ajax_nopriv_wbi_public_quick_order_add',      array( $this, 'ajax_add_to_cart' ) );
         add_action( 'wp_ajax_wbi_public_quick_order_variants',        array( $this, 'ajax_get_variants' ) );
@@ -442,7 +444,54 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             return $html;
         }
 
-        return '';
+        if ( ! $product instanceof WC_Product ) {
+            return $html;
+        }
+
+        if (
+            $product->is_type( 'simple' ) &&
+            $product->is_purchasable() &&
+            $product->is_in_stock() &&
+            ! $product->is_sold_individually()
+        ) {
+            return '';
+        }
+
+        return $html;
+    }
+
+    public function enqueue_quantity_sync_js() {
+        if ( is_admin() || ! function_exists( 'wc_enqueue_js' ) ) {
+            return;
+        }
+
+        if ( ! function_exists( 'is_shop' ) || ! function_exists( 'is_product' ) ) {
+            return;
+        }
+
+        if ( ! ( $this->should_load_assets() || is_product() ) ) {
+            return;
+        }
+
+        wc_enqueue_js(
+            '(function($){$("form.cart").on("change","input.qty",function(){$(this.form).find("[data-quantity]").attr("data-quantity",this.value);});})(jQuery);'
+        );
+    }
+
+    public function maybe_change_single_add_to_cart_text( $text, $product ) {
+        if ( ! $product instanceof WC_Product ) {
+            return $text;
+        }
+
+        if ( ! $product->is_purchasable() ) {
+            return $text;
+        }
+
+        if ( ! $product->is_in_stock() && ! $product->backorders_allowed() ) {
+            return $text;
+        }
+
+        return __( 'Agregar', 'woocommerce' );
     }
 
     private function read_numeric_meta( WC_Product $product, array $keys ) {
