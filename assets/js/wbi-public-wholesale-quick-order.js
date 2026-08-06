@@ -31,6 +31,10 @@
     return form ? form.querySelector('input.qty') : null;
   }
 
+  function getLoopForms() {
+    return Array.from(document.querySelectorAll('.wbi-pwoq form.cart, .wbi-pwoq-loop-cart'));
+  }
+
   function getQty(form) {
     var input = getQtyInput(form);
     if (!input) return 0;
@@ -367,7 +371,7 @@
     var totalProducts = 0;
     var totalUnits = 0;
 
-    document.querySelectorAll('.wbi-pwoq-loop-cart').forEach(function (form) {
+    getLoopForms().forEach(function (form) {
       var qty = getQty(form);
       if (qty <= 0) return;
 
@@ -655,7 +659,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.wbi-pwoq-loop-cart').forEach(function (form) {
+    getLoopForms().forEach(function (form) {
       bindAttributeControls(form);
       bindFormSubmit(form);
       syncButtonQuantity(form);

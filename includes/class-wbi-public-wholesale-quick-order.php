@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class WBI_Public_Wholesale_Quick_Order_Module {
 
-    const ASSET_VERSION = '2.1.0';
+    const ASSET_VERSION = '2.1.1';
 
     /** @var array Cached module settings */
     private $settings;
