@@ -698,7 +698,7 @@ class WBI_Suite_Loader {
      */
     public function sanitize_modules_settings( $input ) {
         $raw_input = is_array( $input ) ? $input : array();
-        $input     = $raw_input;
+        $input     = array();
 
         // Sanitize B2B auto-approve checkbox
         $input['wbi_b2b_auto_approve']                  = ! empty( $raw_input['wbi_b2b_auto_approve'] ) ? 1 : 0;
