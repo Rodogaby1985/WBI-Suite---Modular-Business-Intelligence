@@ -19,9 +19,6 @@
     padding: 0;
 }
 
-.wbi-pwoq-native {
-    display: none; /* hidden when hide_native_add_to_cart is false, shown otherwise */
-}
 
 /* ==========================================================================
    Meta line

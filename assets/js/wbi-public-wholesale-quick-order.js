@@ -11,7 +11,7 @@
 (function ( $ ) {
     'use strict';
 
-    var cfg = window.WBIPwoq || {};
+    var cfg  = window.WBIPwoq || {};
     var i18n = cfg.i18n || {};
 
     /* -----------------------------------------------------------------------
@@ -35,6 +35,19 @@
         $( document.body ).trigger( 'added_to_cart', [ {}, '', null ] );
     }
 
+    /**
+     * Collect selected attribute values from a card's dropdowns.
+     * Returns an object like { attribute_pa_color: 'rojo', ... }
+     */
+    function collectAttributes( $card ) {
+        var attributes = {};
+        $card.find( '.wbi-pwoq-select' ).each( function () {
+            var attr = $( this ).data( 'attr' );
+            if ( attr ) attributes[ 'attribute_' + attr ] = $( this ).val() || '';
+        } );
+        return attributes;
+    }
+
     /* -----------------------------------------------------------------------
      * Variation resolver — finds matching variation_id from selected attrs
      * --------------------------------------------------------------------- */
@@ -43,16 +56,11 @@
         var data = card.data( 'product' );
         if ( ! data || ! data.has_variations ) return { id: 0, ok: true };
 
-        var selected = {};
-        card.find( '.wbi-pwoq-select' ).each( function () {
-            var attr = $( this ).data( 'attr' );
-            var val  = $( this ).val();
-            if ( attr ) selected[ 'attribute_' + attr ] = val || '';
-        } );
-
+        var selected = collectAttributes( card );
+        // Normalise keys: collectAttributes prefixes with attribute_, resolver expects attribute_ prefix too
         var variants = data.variants || [];
         for ( var i = 0; i < variants.length; i++ ) {
-            var v    = variants[ i ];
+            var v     = variants[ i ];
             var attrs = v.attributes || {};
             var match = true;
             for ( var k in attrs ) {
@@ -70,20 +78,19 @@
     }
 
     /* -----------------------------------------------------------------------
-     * AJAX add to cart
+     * AJAX add to cart (WC AJAX endpoint)
      * --------------------------------------------------------------------- */
 
     function addToCart( productId, variationId, qty, attributes, done, fail ) {
         var params = {
-            action      : 'woocommerce_add_to_cart',
-            product_id  : productId,
-            quantity    : qty,
-            security    : cfg.nonce || ''
+            product_id : productId,
+            quantity   : qty,
+            security   : cfg.nonce || ''
         };
 
         if ( variationId ) {
             params.variation_id = variationId;
-            $.extend( params, attributes || {} );
+            $.extend( params, attributes );
         }
 
         $.post( wcAjaxUrl( 'add_to_cart' ), params )
@@ -125,17 +132,8 @@
         }
 
         var variationId = varResult.id;
+        var attributes  = variationId ? collectAttributes( $card ) : {};
 
-        // Collect selected attributes for variation
-        var attributes = {};
-        if ( variationId ) {
-            $card.find( '.wbi-pwoq-select' ).each( function () {
-                var attr = $( this ).data( 'attr' );
-                if ( attr ) attributes[ 'attribute_' + attr ] = $( this ).val() || '';
-            } );
-        }
-
-        // Enter loading state
         $btn.prop( 'disabled', true ).text( i18n.adding );
 
         addToCart(
@@ -144,7 +142,6 @@
             qty,
             attributes,
             function () {
-                // Success
                 $qty.val( 0 );
                 $btn.prop( 'disabled', false ).text( i18n.agregar );
                 $status.text( '' );
@@ -184,8 +181,10 @@
                 totalProducts + ' ' + i18n.products + ' · ' + totalUnits + ' ' + i18n.units
             );
             $bar.prop( 'hidden', false );
+            $( 'body' ).addClass( 'wbi-pwoq-sticky-active' );
         } else {
             $bar.prop( 'hidden', true );
+            $( 'body' ).removeClass( 'wbi-pwoq-sticky-active' );
         }
     }
 
@@ -203,18 +202,14 @@
 
             var productId = parseInt( $card.data( 'product-id' ), 10 );
             var varResult = resolveVariation( $card );
-            if ( ! varResult.ok ) return; // skip unresolved variations silently
+            if ( ! varResult.ok ) return; // skip silently
 
-            var variationId = varResult.id;
-            var attributes  = {};
-            if ( variationId ) {
-                $card.find( '.wbi-pwoq-select' ).each( function () {
-                    var attr = $( this ).data( 'attr' );
-                    if ( attr ) attributes[ 'attribute_' + attr ] = $( this ).val() || '';
-                } );
-            }
-
-            items.push( { productId: productId, variationId: variationId, qty: qty, attributes: attributes, $card: $card } );
+            items.push( {
+                productId  : productId,
+                variationId: varResult.id,
+                qty        : qty,
+                attributes : varResult.id ? collectAttributes( $card ) : {}
+            } );
         } );
 
         if ( ! items.length ) return;
@@ -226,29 +221,19 @@
 
         function next() {
             if ( idx >= items.length ) {
-                // All done
                 $btn.prop( 'disabled', false ).text( i18n.massAdd );
 
                 if ( success > 0 ) {
-                    // Reset qtys
                     $( '.wbi-pwoq-card .wbi-pwoq-qty' ).val( 0 );
                     updateStickyBar();
 
-                    // Try fragment refresh; fallback to reload
-                    var reloaded = false;
                     if ( cfg.forceReload ) {
                         window.location.reload();
                         return;
                     }
-                    $( document.body ).one( 'wc_fragments_refreshed', function () {
-                        reloaded = true;
-                    } );
+
+                    // Refresh fragments; no unconditional timeout reload
                     refreshFragments();
-                    setTimeout( function () {
-                        if ( ! reloaded ) {
-                            window.location.reload();
-                        }
-                    }, 3000 );
                 }
                 return;
             }
@@ -259,14 +244,8 @@
                 item.variationId,
                 item.qty,
                 item.attributes,
-                function () {
-                    success++;
-                    next();
-                },
-                function () {
-                    // Continue on error
-                    next();
-                }
+                function () { success++; next(); },
+                function () { next(); } // continue on error
             );
         }
 
@@ -278,24 +257,20 @@
      * --------------------------------------------------------------------- */
 
     function init() {
-        // Individual AGREGAR
         $( document ).on( 'click', '.wbi-pwoq-add-btn', function ( e ) {
             e.preventDefault();
             handleIndividualAdd( $( this ) );
         } );
 
-        // Mass add (sticky bar)
         $( document ).on( 'click', '.wbi-pwoq-mass-add-btn', function ( e ) {
             e.preventDefault();
             handleMassAdd( $( this ) );
         } );
 
-        // Qty change → update sticky bar
         $( document ).on( 'change input', '.wbi-pwoq-qty', function () {
             updateStickyBar();
         } );
 
-        // Dropdown change → clear status
         $( document ).on( 'change', '.wbi-pwoq-select', function () {
             $( this ).closest( '.wbi-pwoq-card' ).find( '.wbi-pwoq-status' ).text( '' ).removeClass( 'wbi-pwoq-status--error' );
         } );
