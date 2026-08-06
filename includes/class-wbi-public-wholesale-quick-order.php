@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class WBI_Public_Wholesale_Quick_Order_Module {
 
-    const ASSET_VERSION = '2.0.0';
+    const ASSET_VERSION = '2.1.0';
 
     /** @var array Cached module settings */
     private $settings;
@@ -85,15 +85,16 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                 'forceReloadOnFragmentFail' => $this->settings['force_reload_on_fragment_fail'],
                 'i18n'                      => array(
                     'adding'          => 'Agregando…',
-                    'addLabel'        => 'Agregar',
+                    'addLabel'        => 'AGREGAR',
                     'errorGeneric'    => 'No pudimos agregar este producto. Intentá nuevamente.',
-                    'selectVariation' => 'Elegí una variante válida antes de agregar este producto.',
+                    'selectVariation' => 'Seleccioná una opción',
                     'globalAdd'       => 'AGREGAR SELECCIONADOS AL CARRITO',
                     'globalEmpty'     => 'Seleccioná cantidades para agregar al carrito.',
                     'globalSkipped'   => 'Se omitieron %d productos sin variante válida.',
                     'globalSuccess'   => 'Se agregaron %1$d productos por %2$d unidades.',
                     'counterSingular' => '%1$d producto · %2$d unidad',
                     'counterPlural'   => '%1$d productos · %2$d unidades',
+                    'selectedDetail'  => '%1$s · +%2$d más',
                     'qtyPositive'     => 'Ingresá una cantidad mayor a 0 para continuar.',
                     'minQty'          => 'Mínimo: %d unidades',
                     'missingMin'      => 'Te faltan %d para completar el mínimo. Mínimo: %d unidades.',
@@ -139,7 +140,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             false
         );
 
-        $button_classes = array( 'button', 'alt', 'add_to_cart_button', 'wbi-pwoq__submit' );
+        $button_classes = array( 'button', 'alt', 'add_to_cart_button', 'wbi-pwoq__submit', 'wbi-pwoq-add-btn' );
         if ( $product->is_type( 'simple' ) ) {
             $button_classes[] = 'ajax_add_to_cart';
             $button_classes[] = 'product_type_simple';
@@ -152,14 +153,14 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             esc_attr( implode( ' ', $button_classes ) ),
             (int) $product->get_id(),
             esc_attr( $product->get_sku() ),
-            (int) max( 1, $initial_value ),
+            (int) max( 0, $initial_value ),
             esc_attr( sprintf( __( 'Agregar %s al carrito', 'woocommerce' ), $product->get_name() ) ),
-            esc_html__( 'Agregar', 'woocommerce' )
+            esc_html__( 'AGREGAR', 'woocommerce' )
         );
 
         ob_start();
         ?>
-        <div class="wbi-pwoq" data-product="<?php echo esc_attr( wp_json_encode( $product_data ) ); ?>" data-mode="<?php echo esc_attr( $this->settings['variant_selector_mode'] ); ?>">
+        <div class="wbi-pwoq wbi-pwoq-card" data-product="<?php echo esc_attr( wp_json_encode( $product_data ) ); ?>" data-mode="<?php echo esc_attr( $this->settings['variant_selector_mode'] ); ?>">
             <?php $meta_parts = $this->build_meta_parts( $product ); ?>
             <?php if ( ! empty( $meta_parts ) ) : ?>
                 <div class="wbi-pwoq__meta-line"><?php echo esc_html( implode( ' · ', $meta_parts ) ); ?></div>
@@ -188,7 +189,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                     <?php endforeach; ?>
                 <?php endif; ?>
 
-                <div class="wbi-pwoq__action-row">
+                <div class="wbi-pwoq__action-row wbi-pwoq-action-row">
                     <?php echo $qty_html; // phpcs:ignore WordPress.Security.EscapeOutput ?>
                     <?php echo $button_html; // phpcs:ignore WordPress.Security.EscapeOutput ?>
                 </div>
@@ -265,7 +266,10 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         <?php if ( $this->settings['global_add_enabled'] ) : ?>
             <div class="wbi-pwoq-global-bar" hidden aria-live="polite">
                 <div class="wbi-pwoq-global-bar__inner">
-                    <div class="wbi-pwoq-global-bar__summary" aria-atomic="true">0 productos · 0 unidades</div>
+                    <div class="wbi-pwoq-global-bar__content">
+                        <div class="wbi-pwoq-global-bar__summary" aria-atomic="true">0 productos · 0 unidades</div>
+                        <div class="wbi-pwoq-global-bar__detail" aria-atomic="true"></div>
+                    </div>
                     <button type="button" class="button alt wbi-pwoq-global-bar__button" disabled>
                         AGREGAR SELECCIONADOS AL CARRITO
                     </button>
@@ -494,7 +498,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         if ( $variation_id <= 0 ) {
             $parent_product = wc_get_product( $product_id );
             if ( $parent_product instanceof WC_Product && $parent_product->is_type( 'variable' ) ) {
-                wc_add_notice( 'Elegí una variante válida antes de agregar este producto.', 'error' );
+                wc_add_notice( 'Seleccioná una opción', 'error' );
                 return false;
             }
         }
