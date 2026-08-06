@@ -5,21 +5,18 @@ Permite a los clientes agregar productos al carrito directamente desde el catál
 ## Características
 
 ### Card de catálogo
+- Reemplazo del loop add-to-cart por `form.cart` + `woocommerce_quantity_input()` + botón **"Agregar"**.
 - Línea secundaria configurable: SKU, dimensiones, cantidad de colores.
-- Cantidad editable con validación de mínimo y múltiplos.
-- Botón principal: **"Agregar al pedido"**.
-- Feedback inmediato: mensaje de estado en la card + toast flotante.
-- Resumen de carrito en píldora flotante.
+- Fila compacta cantidad + botón, alineada para Woo/Flatsome.
+- Feedback inmediato: mensaje de estado por card + toast flotante.
 
 ### Selector de variantes
 Cuando un producto variable es procesado:
 
 - **Sin variantes:** agrega directo sin pasos extra.
-- **Con variantes:** abre un selector (configurable como `inline` o `modal`):
-  - Chips por atributo (color, talla, medida…).
-  - Combinaciones sin stock deshabilitadas automáticamente.
-  - Si solo existe una opción válida por atributo, se preselecciona.
-  - Campo de cantidad con mínimo/paso configurados desde meta del producto.
+- **Con variantes:** usa selector configurable `inline` (chips) o `modal` (dropdown en card).
+- Requiere `variation_id` válido para agregar cuando la cantidad es mayor a 0.
+- Si una línea variable no tiene variante válida, se omite en agregado masivo y se informa al usuario.
 
 ### Validaciones mayoristas
 - Mínimo de unidades por producto/variante (meta: `_wbi_min_qty`).
@@ -40,9 +37,10 @@ Cuando un producto variable es procesado:
 | `wbi_pwoq_show_color_count` | boolean | Muestra cantidad de colores (atributo `pa_color`) |
 | `wbi_pwoq_enforce_min_qty` | boolean | Aplica validación de mínimo |
 | `wbi_pwoq_enforce_pack_multiples` | boolean | Aplica validación de múltiplos de empaque |
-| `wbi_pwoq_global_add_enabled` | boolean | Muestra una barra fija inferior para agregar todas las selecciones al carrito |
+| `wbi_pwoq_global_add_enabled` | boolean | Muestra la barra fija inferior para agregar todas las selecciones al carrito |
 | `wbi_pwoq_initial_qty_zero` | boolean | Inicializa las cantidades visibles en 0 |
-| `wbi_pwoq_hide_native_add_to_cart` | boolean | Oculta los botones nativos de WooCommerce en el loop |
+| `wbi_pwoq_hide_native_add_to_cart` | boolean | Oculta controles nativos y deja solo la card de pedido rápido en loop |
+| `wbi_pwoq_force_reload_on_fragment_fail` | boolean | Fuerza recarga de página si falla actualización de fragmentos del mini-cart |
 
 Si `wbi_enable_public_wholesale_quick_order = false`, el módulo no carga y el catálogo mantiene su comportamiento estándar.
 
@@ -55,20 +53,18 @@ Si `wbi_enable_public_wholesale_quick_order = false`, el módulo no carga y el c
 4. Ingresar una cantidad válida y hacer clic en el botón.
 5. Confirmar toast de éxito y actualización del contador flotante.
 
-### Producto variable — modo Modal
+### Producto variable — modo “modal” (dropdown en card)
 1. Configurar `wbi_pwoq_variant_selector_mode = modal`.
 2. Ir al catálogo.
-3. Hacer clic en "Agregar al pedido" en un producto variable.
-4. Verificar que se abre el modal con chips de atributos.
-5. Seleccionar color y talla/medida; confirmar que el campo de cantidad se actualiza con el mínimo de la variante.
-6. Ingresar cantidad y confirmar.
-7. Verificar toast de éxito y cierre automático del modal.
-8. Verificar que combinaciones sin stock aparecen deshabilitadas.
+3. Verificar dropdowns de atributos dentro de la card.
+4. Seleccionar color y talla/medida; confirmar que el campo de cantidad se actualiza con el mínimo/paso de la variante.
+5. Ingresar cantidad y confirmar.
+6. Verificar toast de éxito y actualización inmediata del mini-cart/header cart.
 
 ### Producto variable — modo Inline
 1. Cambiar a `wbi_pwoq_variant_selector_mode = inline`.
 2. Verificar que los chips aparecen directamente en la card.
-3. Repetir pasos 5–8 del caso anterior.
+3. Repetir pasos 4–6 del caso anterior.
 
 ### Validaciones mayoristas
 1. Definir `_wbi_min_qty = 12` y `_wbi_pack_multiple = 6` en un producto.
@@ -89,9 +85,10 @@ Si `wbi_enable_public_wholesale_quick_order = false`, el módulo no carga y el c
 
 ### Barra global
 1. Activar `wbi_pwoq_global_add_enabled`.
-2. Cargar cantidades válidas en múltiples cards del catálogo.
-3. Verificar que aparece la barra fija inferior con el CTA "AGREGAR SELECCIONADOS AL CARRITO".
-4. Confirmar que agrega cada selección respetando mínimo, múltiplos y selector de variantes activo.
+2. Cargar cantidades en múltiples cards del catálogo.
+3. Verificar barra fija inferior full-width con resumen de selección y CTA "AGREGAR SELECCIONADOS AL CARRITO".
+4. Confirmar que agrega en lote todas las líneas válidas.
+5. Confirmar que líneas variables sin variante válida se omiten con mensaje claro.
 
 ### Ocultar botón nativo
 1. Activar `wbi_pwoq_hide_native_add_to_cart`.
