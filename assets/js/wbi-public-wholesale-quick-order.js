@@ -32,7 +32,10 @@
   }
 
   function getLoopForms() {
-    return Array.prototype.slice.call(document.querySelectorAll('.wbi-pwoq form.cart, .wbi-pwoq-loop-cart'));
+    var forms = Array.prototype.slice.call(document.querySelectorAll('.wbi-pwoq form.cart, .wbi-pwoq-loop-cart'));
+    return forms.filter(function (form, index) {
+      return forms.indexOf(form) === index;
+    });
   }
 
   function getQty(form) {
