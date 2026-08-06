@@ -857,9 +857,14 @@ class WBI_Abandoned_Carts_Module {
     // =========================================================================
 
     private function send_reminder( $cart, $num, $manual = false ) {
+        $original_token        = is_object( $cart ) && isset( $cart->recovery_token ) ? (string) $cart->recovery_token : '';
+        $original_url          = is_object( $cart ) && isset( $cart->recovery_url ) ? (string) $cart->recovery_url : '';
         $recovery_data         = $this->normalize_recovery_data( $cart );
         $cart->recovery_token  = $recovery_data['token'];
         $cart->recovery_url    = $recovery_data['url'];
+        if ( ! empty( $cart->id ) && ( empty( $original_token ) || empty( $original_url ) || $original_url !== $recovery_data['url'] ) ) {
+            $this->persist_recovery_data( intval( $cart->id ), $recovery_data['token'], $recovery_data['url'] );
+        }
         $channel = $cart->contact_channel;
         $sent    = false;
 
@@ -1228,27 +1233,9 @@ class WBI_Abandoned_Carts_Module {
 
         $url = add_query_arg( 'wbi_recover_cart', $token, home_url( '/' ) );
 
-        if ( is_object( $cart ) && ! empty( $cart->id ) ) {
-            $needs_update = ( empty( $cart->recovery_token ) || empty( $cart->recovery_url ) || $cart->recovery_url !== $url );
-            if ( $needs_update ) {
-                global $wpdb;
-                $wpdb->update(
-                    $this->table,
-                    array(
-                        'recovery_token' => $token,
-                        'recovery_url'   => $url,
-                    ),
-                    array( 'id' => intval( $cart->id ) ),
-                    array( '%s', '%s' ),
-                    array( '%d' )
-                );
-            }
-        }
-
         return array(
             'token' => $token,
             'url'   => $url,
-            'id'    => is_object( $cart ) && ! empty( $cart->id ) ? intval( $cart->id ) : 0,
         );
     }
 
@@ -1258,6 +1245,20 @@ class WBI_Abandoned_Carts_Module {
         } catch ( Exception $e ) {
             return wp_generate_password( 64, false, false );
         }
+    }
+
+    private function persist_recovery_data( $cart_id, $token, $url ) {
+        global $wpdb;
+        $wpdb->update(
+            $this->table,
+            array(
+                'recovery_token' => $token,
+                'recovery_url'   => $url,
+            ),
+            array( 'id' => $cart_id ),
+            array( '%s', '%s' ),
+            array( '%d' )
+        );
     }
 
     private function serialize_cart() {
