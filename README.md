@@ -54,7 +54,7 @@ Los 31 módulos se agrupan en 7 categorías:
 
 | Módulo | Clave de activación | Descripción |
 |--------|---------------------|-------------|
-| **Modo Mayorista B2B** | `wbi_enable_b2b` | Roles mayoristas, precios ocultos al público general y aprobación manual de nuevos clientes con acceso restringido por rol. Incluye opción de **auto-aprobación** (`wbi_b2b_auto_approve`) para que los clientes queden habilitados automáticamente al registrarse, sin intervención manual. |
+| **Modo Mayorista B2B** | `wbi_enable_b2b` | Roles mayoristas, precios ocultos al público general y aprobación manual de nuevos clientes con acceso restringido por rol. Incluye opción de **auto-aprobación** (`wbi_b2b_auto_approve`) y dos toggles independientes: **monto mínimo** (`wbi_b2b_enable_minimum_order_amount`) y **ocultar precios** (`wbi_b2b_enable_hide_prices`). |
 | **Pedido rápido mayorista público** | `wbi_enable_public_wholesale_quick_order` | Permite elegir variante, cantidad y agregar al pedido directamente desde el catálogo. Respeta mínimos y múltiplos de empaque cuando existan metas como `_wbi_min_qty` y `_wbi_pack_multiple`, y muestra feedback inmediato con resumen flotante del pedido. |
 | **Listas de Precios** | `wbi_enable_pricelists` | Precios diferenciados por cliente, rol o grupo — ideal para distribuidores, revendedores y clientes VIP. |
 | **Precio Promo** | `wbi_enable_promo_pricing` | Precio financiado, precio con descuento por transferencia bancaria y ajuste automático en el checkout según el método de pago seleccionado. |
@@ -231,6 +231,26 @@ El archivo `wbi-suite.php` contiene la clase `WBI_Suite_Loader` que:
 5. Agregar varios productos desde el catálogo y verificar el toast de confirmación y el contador flotante de productos/unidades.
 4. **Registra los campos de configuración** y el menú de administración bajo WooCommerce.
 5. **Expone la lista de módulos** vía `get_wbi_module_list()` para el sistema de permisos por usuario.
+
+### Migración de settings B2B
+
+- La configuración B2B sigue guardándose en la option `wbi_modules_settings`.
+- El upgrade agrega dos flags nuevos:
+  - `wbi_b2b_enable_minimum_order_amount`
+  - `wbi_b2b_enable_hide_prices`
+- La migración está protegida por la opción versionada `wbi_b2b_settings_schema_version`.
+- Si ya existía un `wbi_b2b_minimum_order` mayor a cero, el upgrade activa automáticamente `wbi_b2b_enable_minimum_order_amount`.
+- Si la tienda ya tenía activo el módulo B2B o configurados controles de precio oculto, el upgrade activa automáticamente `wbi_b2b_enable_hide_prices`.
+- El monto (`wbi_b2b_minimum_order`) y los controles de precio oculto (texto, URL, roles, email) se conservan sin romper instalaciones existentes.
+
+### Matriz de prueba B2B
+
+| Caso | `wbi_b2b_enable_minimum_order_amount` | `wbi_b2b_enable_hide_prices` | Resultado esperado |
+|------|---------------------------------------|------------------------------|-------------------|
+| 1 | ON | OFF | Se valida el monto mínimo para mayoristas; los precios y compra quedan visibles para el resto. |
+| 2 | OFF | ON | No se valida monto mínimo; se ocultan precios y compra para usuarios no autorizados. |
+| 3 | ON | ON | Se aplican ambas reglas: monto mínimo + ocultar precios/restringir compra. |
+| 4 | OFF | OFF | No se aplica ninguna de las dos reglas; no hay avisos ni restricciones de estas features. |
 
 ### Módulos integrados como wrappers
 
