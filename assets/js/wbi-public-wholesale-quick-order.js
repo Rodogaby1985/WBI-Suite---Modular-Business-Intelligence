@@ -642,25 +642,11 @@
           }
 
           if (state.invalid.length) {
-            var skippedNames = state.invalid
-              .map(function (row) { return row.productName || ''; })
-              .filter(function (name) { return !!name; });
-
-            var skippedLabel = skippedNames.length
-              ? formatSelectedDetail(skippedNames)
-              : '';
-
             showToast(
               (i18n.globalSkipped || 'Se omitieron %d productos sin variante válida.')
                 .replace('%d', String(state.invalid.length)),
               true
             );
-            if (skippedLabel) {
-              showToast(
-                (i18n.globalSkippedDetail || 'Omitidos: %s').replace('%s', skippedLabel),
-                true
-              );
-            }
           } else if (!successProducts && failed.length) {
             showToast(failed[0].message, true);
           } else if (successProducts > 0) {
@@ -700,15 +686,6 @@
           updateGlobalBar();
         });
       }
-
-      form.querySelectorAll('.plus, .minus').forEach(function (qtyButton) {
-        qtyButton.addEventListener('click', function () {
-          setTimeout(function () {
-            syncButtonQuantity(form);
-            updateGlobalBar();
-          }, 0);
-        });
-      });
     });
 
     bindGlobalMassAdd();

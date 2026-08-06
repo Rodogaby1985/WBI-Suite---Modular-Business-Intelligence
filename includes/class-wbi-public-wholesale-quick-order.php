@@ -91,7 +91,6 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                     'globalAdd'       => 'AGREGAR SELECCIONADOS AL CARRITO',
                     'globalEmpty'     => 'Seleccioná cantidades para agregar al carrito.',
                     'globalSkipped'   => 'Se omitieron %d productos sin variante válida.',
-                    'globalSkippedDetail' => 'Omitidos: %s',
                     'globalSuccess'   => 'Se agregaron %1$d productos por %2$d unidades.',
                     'counterSingular' => '%1$d producto · %2$d unidad',
                     'counterPlural'   => '%1$d productos · %2$d unidades',
