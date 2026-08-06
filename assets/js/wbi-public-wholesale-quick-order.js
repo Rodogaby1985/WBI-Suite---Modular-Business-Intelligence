@@ -32,7 +32,7 @@
   }
 
   function getLoopForms() {
-    return Array.from(new Set(document.querySelectorAll('.wbi-pwoq form.cart, .wbi-pwoq-loop-cart')));
+    return Array.from(document.querySelectorAll('.wbi-pwoq form.cart, .wbi-pwoq-loop-cart'));
   }
 
   function getQty(form) {
