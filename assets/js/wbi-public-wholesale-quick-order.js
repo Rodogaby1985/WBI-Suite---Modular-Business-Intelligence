@@ -32,17 +32,7 @@
   }
 
   function getLoopForms() {
-    var forms = Array.prototype.slice.call(document.querySelectorAll('.wbi-pwoq form.cart, .wbi-pwoq-loop-cart'));
-    var unique = [];
-    var seen = new Set();
-
-    forms.forEach(function (form) {
-      if (!form || seen.has(form)) return;
-      seen.add(form);
-      unique.push(form);
-    });
-
-    return unique;
+    return Array.prototype.slice.call(document.querySelectorAll('.wbi-pwoq form.cart, .wbi-pwoq-loop-cart'));
   }
 
   function getQty(form) {
