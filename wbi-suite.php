@@ -12,10 +12,17 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class WBI_Suite_Loader {
 
     private $options;
+    private const B2B_SETTINGS_SCHEMA_OPTION  = 'wbi_b2b_settings_schema_version';
+    private const B2B_SETTINGS_SCHEMA_VERSION = '2.0.0';
 
     public function __construct() {
         // Cargar opciones guardadas en la base de datos
-        $this->options = get_option( 'wbi_modules_settings' );
+        $this->options = get_option( 'wbi_modules_settings', array() );
+        if ( ! is_array( $this->options ) ) {
+            $this->options = array();
+        }
+
+        $this->maybe_migrate_b2b_feature_flags();
 
         // Process license actions
         add_action( 'admin_init', array( $this, 'handle_license_action' ) );
@@ -44,6 +51,38 @@ class WBI_Suite_Loader {
 
         // Cargar Módulos Activos según configuración
         $this->load_modules();
+    }
+
+    private function maybe_migrate_b2b_feature_flags() {
+        if ( get_option( self::B2B_SETTINGS_SCHEMA_OPTION ) === self::B2B_SETTINGS_SCHEMA_VERSION ) {
+            return;
+        }
+
+        $options = is_array( $this->options ) ? $this->options : array();
+        $changed = false;
+
+        if ( ! array_key_exists( 'wbi_b2b_enable_minimum_order_amount', $options ) ) {
+            $minimum                                    = isset( $options['wbi_b2b_minimum_order'] ) ? $this->sanitize_decimal_setting( $options['wbi_b2b_minimum_order'] ) : 0;
+            $options['wbi_b2b_enable_minimum_order_amount'] = $minimum > 0 ? 1 : 0;
+            $changed                                    = true;
+        }
+
+        if ( ! array_key_exists( 'wbi_b2b_enable_hide_prices', $options ) ) {
+            $has_legacy_hide_price_behavior = ! empty( $options['wbi_enable_b2b'] )
+                || ! empty( $options['wbi_b2b_hidden_price_text'] )
+                || ! empty( $options['wbi_b2b_hidden_price_url'] )
+                || ! empty( $options['wbi_b2b_authorized_roles'] );
+
+            $options['wbi_b2b_enable_hide_prices'] = $has_legacy_hide_price_behavior ? 1 : 0;
+            $changed                               = true;
+        }
+
+        if ( $changed ) {
+            update_option( 'wbi_modules_settings', $options );
+        }
+
+        update_option( self::B2B_SETTINGS_SCHEMA_OPTION, self::B2B_SETTINGS_SCHEMA_VERSION );
+        $this->options = $options;
     }
 
     public function load_modules() {
@@ -658,11 +697,13 @@ class WBI_Suite_Loader {
      * @return array Sanitized array.
      */
     public function sanitize_modules_settings( $input ) {
-        if ( ! is_array( $input ) ) {
-            return array();
-        }
+        $raw_input = is_array( $input ) ? $input : array();
+        $input     = array();
+
         // Sanitize B2B auto-approve checkbox
-        $input['wbi_b2b_auto_approve'] = ! empty( $input['wbi_b2b_auto_approve'] ) ? 1 : 0;
+        $input['wbi_b2b_auto_approve']                  = ! empty( $raw_input['wbi_b2b_auto_approve'] ) ? 1 : 0;
+        $input['wbi_b2b_enable_minimum_order_amount']  = ! empty( $raw_input['wbi_b2b_enable_minimum_order_amount'] ) ? 1 : 0;
+        $input['wbi_b2b_enable_hide_prices']           = ! empty( $raw_input['wbi_b2b_enable_hide_prices'] ) ? 1 : 0;
         // Sanitize PWOQ checkboxes (absent from POST when unchecked → explicitly set to 0)
         $input['wbi_enable_public_wholesale_quick_order'] = ! empty( $input['wbi_enable_public_wholesale_quick_order'] ) ? 1 : 0;
         $input['wbi_pwoq_show_sku']               = ! empty( $input['wbi_pwoq_show_sku'] ) ? 1 : 0;
@@ -679,19 +720,26 @@ class WBI_Suite_Loader {
                 ? $input['wbi_pwoq_variant_selector_mode']
                 : 'modal';
         }
+        $input['wbi_b2b_minimum_order'] = $this->sanitize_decimal_setting( $raw_input['wbi_b2b_minimum_order'] ?? 0 );
+        $input['wbi_b2b_hidden_price_text'] = isset( $raw_input['wbi_b2b_hidden_price_text'] )
+            ? sanitize_text_field( $raw_input['wbi_b2b_hidden_price_text'] )
+            : 'PRECIO MAYORISTA OCULTO';
         // Sanitize B2B URL field specifically
-        if ( isset( $input['wbi_b2b_hidden_price_url'] ) ) {
-            $input['wbi_b2b_hidden_price_url'] = esc_url_raw( $input['wbi_b2b_hidden_price_url'] );
+        if ( isset( $raw_input['wbi_b2b_hidden_price_url'] ) ) {
+            $input['wbi_b2b_hidden_price_url'] = esc_url_raw( $raw_input['wbi_b2b_hidden_price_url'] );
+        } else {
+            $input['wbi_b2b_hidden_price_url'] = '';
         }
         // Sanitize B2B notification email
-        if ( isset( $input['wbi_b2b_notification_email'] ) ) {
-            $input['wbi_b2b_notification_email'] = sanitize_email( $input['wbi_b2b_notification_email'] );
+        if ( isset( $raw_input['wbi_b2b_notification_email'] ) ) {
+            $input['wbi_b2b_notification_email'] = sanitize_email( $raw_input['wbi_b2b_notification_email'] );
+        } else {
+            $input['wbi_b2b_notification_email'] = '';
         }
         // Sanitize B2B authorized roles (array of role slugs)
-        if ( isset( $input['wbi_b2b_authorized_roles'] ) && is_array( $input['wbi_b2b_authorized_roles'] ) ) {
-            $input['wbi_b2b_authorized_roles'] = array_map( 'sanitize_key', $input['wbi_b2b_authorized_roles'] );
+        if ( isset( $raw_input['wbi_b2b_authorized_roles'] ) && is_array( $raw_input['wbi_b2b_authorized_roles'] ) ) {
+            $input['wbi_b2b_authorized_roles'] = array_map( 'sanitize_key', $raw_input['wbi_b2b_authorized_roles'] );
         } else {
-            // When no checkboxes are checked, the field is absent from POST — default to empty array
             $input['wbi_b2b_authorized_roles'] = array();
         }
         return $input;
@@ -749,7 +797,9 @@ class WBI_Suite_Loader {
 
         // B2B config fields (minimum order, hidden price text, registration URL)
         add_settings_field( 'wbi_b2b_auto_approve',     'B2B: Auto-aprobación de clientes', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_auto_approve'] );
+        add_settings_field( 'wbi_b2b_enable_minimum_order_amount', 'B2B: Activar monto mínimo', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_enable_minimum_order_amount'] );
         add_settings_field( 'wbi_b2b_minimum_order',    'B2B: Monto mínimo de compra',  array($this, 'number_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_minimum_order'] );
+        add_settings_field( 'wbi_b2b_enable_hide_prices', 'B2B: Activar ocultar precios', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_enable_hide_prices'] );
         add_settings_field( 'wbi_b2b_hidden_price_text','B2B: Texto precio oculto',      array($this, 'text_field'),   'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_hidden_price_text', 'default' => 'PRECIO MAYORISTA OCULTO'] );
         add_settings_field( 'wbi_b2b_hidden_price_url', 'B2B: URL registro mayorista',   array($this, 'text_field'),   'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_hidden_price_url'] );
         add_settings_field( 'wbi_b2b_notification_email', 'B2B: Email notificación solicitudes', array($this, 'text_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_b2b_notification_email'] );
@@ -1081,6 +1131,17 @@ class WBI_Suite_Loader {
         echo "<input type='text' name='wbi_modules_settings[" . esc_attr( $id ) . "]' value='" . esc_attr( $value ) . "' style='width:300px;'>";
     }
 
+    private function sanitize_decimal_setting( $value ) {
+        if ( is_string( $value ) ) {
+            $value = str_replace( ',', '.', $value );
+            $value = preg_replace( '/[^0-9.\-]/', '', $value );
+        }
+
+        $value = is_numeric( $value ) ? (float) $value : 0;
+
+        return max( 0, $value );
+    }
+
     public function render_settings_page() {
         // Only the WBI Superadmin can access the configuration page
         if ( ! self::is_wbi_superadmin() ) {
@@ -1215,48 +1276,77 @@ class WBI_Suite_Loader {
                         </div>
                         <?php if ( 'wbi_enable_b2b' === $key ) : ?>
                         <div class="wbi-b2b-config" style="margin-top:12px; padding-top:10px; border-top:1px solid #e0e0e0; font-size:12px;">
-                            <p style="margin:0 0 6px; font-weight:600; color:#50575e;">⚙️ Configuración B2B</p>
+                            <p style="margin:0 0 6px; font-weight:600; color:#50575e;"><?php echo esc_html__( '⚙️ Configuración B2B', 'wbi-suite' ); ?></p>
                             <label style="display:block; margin-bottom:6px;">
                                 <input type="checkbox" name="wbi_modules_settings[wbi_b2b_auto_approve]" value="1"
                                     <?php checked( ! empty( $opts['wbi_b2b_auto_approve'] ), true ); ?>>
-                                <strong>Habilitar auto-aprobación de clientes</strong>
+                                <strong><?php echo esc_html__( 'Habilitar auto-aprobación de clientes', 'wbi-suite' ); ?></strong>
                                 <span style="display:block; color:#888; font-size:11px; margin-top:2px;">
-                                    Cuando está activado, los nuevos clientes quedan habilitados automáticamente para ver precios y comprar sin necesitar aprobación manual. Desactivado por defecto (requiere aprobación manual).
+                                    <?php echo esc_html__( 'Cuando está activado, los nuevos clientes quedan habilitados automáticamente para ver precios y comprar sin necesitar aprobación manual. Desactivado por defecto (requiere aprobación manual).', 'wbi-suite' ); ?>
                                 </span>
                             </label>
-                            <label style="display:block; margin-bottom:4px;">
-                                Monto mínimo ($):
-                                <input type="number" name="wbi_modules_settings[wbi_b2b_minimum_order]"
-                                    value="<?php echo esc_attr( $opts['wbi_b2b_minimum_order'] ?? '' ); ?>"
-                                    min="0" step="0.01" style="width:90px; margin-left:4px;">
-                            </label>
-                            <label style="display:block; margin-bottom:4px;">
-                                Texto precio oculto:
-                                <input type="text" name="wbi_modules_settings[wbi_b2b_hidden_price_text]"
-                                    value="<?php echo esc_attr( $opts['wbi_b2b_hidden_price_text'] ?? 'PRECIO MAYORISTA OCULTO' ); ?>"
-                                    style="width:100%; margin-top:2px;">
-                            </label>
-                            <label style="display:block;">
-                                URL registro mayorista:
-                                <input type="url" name="wbi_modules_settings[wbi_b2b_hidden_price_url]"
-                                    value="<?php echo esc_attr( $opts['wbi_b2b_hidden_price_url'] ?? '' ); ?>"
-                                    style="width:100%; margin-top:2px;">
-                            </label>
+                            <?php
+                            $minimum_toggle_enabled = isset( $opts['wbi_b2b_enable_minimum_order_amount'] ) ? ! empty( $opts['wbi_b2b_enable_minimum_order_amount'] ) : ! empty( $opts['wbi_b2b_minimum_order'] );
+                            $hide_toggle_enabled    = isset( $opts['wbi_b2b_enable_hide_prices'] ) ? ! empty( $opts['wbi_b2b_enable_hide_prices'] ) : $is_active;
+                            ?>
+                            <div style="margin:10px 0; padding:10px; border:1px solid #e0e0e0; border-radius:8px;">
+                                <label style="display:block; margin-bottom:6px;">
+                                    <input type="checkbox" name="wbi_modules_settings[wbi_b2b_enable_minimum_order_amount]" value="1"
+                                        <?php checked( $minimum_toggle_enabled, true ); ?>>
+                                    <strong><?php echo esc_html__( 'Activar monto mínimo', 'wbi-suite' ); ?></strong>
+                                    <span style="display:block; color:#888; font-size:11px; margin-top:2px;">
+                                        <?php echo esc_html__( 'Activa o desactiva la validación del monto mínimo de compra mayorista sin afectar el resto de la configuración B2B.', 'wbi-suite' ); ?>
+                                    </span>
+                                </label>
+                                <fieldset style="margin:0; padding:0; border:0; <?php echo $minimum_toggle_enabled ? '' : 'opacity:0.55;'; ?>">
+                                    <label style="display:block; margin-bottom:4px;">
+                                        <?php echo esc_html__( 'Monto mínimo ($):', 'wbi-suite' ); ?>
+                                        <input type="number" name="wbi_modules_settings[wbi_b2b_minimum_order]"
+                                            value="<?php echo esc_attr( $opts['wbi_b2b_minimum_order'] ?? '' ); ?>"
+                                            min="0" step="0.01" style="width:90px; margin-left:4px;">
+                                    </label>
+                                </fieldset>
+                            </div>
+                            <div style="margin:10px 0 0; padding:10px; border:1px solid #e0e0e0; border-radius:8px;">
+                                <label style="display:block; margin-bottom:6px;">
+                                    <input type="checkbox" name="wbi_modules_settings[wbi_b2b_enable_hide_prices]" value="1"
+                                        <?php checked( $hide_toggle_enabled, true ); ?>>
+                                    <strong><?php echo esc_html__( 'Activar ocultar precios', 'wbi-suite' ); ?></strong>
+                                    <span style="display:block; color:#888; font-size:11px; margin-top:2px;">
+                                        <?php echo esc_html__( 'Cuando está activo, oculta precios y restringe la compra para usuarios no autorizados. Cuando está apagado, los precios permanecen visibles.', 'wbi-suite' ); ?>
+                                    </span>
+                                </label>
+                                <fieldset style="margin:0; padding:0; border:0; <?php echo $hide_toggle_enabled ? '' : 'opacity:0.55;'; ?>">
+                                    <label style="display:block; margin-bottom:4px;">
+                                        <?php echo esc_html__( 'Texto precio oculto:', 'wbi-suite' ); ?>
+                                        <input type="text" name="wbi_modules_settings[wbi_b2b_hidden_price_text]"
+                                            value="<?php echo esc_attr( $opts['wbi_b2b_hidden_price_text'] ?? 'PRECIO MAYORISTA OCULTO' ); ?>"
+                                            style="width:100%; margin-top:2px;">
+                                    </label>
+                                    <label style="display:block;">
+                                        <?php echo esc_html__( 'URL registro mayorista:', 'wbi-suite' ); ?>
+                                        <input type="url" name="wbi_modules_settings[wbi_b2b_hidden_price_url]"
+                                            value="<?php echo esc_attr( $opts['wbi_b2b_hidden_price_url'] ?? '' ); ?>"
+                                            style="width:100%; margin-top:2px;">
+                                    </label>
+                                </fieldset>
+                            </div>
                             <?php
                             $wc_new_order = get_option( 'woocommerce_new_order_settings', array() );
                             $wc_recipient = ! empty( $wc_new_order['recipient'] ) ? $wc_new_order['recipient'] : get_option( 'admin_email' );
                             ?>
-                            <label style="display:block; margin-top:4px;">
-                                Email notificación B2B:
-                                <input type="email" name="wbi_modules_settings[wbi_b2b_notification_email]"
-                                    value="<?php echo esc_attr( $opts['wbi_b2b_notification_email'] ?? '' ); ?>"
-                                    placeholder="<?php echo esc_attr( $wc_recipient ); ?>"
-                                    style="width:100%; margin-top:2px;">
-                                <span style="color:#888; font-size:11px;">Dejá vacío para usar el email de pedidos de WooCommerce (<?php echo esc_html( $wc_recipient ); ?>)</span>
-                            </label>
-                            <label style="display:block; margin-top:8px;">
-                                Roles autorizados para ver precios y comprar:
-                                <div style="margin-top:4px;">
+                            <fieldset style="margin:10px 0 0; padding:0; border:0; <?php echo $hide_toggle_enabled ? '' : 'opacity:0.55;'; ?>">
+                                <label style="display:block; margin-top:4px;">
+                                    <?php echo esc_html__( 'Email notificación B2B:', 'wbi-suite' ); ?>
+                                    <input type="email" name="wbi_modules_settings[wbi_b2b_notification_email]"
+                                        value="<?php echo esc_attr( $opts['wbi_b2b_notification_email'] ?? '' ); ?>"
+                                        placeholder="<?php echo esc_attr( $wc_recipient ); ?>"
+                                        style="width:100%; margin-top:2px;">
+                                    <span style="color:#888; font-size:11px;"><?php echo esc_html( sprintf( __( 'Dejá vacío para usar el email de pedidos de WooCommerce (%s)', 'wbi-suite' ), $wc_recipient ) ); ?></span>
+                                </label>
+                                <label style="display:block; margin-top:8px;">
+                                    <?php echo esc_html__( 'Roles autorizados para ver precios y comprar:', 'wbi-suite' ); ?>
+                                    <div style="margin-top:4px;">
                                 <?php
                                 $authorized = isset( $opts['wbi_b2b_authorized_roles'] ) ? (array) $opts['wbi_b2b_authorized_roles'] : array( 'administrator', 'mayorista' );
                                 $all_roles  = wp_roles()->roles;
@@ -1268,9 +1358,10 @@ class WBI_Suite_Loader {
                                         <?php echo esc_html( $role_data['name'] ); ?>
                                     </label>
                                 <?php endforeach; ?>
-                                </div>
-                                <span style="color:#888; font-size:11px;">Solo estos roles podrán ver precios y comprar. El resto verá "Precio oculto".</span>
-                            </label>
+                                    </div>
+                                    <span style="color:#888; font-size:11px;"><?php echo esc_html__( 'Solo estos roles podrán ver precios y comprar cuando “Activar ocultar precios” esté encendido. El resto verá el mensaje de precio oculto.', 'wbi-suite' ); ?></span>
+                                </label>
+                            </fieldset>
                         </div>
                         <?php endif; ?>
                         <?php if ( 'wbi_enable_public_wholesale_quick_order' === $key ) : ?>
