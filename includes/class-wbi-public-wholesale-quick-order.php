@@ -4,24 +4,21 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 /**
  * WBI Public Wholesale Quick Order Module
  *
- * Enables a public-facing quick-order card on WooCommerce catalog pages,
- * allowing customers to add products (with or without variants) directly
- * from the listing without visiting the single-product page.
- *
  * Settings (stored in wbi_modules_settings):
- *   wbi_pwoq_variant_selector_mode  string  'inline' | 'modal'
- *   wbi_pwoq_show_sku               bool
- *   wbi_pwoq_show_dimensions        bool
- *   wbi_pwoq_show_color_count       bool
- *   wbi_pwoq_enforce_min_qty        bool
- *   wbi_pwoq_enforce_pack_multiples bool
- *   wbi_pwoq_global_add_enabled     bool
- *   wbi_pwoq_initial_qty_zero       bool
- *   wbi_pwoq_hide_native_add_to_cart bool
+ *   wbi_pwoq_variant_selector_mode        string  'inline' | 'modal'
+ *   wbi_pwoq_show_sku                     bool
+ *   wbi_pwoq_show_dimensions              bool
+ *   wbi_pwoq_show_color_count             bool
+ *   wbi_pwoq_enforce_min_qty              bool
+ *   wbi_pwoq_enforce_pack_multiples       bool
+ *   wbi_pwoq_global_add_enabled           bool
+ *   wbi_pwoq_initial_qty_zero             bool
+ *   wbi_pwoq_hide_native_add_to_cart      bool
+ *   wbi_pwoq_force_reload_on_fragment_fail bool
  */
 class WBI_Public_Wholesale_Quick_Order_Module {
 
-    const ASSET_VERSION = '1.4.0';
+    const ASSET_VERSION = '2.0.0';
 
     /** @var array Cached module settings */
     private $settings;
@@ -29,41 +26,31 @@ class WBI_Public_Wholesale_Quick_Order_Module {
     public function __construct() {
         $this->settings = $this->load_settings();
 
-        add_action( 'wp_enqueue_scripts',                             array( $this, 'enqueue_assets' ) );
-        add_action( 'wp_enqueue_scripts',                             array( $this, 'enqueue_quantity_sync_js' ), 20 );
-        add_action( 'woocommerce_after_shop_loop_item',               array( $this, 'render_quick_order_ui' ), 15 );
-        add_action( 'wp_footer',                                      array( $this, 'render_feedback_shell' ) );
-        add_filter( 'woocommerce_loop_add_to_cart_link',               array( $this, 'maybe_hide_native_add_to_cart' ), 10, 3 );
-        add_filter( 'woocommerce_product_single_add_to_cart_text',    array( $this, 'maybe_change_single_add_to_cart_text' ), 10, 2 );
-        add_action( 'wp_ajax_wbi_public_quick_order_add',             array( $this, 'ajax_add_to_cart' ) );
-        add_action( 'wp_ajax_nopriv_wbi_public_quick_order_add',      array( $this, 'ajax_add_to_cart' ) );
-        add_action( 'wp_ajax_wbi_public_quick_order_variants',        array( $this, 'ajax_get_variants' ) );
-        add_action( 'wp_ajax_nopriv_wbi_public_quick_order_variants', array( $this, 'ajax_get_variants' ) );
-    }
+        add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+        add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_quantity_sync_js' ), 20 );
+        add_action( 'wp_footer', array( $this, 'render_feedback_shell' ) );
 
-    // -----------------------------------------------------------------------
-    // Settings helpers
-    // -----------------------------------------------------------------------
+        add_filter( 'woocommerce_loop_add_to_cart_link', array( $this, 'render_loop_add_to_cart_form' ), 10, 3 );
+        add_filter( 'woocommerce_product_single_add_to_cart_text', array( $this, 'maybe_change_single_add_to_cart_text' ), 10, 2 );
+        add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate_quick_order_add_to_cart' ), 10, 6 );
+    }
 
     private function load_settings() {
         $opts = get_option( 'wbi_modules_settings', array() );
+
         return array(
-            'variant_selector_mode'  => isset( $opts['wbi_pwoq_variant_selector_mode'] ) ? $opts['wbi_pwoq_variant_selector_mode'] : 'modal',
-            'show_sku'               => ! empty( $opts['wbi_pwoq_show_sku'] ),
-            'show_dimensions'        => ! empty( $opts['wbi_pwoq_show_dimensions'] ),
-            'show_color_count'       => ! empty( $opts['wbi_pwoq_show_color_count'] ),
-            'enforce_min_qty'        => isset( $opts['wbi_pwoq_enforce_min_qty'] ) ? (bool) $opts['wbi_pwoq_enforce_min_qty'] : true,
-            'enforce_pack_multiples' => isset( $opts['wbi_pwoq_enforce_pack_multiples'] ) ? (bool) $opts['wbi_pwoq_enforce_pack_multiples'] : true,
-            'global_add_enabled'              => ! empty( $opts['wbi_pwoq_global_add_enabled'] ),
-            'initial_qty_zero'                => ! empty( $opts['wbi_pwoq_initial_qty_zero'] ),
-            'hide_native_add_to_cart'         => ! empty( $opts['wbi_pwoq_hide_native_add_to_cart'] ),
-            'force_reload_on_fragment_fail'   => ! empty( $opts['wbi_pwoq_force_reload_on_fragment_fail'] ),
+            'variant_selector_mode'        => isset( $opts['wbi_pwoq_variant_selector_mode'] ) ? $opts['wbi_pwoq_variant_selector_mode'] : 'modal',
+            'show_sku'                     => ! empty( $opts['wbi_pwoq_show_sku'] ),
+            'show_dimensions'              => ! empty( $opts['wbi_pwoq_show_dimensions'] ),
+            'show_color_count'             => ! empty( $opts['wbi_pwoq_show_color_count'] ),
+            'enforce_min_qty'              => isset( $opts['wbi_pwoq_enforce_min_qty'] ) ? (bool) $opts['wbi_pwoq_enforce_min_qty'] : true,
+            'enforce_pack_multiples'       => isset( $opts['wbi_pwoq_enforce_pack_multiples'] ) ? (bool) $opts['wbi_pwoq_enforce_pack_multiples'] : true,
+            'global_add_enabled'           => ! empty( $opts['wbi_pwoq_global_add_enabled'] ),
+            'initial_qty_zero'             => ! empty( $opts['wbi_pwoq_initial_qty_zero'] ),
+            'hide_native_add_to_cart'      => ! empty( $opts['wbi_pwoq_hide_native_add_to_cart'] ),
+            'force_reload_on_fragment_fail'=> ! empty( $opts['wbi_pwoq_force_reload_on_fragment_fail'] ),
         );
     }
-
-    // -----------------------------------------------------------------------
-    // Asset enqueue
-    // -----------------------------------------------------------------------
 
     public function enqueue_assets() {
         if ( is_admin() || ! function_exists( 'is_shop' ) || ! $this->should_load_assets() ) {
@@ -82,7 +69,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         wp_enqueue_script(
             'wbi-public-wholesale-quick-order',
             $plugin_root_url . 'assets/js/wbi-public-wholesale-quick-order.js',
-            array(),
+            array( 'jquery', 'wc-add-to-cart' ),
             self::ASSET_VERSION,
             true
         );
@@ -91,37 +78,26 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             'wbi-public-wholesale-quick-order',
             'WBIPublicQuickOrder',
             array(
-                'ajaxUrl'                     => admin_url( 'admin-ajax.php' ),
-                'nonce'                       => wp_create_nonce( 'wbi_public_quick_order' ),
-                'currencySymbol'              => get_woocommerce_currency_symbol(),
-                'variantSelectorMode'         => $this->settings['variant_selector_mode'],
-                'globalAddEnabled'            => $this->settings['global_add_enabled'],
-                'initialQtyZero'              => $this->settings['initial_qty_zero'],
-                'forceReloadOnFragmentFail'   => $this->settings['force_reload_on_fragment_fail'],
-                'i18n'                        => array(
-                    'adding'           => 'Agregando…',
-                    'defaultButton'    => 'AGREGAR AL PEDIDO',
-                    'added'            => 'Agregado al pedido',
-                    'errorGeneric'     => 'No pudimos agregar este producto. Intentá nuevamente.',
-                    'successSingle'    => 'Agregaste %1$s unidad de %2$s.',
-                    'successPlural'    => 'Agregaste %1$s unidades de %2$s.',
-                    'counterSingular'  => '%1$s producto · %2$s unidad',
-                    'counterPlural'    => '%1$s productos · %2$s unidades',
-                    'selectOption'     => 'Seleccioná una opción',
-                    'selectVariation'  => 'Elegí una variante para continuar.',
-                    'confirmAdd'       => 'AGREGAR AL PEDIDO',
-                    'cancel'           => 'Cancelar',
-                    'quantity'         => 'Cantidad',
-                    'minQty'           => 'Mínimo: %d unidades',
-                    'missingMin'       => 'Te faltan %d para completar el mínimo',
-                    'packMultiple'     => 'Múltiplos de %d',
-                    'noStock'          => 'Sin stock',
-                    'close'            => 'Cerrar',
-                    'globalAdd'        => 'AGREGAR SELECCIONADOS AL CARRITO',
-                    'globalEmpty'      => 'Seleccioná cantidades para agregar al carrito.',
-                    'globalSkipped'    => '%1$s sin variante válida',
-                    'globalInvalidOnly'=> 'Elegí una variante válida antes de agregar los productos seleccionados.',
-                    'globalSuccess'    => 'Se agregaron %1$s productos por %2$s unidades.',
+                'nonce'                     => wp_create_nonce( 'wbi_public_quick_order' ),
+                'variantSelectorMode'       => $this->settings['variant_selector_mode'],
+                'globalAddEnabled'          => $this->settings['global_add_enabled'],
+                'initialQtyZero'            => $this->settings['initial_qty_zero'],
+                'forceReloadOnFragmentFail' => $this->settings['force_reload_on_fragment_fail'],
+                'i18n'                      => array(
+                    'adding'          => 'Agregando…',
+                    'addLabel'        => 'Agregar',
+                    'errorGeneric'    => 'No pudimos agregar este producto. Intentá nuevamente.',
+                    'selectVariation' => 'Elegí una variante válida antes de agregar este producto.',
+                    'globalAdd'       => 'AGREGAR SELECCIONADOS AL CARRITO',
+                    'globalEmpty'     => 'Seleccioná cantidades para agregar al carrito.',
+                    'globalSkipped'   => 'Se omitieron %d productos sin variante válida.',
+                    'globalSuccess'   => 'Se agregaron %1$d productos por %2$d unidades.',
+                    'counterSingular' => '%1$d producto · %2$d unidad',
+                    'counterPlural'   => '%1$d productos · %2$d unidades',
+                    'qtyPositive'     => 'Ingresá una cantidad mayor a 0 para continuar.',
+                    'minQty'          => 'Mínimo: %d unidades',
+                    'missingMin'      => 'Te faltan %d para completar el mínimo. Mínimo: %d unidades.',
+                    'packMultiple'    => 'Elegí múltiplos de %d unidades para este producto.',
                 ),
             )
         );
@@ -131,85 +107,107 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         return is_shop() || is_product_taxonomy() || is_product_category() || is_product_tag();
     }
 
-    // -----------------------------------------------------------------------
-    // Front-end rendering — product card UI
-    // -----------------------------------------------------------------------
+    public function render_loop_add_to_cart_form( $html, $product, $args ) {
+        if ( ! $this->should_load_assets() || ! $product instanceof WC_Product ) {
+            return $html;
+        }
 
-    public function render_quick_order_ui() {
-        global $product;
-
-        if ( ! $product instanceof WC_Product || ! $product->is_purchasable() || ! $product->is_in_stock() ) {
-            return;
+        if ( ! $product->is_purchasable() || ! $product->is_in_stock() || $product->is_sold_individually() ) {
+            return $html;
         }
 
         $product_data = $this->build_product_data( $product );
         if ( empty( $product_data['variants'] ) ) {
-            return;
+            return $html;
         }
 
-        $default_variant = reset( $product_data['variants'] );
-        $has_variations  = ! empty( $product_data['has_variations'] );
-        $mode            = $this->settings['variant_selector_mode'];
+        $default_variant = $this->get_default_variant_for_ui( $product_data );
+        $rules_text      = $this->build_rules_message( $default_variant );
+        $initial_value   = $this->get_initial_quantity_value( $default_variant );
+        $min_value       = $this->settings['initial_qty_zero'] ? 0 : (int) $default_variant['min_qty'];
 
-        // Secondary info line
-        $meta_parts = $this->build_meta_parts( $product );
+        $qty_html = woocommerce_quantity_input(
+            array(
+                'input_name'   => 'quantity',
+                'input_value'  => $initial_value,
+                'min_value'    => $min_value,
+                'max_value'    => $product->get_max_purchase_quantity(),
+                'step'         => max( 1, (int) $default_variant['step_qty'] ),
+                'classes'      => array( 'input-text', 'qty', 'text', 'wbi-pwoq__qty' ),
+            ),
+            $product,
+            false
+        );
+
+        $button_classes = array( 'button', 'alt', 'add_to_cart_button', 'wbi-pwoq__submit' );
+        if ( $product->is_type( 'simple' ) ) {
+            $button_classes[] = 'ajax_add_to_cart';
+            $button_classes[] = 'product_type_simple';
+        } else {
+            $button_classes[] = 'product_type_variable';
+        }
+
+        $button_html = sprintf(
+            '<button type="submit" class="%1$s" data-product_id="%2$d" data-product_sku="%3$s" data-quantity="%4$d" aria-label="%5$s">%6$s</button>',
+            esc_attr( implode( ' ', $button_classes ) ),
+            (int) $product->get_id(),
+            esc_attr( $product->get_sku() ),
+            (int) max( 1, $initial_value ),
+            esc_attr( sprintf( __( 'Agregar %s al carrito', 'woocommerce' ), $product->get_name() ) ),
+            esc_html__( 'Agregar', 'woocommerce' )
+        );
+
+        ob_start();
         ?>
-        <div class="wbi-pwoq" data-product="<?php echo esc_attr( wp_json_encode( $product_data ) ); ?>" data-mode="<?php echo esc_attr( $mode ); ?>">
-
+        <div class="wbi-pwoq" data-product="<?php echo esc_attr( wp_json_encode( $product_data ) ); ?>" data-mode="<?php echo esc_attr( $this->settings['variant_selector_mode'] ); ?>">
+            <?php $meta_parts = $this->build_meta_parts( $product ); ?>
             <?php if ( ! empty( $meta_parts ) ) : ?>
-            <div class="wbi-pwoq__meta-line">
-                <?php echo esc_html( implode( ' · ', $meta_parts ) ); ?>
-            </div>
+                <div class="wbi-pwoq__meta-line"><?php echo esc_html( implode( ' · ', $meta_parts ) ); ?></div>
             <?php endif; ?>
 
-            <?php // ---- INLINE mode: show chips directly in the card ---- ?>
-            <?php if ( $has_variations && 'inline' === $mode ) : ?>
-            <div class="wbi-pwoq__inline-selector">
-                <?php echo $this->render_attribute_chips( $product_data ); // phpcs:ignore WordPress.Security.EscapeOutput ?>
-            </div>
+            <?php if ( ! empty( $product_data['has_variations'] ) ) : ?>
+                <?php if ( 'inline' === $this->settings['variant_selector_mode'] ) : ?>
+                    <div class="wbi-pwoq__selectors wbi-pwoq__selectors--chips">
+                        <?php echo $this->render_attribute_chips( $product_data ); // phpcs:ignore WordPress.Security.EscapeOutput ?>
+                    </div>
+                <?php else : ?>
+                    <div class="wbi-pwoq__selectors wbi-pwoq__selectors--dropdowns">
+                        <?php echo $this->render_attribute_dropdowns( $product_data ); // phpcs:ignore WordPress.Security.EscapeOutput ?>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
 
-            <?php if ( ! $has_variations ) : ?>
-            <div class="wbi-pwoq__presentation-row">
-                <div class="wbi-pwoq__variant-static">
-                    <?php echo esc_html( $default_variant['label'] ); ?>
+            <form class="cart wbi-pwoq-loop-cart" method="post" enctype="multipart/form-data" data-product-id="<?php echo esc_attr( $product->get_id() ); ?>">
+                <input type="hidden" name="add-to-cart" value="<?php echo esc_attr( $product->get_id() ); ?>" />
+                <input type="hidden" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>" />
+                <input type="hidden" name="variation_id" value="0" class="wbi-pwoq__variation-id" />
+                <input type="hidden" name="wbi_pwoq_request" value="1" />
+                <?php if ( ! empty( $product_data['attributes'] ) ) : ?>
+                    <?php foreach ( array_keys( $product_data['attributes'] ) as $attribute_key ) : ?>
+                        <input type="hidden" name="<?php echo esc_attr( 'attribute_' . $attribute_key ); ?>" value="" class="wbi-pwoq__attr-hidden" data-attr="<?php echo esc_attr( $attribute_key ); ?>" />
+                    <?php endforeach; ?>
+                <?php endif; ?>
+
+                <div class="wbi-pwoq__action-row">
+                    <?php echo $qty_html; // phpcs:ignore WordPress.Security.EscapeOutput ?>
+                    <?php echo $button_html; // phpcs:ignore WordPress.Security.EscapeOutput ?>
                 </div>
-            </div>
-            <?php endif; ?>
+            </form>
 
-            <div class="wbi-pwoq__action-row">
-                <label class="screen-reader-text" for="wbi-pwoq-qty-<?php echo esc_attr( $product->get_id() ); ?>">Cantidad</label>
-                <div class="wbi-pwoq__stepper">
-                    <button type="button" class="wbi-pwoq__stepper-dec" aria-label="Reducir cantidad">&#8722;</button>
-                    <input
-                        id="wbi-pwoq-qty-<?php echo esc_attr( $product->get_id() ); ?>"
-                        class="wbi-pwoq__qty"
-                        type="number"
-                        min="<?php echo esc_attr( $default_variant['min_qty'] ); ?>"
-                        step="<?php echo esc_attr( $default_variant['step_qty'] ); ?>"
-                        value="<?php echo esc_attr( $this->get_initial_quantity_value( $default_variant ) ); ?>"
-                        inputmode="numeric"
-                    />
-                    <button type="button" class="wbi-pwoq__stepper-inc" aria-label="Aumentar cantidad">&#43;</button>
-                </div>
-
-                <button type="button" class="button alt wbi-pwoq__button">
-                    AGREGAR
-                </button>
-            </div>
-
-            <div class="wbi-pwoq__rules-line" aria-live="polite">
-                <?php echo esc_html( $this->build_rules_message( $default_variant ) ); ?>
-            </div>
+            <div class="wbi-pwoq__rules-line" aria-live="polite"><?php echo esc_html( $rules_text ); ?></div>
             <div class="wbi-pwoq__status" aria-live="polite"></div>
         </div>
         <?php
+
+        $quick_order_html = trim( ob_get_clean() );
+
+        if ( $this->settings['hide_native_add_to_cart'] ) {
+            return $quick_order_html;
+        }
+
+        return '<div class="wbi-pwoq-native-loop">' . $html . '</div>' . $quick_order_html;
     }
 
-    /**
-     * Render attribute chip groups for inline/modal variant selection.
-     * Returns escaped HTML string.
-     */
     private function render_attribute_chips( array $product_data ) {
         if ( empty( $product_data['attributes'] ) ) {
             return '';
@@ -229,6 +227,31 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             $out .= '</div>';
             $out .= '</div>';
         }
+
+        return $out;
+    }
+
+    private function render_attribute_dropdowns( array $product_data ) {
+        if ( empty( $product_data['attributes'] ) ) {
+            return '';
+        }
+
+        $out = '';
+        foreach ( $product_data['attributes'] as $attr_name => $attr_values ) {
+            $label = ucfirst( str_replace( array( 'pa_', '-', '_' ), array( '', ' ', ' ' ), $attr_name ) );
+            $out  .= '<label class="wbi-pwoq__select-wrap" data-attr="' . esc_attr( $attr_name ) . '">';
+            $out  .= '<span class="wbi-pwoq__attr-label">' . esc_html( $label ) . '</span>';
+            $out  .= '<select class="wbi-pwoq__select" data-attr="' . esc_attr( $attr_name ) . '">';
+            $out  .= '<option value="">' . esc_html__( 'Seleccioná una opción', 'wbi-suite' ) . '</option>';
+            foreach ( $attr_values as $attr_value ) {
+                $option_label = is_array( $attr_value ) && isset( $attr_value['value'] ) ? $attr_value['value'] : $attr_value;
+                $option_slug  = is_array( $attr_value ) && isset( $attr_value['slug'] ) ? $attr_value['slug'] : $option_label;
+                $out .= '<option value="' . esc_attr( $option_slug ) . '" data-label="' . esc_attr( $option_label ) . '">' . esc_html( $option_label ) . '</option>';
+            }
+            $out .= '</select>';
+            $out .= '</label>';
+        }
+
         return $out;
     }
 
@@ -237,61 +260,33 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             return;
         }
 
-        $summary = $this->get_cart_summary();
-        $mode    = $this->settings['variant_selector_mode'];
         ?>
         <div class="wbi-pwoq-toast" hidden></div>
-        <div class="wbi-pwoq-summary" data-items="<?php echo esc_attr( $summary['items'] ); ?>" data-units="<?php echo esc_attr( $summary['units'] ); ?>">
-            <?php echo esc_html( $summary['label'] ); ?>
-        </div>
-
         <?php if ( $this->settings['global_add_enabled'] ) : ?>
-        <div class="wbi-pwoq-global-bar" hidden aria-live="polite">
-            <div class="wbi-pwoq-global-bar__inner">
-                <div class="wbi-pwoq-global-bar__summary" aria-atomic="true"></div>
-                <div class="wbi-pwoq-global-bar__detail"></div>
-                <button type="button" class="button alt wbi-pwoq-global-bar__button" disabled>AGREGAR SELECCIONADOS AL CARRITO</button>
-            </div>
-        </div>
-        <?php endif; ?>
-
-        <?php if ( 'modal' === $mode ) : ?>
-        <div class="wbi-pwoq-modal" hidden role="dialog" aria-modal="true" aria-label="Elegí variantes">
-            <div class="wbi-pwoq-modal__backdrop"></div>
-            <div class="wbi-pwoq-modal__box">
-                <button type="button" class="wbi-pwoq-modal__close" aria-label="Cerrar">&#x2715;</button>
-                <div class="wbi-pwoq-modal__product-name"></div>
-                <div class="wbi-pwoq-modal__attrs"></div>
-                <div class="wbi-pwoq-modal__qty-row">
-                    <label class="wbi-pwoq-modal__qty-label">Cantidad</label>
-                    <input class="wbi-pwoq-modal__qty" type="number" min="1" step="1" value="<?php echo esc_attr( $this->settings['initial_qty_zero'] ? 0 : 1 ); ?>" inputmode="numeric" />
+            <div class="wbi-pwoq-global-bar" hidden aria-live="polite">
+                <div class="wbi-pwoq-global-bar__inner">
+                    <div class="wbi-pwoq-global-bar__summary" aria-atomic="true">0 productos · 0 unidades</div>
+                    <button type="button" class="button alt wbi-pwoq-global-bar__button" disabled>
+                        AGREGAR SELECCIONADOS AL CARRITO
+                    </button>
                 </div>
-                <div class="wbi-pwoq-modal__rules" aria-live="polite"></div>
-                <button type="button" class="button alt wbi-pwoq-modal__confirm">AGREGAR AL PEDIDO</button>
-                <div class="wbi-pwoq-modal__status" aria-live="polite"></div>
             </div>
-        </div>
         <?php endif; ?>
         <?php
     }
 
-    // -----------------------------------------------------------------------
-    // Product data builder
-    // -----------------------------------------------------------------------
-
     private function build_product_data( WC_Product $product ) {
-        $variants    = array();
-        $attributes  = array();
+        $variants   = array();
+        $attributes = array();
 
         if ( $product->is_type( 'variable' ) ) {
-            // Collect unique attribute values across in-stock variations
             foreach ( $product->get_available_variations() as $variation_data ) {
-                if ( empty( $variation_data['variation_id'] ) || empty( $variation_data['is_purchasable'] ) ) {
+                if ( empty( $variation_data['variation_id'] ) ) {
                     continue;
                 }
 
                 $variation = wc_get_product( $variation_data['variation_id'] );
-                if ( ! $variation instanceof WC_Product_Variation ) {
+                if ( ! $variation instanceof WC_Product_Variation || ! $variation->is_purchasable() ) {
                     continue;
                 }
 
@@ -300,19 +295,23 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                 $attr_data = $variation->get_variation_attributes();
                 $attr_str  = wc_get_formatted_variation( $variation, true, false, true );
 
-                // Build attribute chip maps
                 foreach ( $attr_data as $attr_key => $attr_value ) {
-                    if ( '' === $attr_value ) continue;
+                    if ( '' === $attr_value ) {
+                        continue;
+                    }
+
                     $clean_key = str_replace( 'attribute_', '', $attr_key );
                     if ( ! isset( $attributes[ $clean_key ] ) ) {
                         $attributes[ $clean_key ] = array();
                     }
-                    $term = get_term_by( 'slug', $attr_value, $clean_key );
+
+                    $term          = get_term_by( 'slug', $attr_value, $clean_key );
                     $display_value = ( $term && ! is_wp_error( $term ) ) ? $term->name : $attr_value;
                     $chip_value    = array(
                         'value' => $display_value,
                         'slug'  => $attr_value,
                     );
+
                     if ( ! in_array( $chip_value, $attributes[ $clean_key ], true ) ) {
                         $attributes[ $clean_key ][] = $chip_value;
                     }
@@ -327,7 +326,6 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                     'step_qty'    => $rules['step_qty'],
                     'default_qty' => $rules['default_qty'],
                     'rule_text'   => $this->build_rules_message( $rules ),
-                    'price'       => $in_stock ? wc_price( $variation->get_price() ) : '',
                 );
             }
         } else {
@@ -341,13 +339,17 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                 'step_qty'    => $rules['step_qty'],
                 'default_qty' => $rules['default_qty'],
                 'rule_text'   => $this->build_rules_message( $rules ),
-                'price'       => wc_price( $product->get_price() ),
             );
         }
 
-        // If only one valid variant, mark it as pre-selected
-        $valid_variants = array_filter( $variants, function ( $v ) { return $v['in_stock']; } );
-        $auto_select    = ( 1 === count( $valid_variants ) ) ? array_values( $valid_variants )[0]['id'] : null;
+        $valid_variants = array_filter(
+            $variants,
+            function ( $variant ) {
+                return ! empty( $variant['in_stock'] );
+            }
+        );
+
+        $auto_select = ( 1 === count( $valid_variants ) ) ? (int) array_values( $valid_variants )[0]['id'] : 0;
 
         return array(
             'product_id'     => $product->get_id(),
@@ -359,9 +361,24 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         );
     }
 
-    /**
-     * Build the secondary meta-info line for the card.
-     */
+    private function get_default_variant_for_ui( array $product_data ) {
+        if ( ! empty( $product_data['auto_select'] ) ) {
+            foreach ( $product_data['variants'] as $variant ) {
+                if ( (int) $variant['id'] === (int) $product_data['auto_select'] ) {
+                    return $variant;
+                }
+            }
+        }
+
+        foreach ( $product_data['variants'] as $variant ) {
+            if ( ! empty( $variant['in_stock'] ) ) {
+                return $variant;
+            }
+        }
+
+        return reset( $product_data['variants'] );
+    }
+
     private function build_meta_parts( WC_Product $product ) {
         $parts = array();
 
@@ -384,9 +401,6 @@ class WBI_Public_Wholesale_Quick_Order_Module {
             if ( ! $color_attr ) {
                 $color_attr = $product->get_attribute( 'pa_colour' );
             }
-            if ( ! $color_attr ) {
-                $color_attr = $product->get_attribute( 'pa_color' );
-            }
             if ( $color_attr ) {
                 $colors = array_filter( explode( ', ', $color_attr ) );
                 $count  = count( $colors );
@@ -399,21 +413,18 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         return $parts;
     }
 
-    // -----------------------------------------------------------------------
-    // Purchase rules
-    // -----------------------------------------------------------------------
-
     private function get_purchase_rules( WC_Product $product, WC_Product $parent_product = null ) {
         $meta_keys_min  = array( '_wbi_min_qty', '_wbi_wholesale_min_qty', '_min_qty', 'wbi_min_qty' );
         $meta_keys_step = array( '_wbi_pack_multiple', '_wbi_qty_multiple', '_qty_step', '_quantity_step', 'wbi_pack_multiple' );
 
-        $min_qty  = $this->settings['enforce_min_qty']        ? $this->read_numeric_meta( $product, $meta_keys_min )  : 0;
+        $min_qty  = $this->settings['enforce_min_qty'] ? $this->read_numeric_meta( $product, $meta_keys_min ) : 0;
         $step_qty = $this->settings['enforce_pack_multiples'] ? $this->read_numeric_meta( $product, $meta_keys_step ) : 0;
 
         if ( $parent_product instanceof WC_Product ) {
             if ( $min_qty <= 0 && $this->settings['enforce_min_qty'] ) {
                 $min_qty = $this->read_numeric_meta( $parent_product, $meta_keys_min );
             }
+
             if ( $step_qty <= 0 && $this->settings['enforce_pack_multiples'] ) {
                 $step_qty = $this->read_numeric_meta( $parent_product, $meta_keys_step );
             }
@@ -436,28 +447,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
     }
 
     private function get_initial_quantity_value( array $rules ) {
-        return $this->settings['initial_qty_zero'] ? 0 : $rules['default_qty'];
-    }
-
-    public function maybe_hide_native_add_to_cart( $html, $product, $args ) {
-        if ( ! $this->should_load_assets() || ! $this->settings['hide_native_add_to_cart'] ) {
-            return $html;
-        }
-
-        if ( ! $product instanceof WC_Product ) {
-            return $html;
-        }
-
-        if (
-            $product->is_type( 'simple' ) &&
-            $product->is_purchasable() &&
-            $product->is_in_stock() &&
-            ! $product->is_sold_individually()
-        ) {
-            return '';
-        }
-
-        return $html;
+        return $this->settings['initial_qty_zero'] ? 0 : (int) $rules['default_qty'];
     }
 
     public function enqueue_quantity_sync_js() {
@@ -474,7 +464,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         }
 
         wc_enqueue_js(
-            '(function($){$("form.cart").on("change","input.qty",function(){$(this.form).find("[data-quantity]").attr("data-quantity",this.value);});})(jQuery);'
+            '(function($){$(document).on("change input","form.cart input.qty",function(){$(this.form).find("[data-quantity]").attr("data-quantity",this.value);});})(jQuery);'
         );
     }
 
@@ -494,6 +484,46 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         return __( 'Agregar', 'woocommerce' );
     }
 
+    public function validate_quick_order_add_to_cart( $passed, $product_id, $quantity, $variation_id = 0, $variations = array(), $cart_item_data = array() ) {
+        if ( ! $this->is_quick_order_request() ) {
+            return $passed;
+        }
+
+        $qty = (int) $quantity;
+
+        if ( $variation_id <= 0 ) {
+            $parent_product = wc_get_product( $product_id );
+            if ( $parent_product instanceof WC_Product && $parent_product->is_type( 'variable' ) ) {
+                wc_add_notice( 'Elegí una variante válida antes de agregar este producto.', 'error' );
+                return false;
+            }
+        }
+
+        $product = $variation_id ? wc_get_product( $variation_id ) : wc_get_product( $product_id );
+        if ( ! $product instanceof WC_Product ) {
+            return false;
+        }
+
+        $parent_product = ( $product instanceof WC_Product_Variation ) ? wc_get_product( $product->get_parent_id() ) : null;
+        $rules          = $this->get_purchase_rules( $product, $parent_product );
+        $validation     = $this->validate_quantity( $qty, $rules );
+
+        if ( is_wp_error( $validation ) ) {
+            wc_add_notice( $validation->get_error_message(), 'error' );
+            return false;
+        }
+
+        return $passed;
+    }
+
+    private function is_quick_order_request() {
+        if ( ! isset( $_REQUEST['wbi_pwoq_request'] ) ) {
+            return false;
+        }
+
+        return '1' === sanitize_text_field( wp_unslash( $_REQUEST['wbi_pwoq_request'] ) );
+    }
+
     private function read_numeric_meta( WC_Product $product, array $keys ) {
         foreach ( $keys as $key ) {
             $value = get_post_meta( $product->get_id(), $key, true );
@@ -501,6 +531,7 @@ class WBI_Public_Wholesale_Quick_Order_Module {
                 return (int) $value;
             }
         }
+
         return 0;
     }
 
@@ -517,92 +548,6 @@ class WBI_Public_Wholesale_Quick_Order_Module {
 
         return ! empty( $messages ) ? implode( ' · ', $messages ) : 'Elegí la cantidad y agregá al pedido.';
     }
-
-    // -----------------------------------------------------------------------
-    // AJAX: add to cart
-    // -----------------------------------------------------------------------
-
-    public function ajax_add_to_cart() {
-        check_ajax_referer( 'wbi_public_quick_order', 'nonce' );
-
-        if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
-            wp_send_json_error( array( 'message' => 'El carrito no está disponible en este momento.' ), 400 );
-        }
-
-        $product_id   = isset( $_POST['product_id'] )   ? absint( wp_unslash( $_POST['product_id'] ) )   : 0;
-        $variation_id = isset( $_POST['variation_id'] ) ? absint( wp_unslash( $_POST['variation_id'] ) ) : 0;
-        $quantity     = isset( $_POST['quantity'] )     ? (int) wp_unslash( $_POST['quantity'] )         : 0;
-
-        if ( $variation_id <= 0 ) {
-            $parent_product = wc_get_product( $product_id );
-            if ( $parent_product instanceof WC_Product && $parent_product->is_type( 'variable' ) ) {
-                wp_send_json_error( array( 'message' => 'Elegí una variante válida antes de agregar este producto.' ), 400 );
-            }
-        }
-
-        $product = $variation_id ? wc_get_product( $variation_id ) : wc_get_product( $product_id );
-        if ( ! $product instanceof WC_Product || ! $product->is_purchasable() || ! $product->is_in_stock() ) {
-            wp_send_json_error( array( 'message' => 'Este producto no está disponible para agregar al pedido.' ), 400 );
-        }
-
-        $parent_product = ( $product instanceof WC_Product_Variation ) ? wc_get_product( $product->get_parent_id() ) : null;
-        $rules          = $this->get_purchase_rules( $product, $parent_product );
-        $validation     = $this->validate_quantity( $quantity, $rules );
-
-        if ( is_wp_error( $validation ) ) {
-            wp_send_json_error( array( 'message' => $validation->get_error_message() ), 400 );
-        }
-
-        $variation = array();
-        if ( $product instanceof WC_Product_Variation ) {
-            $product_id   = $product->get_parent_id();
-            $variation_id = $product->get_id();
-            $variation    = $product->get_variation_attributes();
-        }
-
-        $added = WC()->cart->add_to_cart( $product_id, $quantity, $variation_id, $variation );
-        if ( ! $added ) {
-            wp_send_json_error( array( 'message' => 'No pudimos agregar este producto al pedido.' ), 400 );
-        }
-
-        $summary      = $this->get_cart_summary();
-        $product_name = $product instanceof WC_Product_Variation && $parent_product instanceof WC_Product
-            ? $parent_product->get_name()
-            : $product->get_name();
-
-        wp_send_json_success(
-            array(
-                'message' => sprintf(
-                    _n( 'Agregaste %1$s unidad de %2$s.', 'Agregaste %1$s unidades de %2$s.', $quantity, 'wbi-suite' ),
-                    $quantity,
-                    $product_name
-                ),
-                'summary' => $summary,
-            )
-        );
-    }
-
-    // -----------------------------------------------------------------------
-    // AJAX: get variants for modal
-    // -----------------------------------------------------------------------
-
-    public function ajax_get_variants() {
-        check_ajax_referer( 'wbi_public_quick_order', 'nonce' );
-
-        $product_id = isset( $_POST['product_id'] ) ? absint( wp_unslash( $_POST['product_id'] ) ) : 0;
-        $product    = wc_get_product( $product_id );
-
-        if ( ! $product instanceof WC_Product ) {
-            wp_send_json_error( array( 'message' => 'Producto no encontrado.' ), 404 );
-        }
-
-        $data = $this->build_product_data( $product );
-        wp_send_json_success( $data );
-    }
-
-    // -----------------------------------------------------------------------
-    // Quantity validation
-    // -----------------------------------------------------------------------
 
     private function validate_quantity( $quantity, array $rules ) {
         if ( $quantity <= 0 ) {
@@ -623,41 +568,10 @@ class WBI_Public_Wholesale_Quick_Order_Module {
         if ( $this->settings['enforce_pack_multiples'] && $rules['step_qty'] > 1 && 0 !== $quantity % $rules['step_qty'] ) {
             return new WP_Error(
                 'pack_multiple',
-                sprintf(
-                    'Elegí múltiplos de %1$d unidades para este producto.',
-                    $rules['step_qty']
-                )
+                sprintf( 'Elegí múltiplos de %1$d unidades para este producto.', $rules['step_qty'] )
             );
         }
 
         return true;
-    }
-
-    // -----------------------------------------------------------------------
-    // Cart summary
-    // -----------------------------------------------------------------------
-
-    private function get_cart_summary() {
-        $items = 0;
-        $units = 0;
-
-        if ( function_exists( 'WC' ) && WC()->cart ) {
-            $items = count( WC()->cart->get_cart() );
-            foreach ( WC()->cart->get_cart() as $cart_item ) {
-                $units += isset( $cart_item['quantity'] ) ? (int) $cart_item['quantity'] : 0;
-            }
-        }
-
-        return array(
-            'items' => $items,
-            'units' => $units,
-            'label' => sprintf(
-                '%1$s %2$s · %3$s %4$s',
-                $items,
-                1 === $items ? 'producto' : 'productos',
-                $units,
-                1 === $units ? 'unidad' : 'unidades'
-            ),
-        );
     }
 }
