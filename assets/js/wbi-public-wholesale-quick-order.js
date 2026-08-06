@@ -31,6 +31,20 @@
     return form ? form.querySelector('input.qty') : null;
   }
 
+  function getLoopForms() {
+    var forms = Array.prototype.slice.call(document.querySelectorAll('.wbi-pwoq form.cart, .wbi-pwoq-loop-cart'));
+    var unique = [];
+    var seen = new Set();
+
+    forms.forEach(function (form) {
+      if (!form || seen.has(form)) return;
+      seen.add(form);
+      unique.push(form);
+    });
+
+    return unique;
+  }
+
   function getQty(form) {
     var input = getQtyInput(form);
     if (!input) return 0;
@@ -367,7 +381,7 @@
     var totalProducts = 0;
     var totalUnits = 0;
 
-    document.querySelectorAll('.wbi-pwoq-loop-cart').forEach(function (form) {
+    getLoopForms().forEach(function (form) {
       var qty = getQty(form);
       if (qty <= 0) return;
 
@@ -628,11 +642,25 @@
           }
 
           if (state.invalid.length) {
+            var skippedNames = state.invalid
+              .map(function (row) { return row.productName || ''; })
+              .filter(function (name) { return !!name; });
+
+            var skippedLabel = skippedNames.length
+              ? formatSelectedDetail(skippedNames)
+              : '';
+
             showToast(
               (i18n.globalSkipped || 'Se omitieron %d productos sin variante válida.')
                 .replace('%d', String(state.invalid.length)),
               true
             );
+            if (skippedLabel) {
+              showToast(
+                (i18n.globalSkippedDetail || 'Omitidos: %s').replace('%s', skippedLabel),
+                true
+              );
+            }
           } else if (!successProducts && failed.length) {
             showToast(failed[0].message, true);
           } else if (successProducts > 0) {
@@ -655,7 +683,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.wbi-pwoq-loop-cart').forEach(function (form) {
+    getLoopForms().forEach(function (form) {
       bindAttributeControls(form);
       bindFormSubmit(form);
       syncButtonQuantity(form);
@@ -672,6 +700,15 @@
           updateGlobalBar();
         });
       }
+
+      form.querySelectorAll('.plus, .minus').forEach(function (qtyButton) {
+        qtyButton.addEventListener('click', function () {
+          setTimeout(function () {
+            syncButtonQuantity(form);
+            updateGlobalBar();
+          }, 0);
+        });
+      });
     });
 
     bindGlobalMassAdd();
