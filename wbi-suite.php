@@ -12,16 +12,19 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class WBI_Suite_Loader {
 
     private $options;
-    private const B2B_SETTINGS_SCHEMA_OPTION  = 'wbi_b2b_settings_schema_version';
-    private const B2B_SETTINGS_SCHEMA_VERSION = '2.0.0';
+    private const MODULE_SETTINGS_OPTION         = 'wbi_modules_settings';
+    private const MODULE_SETTINGS_BACKUP_OPTION  = 'wbi_modules_settings_backup';
+    private const MODULE_SETTINGS_BACKUP_TRANSIENT = 'wbi_modules_settings_backup_transient';
+    private const MODULE_SETTINGS_RECOVERY_OPTION = 'wbi_modules_settings_recovery_version';
+    private const MODULE_SETTINGS_RECOVERY_VERSION = '1.0.0';
+    private const B2B_SETTINGS_SCHEMA_OPTION      = 'wbi_b2b_settings_schema_version';
+    private const B2B_SETTINGS_SCHEMA_VERSION     = '2.0.0';
 
     public function __construct() {
-        // Cargar opciones guardadas en la base de datos
-        $this->options = get_option( 'wbi_modules_settings', array() );
-        if ( ! is_array( $this->options ) ) {
-            $this->options = array();
-        }
+        // Cargar opciones guardadas en la base de datos (con recuperación defensiva)
+        $this->options = $this->load_module_settings();
 
+        $this->maybe_recover_corrupted_module_states();
         $this->maybe_migrate_b2b_feature_flags();
 
         // Process license actions
@@ -78,11 +81,171 @@ class WBI_Suite_Loader {
         }
 
         if ( $changed ) {
-            update_option( 'wbi_modules_settings', $options );
+            update_option( self::MODULE_SETTINGS_OPTION, $options );
+            $this->persist_module_settings_backup( $options );
         }
 
         update_option( self::B2B_SETTINGS_SCHEMA_OPTION, self::B2B_SETTINGS_SCHEMA_VERSION );
         $this->options = $options;
+    }
+
+
+
+    private function get_module_toggle_keys() {
+        return array(
+            'wbi_enable_b2b','wbi_enable_data','wbi_enable_dashboard','wbi_enable_barcode',
+            'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_purchase','wbi_enable_scoring',
+            'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
+            'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
+            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator','wbi_enable_accounting_reports',
+            'wbi_enable_credit_notes','wbi_enable_email_marketing','wbi_enable_reorder','wbi_enable_crm',
+            'wbi_enable_custom_fields','wbi_enable_employees','wbi_enable_pos','wbi_enable_offline_payments',
+            'wbi_enable_promo_pricing','wbi_enable_mobapp_shipping','wbi_enable_multi_shipping',
+            'wbi_enable_public_wholesale_quick_order',
+        );
+    }
+
+    private function is_corrupted_module_settings_array( $settings ) {
+        if ( ! is_array( $settings ) ) {
+            return true;
+        }
+
+        $toggle_keys = $this->get_module_toggle_keys();
+        foreach ( $toggle_keys as $key ) {
+            if ( array_key_exists( $key, $settings ) ) {
+                return false;
+            }
+        }
+
+        $corruption_markers = array(
+            'wbi_b2b_auto_approve',
+            'wbi_b2b_enable_minimum_order_amount',
+            'wbi_b2b_enable_hide_prices',
+            'wbi_b2b_minimum_order',
+            'wbi_b2b_hidden_price_text',
+            'wbi_b2b_hidden_price_url',
+            'wbi_b2b_notification_email',
+            'wbi_b2b_authorized_roles',
+            'wbi_pwoq_variant_selector_mode',
+            'wbi_pwoq_show_sku',
+            'wbi_pwoq_show_dimensions',
+            'wbi_pwoq_show_color_count',
+            'wbi_pwoq_enforce_min_qty',
+            'wbi_pwoq_enforce_pack_multiples',
+            'wbi_pwoq_global_add_enabled',
+            'wbi_pwoq_initial_qty_zero',
+            'wbi_pwoq_hide_native_add_to_cart',
+            'wbi_pwoq_force_reload_on_fragment_fail',
+        );
+
+        foreach ( $corruption_markers as $marker ) {
+            if ( array_key_exists( $marker, $settings ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function persist_module_settings_backup( $settings ) {
+        if ( is_array( $settings ) ) {
+            update_option( self::MODULE_SETTINGS_BACKUP_OPTION, $settings, false );
+            set_transient( self::MODULE_SETTINGS_BACKUP_TRANSIENT, $settings, DAY_IN_SECONDS * 30 );
+        }
+    }
+
+    private function log_module_settings_event( $message ) {
+        if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+            error_log( '[WBI Suite] ' . $message );
+        }
+    }
+
+    private function build_recovered_module_settings( $current_settings ) {
+        $settings = is_array( $current_settings ) ? $current_settings : array();
+
+        $inferred_toggles = array(
+            'wbi_enable_b2b' => ! empty( $settings['wbi_b2b_enable_hide_prices'] )
+                || ! empty( $settings['wbi_b2b_enable_minimum_order_amount'] )
+                || ! empty( $settings['wbi_b2b_auto_approve'] )
+                || ! empty( $settings['wbi_b2b_hidden_price_text'] )
+                || ! empty( $settings['wbi_b2b_hidden_price_url'] )
+                || ! empty( $settings['wbi_b2b_authorized_roles'] ),
+            'wbi_enable_public_wholesale_quick_order' => array_key_exists( 'wbi_pwoq_variant_selector_mode', $settings )
+                || array_key_exists( 'wbi_pwoq_show_sku', $settings )
+                || array_key_exists( 'wbi_pwoq_show_dimensions', $settings )
+                || array_key_exists( 'wbi_pwoq_show_color_count', $settings )
+                || array_key_exists( 'wbi_pwoq_enforce_min_qty', $settings )
+                || array_key_exists( 'wbi_pwoq_enforce_pack_multiples', $settings )
+                || array_key_exists( 'wbi_pwoq_global_add_enabled', $settings )
+                || array_key_exists( 'wbi_pwoq_initial_qty_zero', $settings )
+                || array_key_exists( 'wbi_pwoq_hide_native_add_to_cart', $settings )
+                || array_key_exists( 'wbi_pwoq_force_reload_on_fragment_fail', $settings ),
+        );
+
+        foreach ( $inferred_toggles as $toggle_key => $is_active ) {
+            if ( ! array_key_exists( $toggle_key, $settings ) ) {
+                $settings[ $toggle_key ] = $is_active ? 1 : 0;
+            }
+        }
+
+        return $settings;
+    }
+
+    private function maybe_recover_corrupted_module_states() {
+        if ( get_option( self::MODULE_SETTINGS_RECOVERY_OPTION ) === self::MODULE_SETTINGS_RECOVERY_VERSION ) {
+            return;
+        }
+
+        $current_settings = get_option( self::MODULE_SETTINGS_OPTION, array() );
+        if ( ! $this->is_corrupted_module_settings_array( $current_settings ) ) {
+            update_option( self::MODULE_SETTINGS_RECOVERY_OPTION, self::MODULE_SETTINGS_RECOVERY_VERSION, false );
+            return;
+        }
+
+        $backup_settings = get_option( self::MODULE_SETTINGS_BACKUP_OPTION, null );
+        if ( ! is_array( $backup_settings ) ) {
+            $backup_settings = get_transient( self::MODULE_SETTINGS_BACKUP_TRANSIENT );
+        }
+
+        if ( is_array( $backup_settings ) && ! $this->is_corrupted_module_settings_array( $backup_settings ) ) {
+            update_option( self::MODULE_SETTINGS_OPTION, $backup_settings );
+            $this->options = $backup_settings;
+            $this->persist_module_settings_backup( $backup_settings );
+            update_option( self::MODULE_SETTINGS_RECOVERY_OPTION, self::MODULE_SETTINGS_RECOVERY_VERSION, false );
+            $this->log_module_settings_event( 'Module settings recovery applied from backup after B2B refactor corruption.' );
+            return;
+        }
+
+        $recovered_settings = $this->build_recovered_module_settings( $current_settings );
+        update_option( self::MODULE_SETTINGS_OPTION, $recovered_settings );
+        $this->options = $recovered_settings;
+        $this->persist_module_settings_backup( $recovered_settings );
+        update_option( self::MODULE_SETTINGS_RECOVERY_OPTION, self::MODULE_SETTINGS_RECOVERY_VERSION, false );
+        $this->log_module_settings_event( 'Module settings recovery reconstructed partial toggle state because no valid backup was available.' );
+    }
+
+    private function load_module_settings() {
+        $settings = get_option( self::MODULE_SETTINGS_OPTION, array() );
+
+        if ( is_array( $settings ) ) {
+            if ( ! $this->is_corrupted_module_settings_array( $settings ) ) {
+                $this->persist_module_settings_backup( $settings );
+            }
+            return $settings;
+        }
+
+        $backup_settings = get_option( self::MODULE_SETTINGS_BACKUP_OPTION, null );
+        if ( ! is_array( $backup_settings ) ) {
+            $backup_settings = get_transient( self::MODULE_SETTINGS_BACKUP_TRANSIENT );
+        }
+
+        if ( is_array( $backup_settings ) ) {
+            $this->log_module_settings_event( 'Invalid module settings option detected; loading cached backup.' );
+            return $backup_settings;
+        }
+
+        $this->log_module_settings_event( 'Invalid module settings option detected; loading safe empty fallback.' );
+        return array();
     }
 
     public function load_modules() {
@@ -697,52 +860,85 @@ class WBI_Suite_Loader {
      * @return array Sanitized array.
      */
     public function sanitize_modules_settings( $input ) {
-        $raw_input = is_array( $input ) ? $input : array();
-        $input     = array();
+        $raw_input    = is_array( $input ) ? $input : array();
+        $current      = is_array( $this->options ) ? $this->options : get_option( self::MODULE_SETTINGS_OPTION, array() );
+        $current      = is_array( $current ) ? $current : array();
+        $sanitized    = $current;
+        $is_full_form = ! empty( $raw_input['_wbi_full_settings_form'] );
 
-        // Sanitize B2B auto-approve checkbox
-        $input['wbi_b2b_auto_approve']                  = ! empty( $raw_input['wbi_b2b_auto_approve'] ) ? 1 : 0;
-        $input['wbi_b2b_enable_minimum_order_amount']  = ! empty( $raw_input['wbi_b2b_enable_minimum_order_amount'] ) ? 1 : 0;
-        $input['wbi_b2b_enable_hide_prices']           = ! empty( $raw_input['wbi_b2b_enable_hide_prices'] ) ? 1 : 0;
-        // Sanitize PWOQ checkboxes (absent from POST when unchecked → explicitly set to 0)
-        $input['wbi_enable_public_wholesale_quick_order'] = ! empty( $input['wbi_enable_public_wholesale_quick_order'] ) ? 1 : 0;
-        $input['wbi_pwoq_show_sku']               = ! empty( $input['wbi_pwoq_show_sku'] ) ? 1 : 0;
-        $input['wbi_pwoq_show_dimensions']        = ! empty( $input['wbi_pwoq_show_dimensions'] ) ? 1 : 0;
-        $input['wbi_pwoq_show_color_count']       = ! empty( $input['wbi_pwoq_show_color_count'] ) ? 1 : 0;
-        $input['wbi_pwoq_enforce_min_qty']        = ! empty( $input['wbi_pwoq_enforce_min_qty'] ) ? 1 : 0;
-        $input['wbi_pwoq_enforce_pack_multiples'] = ! empty( $input['wbi_pwoq_enforce_pack_multiples'] ) ? 1 : 0;
-        $input['wbi_pwoq_global_add_enabled']           = ! empty( $input['wbi_pwoq_global_add_enabled'] ) ? 1 : 0;
-        $input['wbi_pwoq_initial_qty_zero']             = ! empty( $input['wbi_pwoq_initial_qty_zero'] ) ? 1 : 0;
-        $input['wbi_pwoq_hide_native_add_to_cart']      = ! empty( $input['wbi_pwoq_hide_native_add_to_cart'] ) ? 1 : 0;
-        $input['wbi_pwoq_force_reload_on_fragment_fail'] = ! empty( $input['wbi_pwoq_force_reload_on_fragment_fail'] ) ? 1 : 0;
-        if ( isset( $input['wbi_pwoq_variant_selector_mode'] ) ) {
-            $input['wbi_pwoq_variant_selector_mode'] = in_array( $input['wbi_pwoq_variant_selector_mode'], array( 'inline', 'modal' ), true )
-                ? $input['wbi_pwoq_variant_selector_mode']
+        unset( $raw_input['_wbi_full_settings_form'] );
+
+        $checkbox_keys = array_merge(
+            $this->get_module_toggle_keys(),
+            array(
+                'wbi_b2b_auto_approve',
+                'wbi_b2b_enable_minimum_order_amount',
+                'wbi_b2b_enable_hide_prices',
+                'wbi_pwoq_show_sku',
+                'wbi_pwoq_show_dimensions',
+                'wbi_pwoq_show_color_count',
+                'wbi_pwoq_enforce_min_qty',
+                'wbi_pwoq_enforce_pack_multiples',
+                'wbi_pwoq_global_add_enabled',
+                'wbi_pwoq_initial_qty_zero',
+                'wbi_pwoq_hide_native_add_to_cart',
+                'wbi_pwoq_force_reload_on_fragment_fail',
+            )
+        );
+
+        foreach ( $checkbox_keys as $key ) {
+            if ( array_key_exists( $key, $raw_input ) ) {
+                $sanitized[ $key ] = ! empty( $raw_input[ $key ] ) ? 1 : 0;
+            } elseif ( $is_full_form ) {
+                $sanitized[ $key ] = 0;
+            }
+        }
+
+        if ( array_key_exists( 'wbi_pwoq_variant_selector_mode', $raw_input ) ) {
+            $sanitized['wbi_pwoq_variant_selector_mode'] = in_array( $raw_input['wbi_pwoq_variant_selector_mode'], array( 'inline', 'modal' ), true )
+                ? $raw_input['wbi_pwoq_variant_selector_mode']
                 : 'modal';
         }
-        $input['wbi_b2b_minimum_order'] = $this->sanitize_decimal_setting( $raw_input['wbi_b2b_minimum_order'] ?? 0 );
-        $input['wbi_b2b_hidden_price_text'] = isset( $raw_input['wbi_b2b_hidden_price_text'] )
-            ? sanitize_text_field( $raw_input['wbi_b2b_hidden_price_text'] )
-            : 'PRECIO MAYORISTA OCULTO';
-        // Sanitize B2B URL field specifically
-        if ( isset( $raw_input['wbi_b2b_hidden_price_url'] ) ) {
-            $input['wbi_b2b_hidden_price_url'] = esc_url_raw( $raw_input['wbi_b2b_hidden_price_url'] );
-        } else {
-            $input['wbi_b2b_hidden_price_url'] = '';
+
+        if ( array_key_exists( 'wbi_b2b_minimum_order', $raw_input ) ) {
+            $sanitized['wbi_b2b_minimum_order'] = $this->sanitize_decimal_setting( $raw_input['wbi_b2b_minimum_order'] );
         }
-        // Sanitize B2B notification email
-        if ( isset( $raw_input['wbi_b2b_notification_email'] ) ) {
-            $input['wbi_b2b_notification_email'] = sanitize_email( $raw_input['wbi_b2b_notification_email'] );
-        } else {
-            $input['wbi_b2b_notification_email'] = '';
+
+        if ( array_key_exists( 'wbi_b2b_hidden_price_text', $raw_input ) ) {
+            $sanitized['wbi_b2b_hidden_price_text'] = sanitize_text_field( $raw_input['wbi_b2b_hidden_price_text'] );
         }
-        // Sanitize B2B authorized roles (array of role slugs)
-        if ( isset( $raw_input['wbi_b2b_authorized_roles'] ) && is_array( $raw_input['wbi_b2b_authorized_roles'] ) ) {
-            $input['wbi_b2b_authorized_roles'] = array_map( 'sanitize_key', $raw_input['wbi_b2b_authorized_roles'] );
-        } else {
-            $input['wbi_b2b_authorized_roles'] = array();
+
+        if ( array_key_exists( 'wbi_b2b_hidden_price_url', $raw_input ) ) {
+            $sanitized['wbi_b2b_hidden_price_url'] = esc_url_raw( $raw_input['wbi_b2b_hidden_price_url'] );
         }
-        return $input;
+
+        if ( array_key_exists( 'wbi_b2b_notification_email', $raw_input ) ) {
+            $sanitized['wbi_b2b_notification_email'] = sanitize_email( $raw_input['wbi_b2b_notification_email'] );
+        }
+
+        if ( array_key_exists( 'wbi_b2b_authorized_roles', $raw_input ) && is_array( $raw_input['wbi_b2b_authorized_roles'] ) ) {
+            $sanitized['wbi_b2b_authorized_roles'] = array_map( 'sanitize_key', $raw_input['wbi_b2b_authorized_roles'] );
+        } elseif ( $is_full_form ) {
+            $sanitized['wbi_b2b_authorized_roles'] = array();
+        }
+
+        foreach ( $raw_input as $key => $value ) {
+            if ( 0 === strpos( $key, 'wbi_permissions_' ) ) {
+                $sanitized[ $key ] = is_array( $value ) ? array_map( 'sanitize_key', $value ) : array();
+            }
+        }
+
+        if ( $this->is_corrupted_module_settings_array( $sanitized ) ) {
+            add_settings_error( 'wbi_modules_settings', 'wbi_modules_invalid_payload', __( 'No se pudo guardar la configuración por una estructura inválida detectada.', 'wbi-suite' ), 'error' );
+            $this->options = $current;
+            return $current;
+        }
+
+        $this->options = $sanitized;
+        $this->persist_module_settings_backup( $sanitized );
+        add_settings_error( 'wbi_modules_settings', 'wbi_modules_saved', __( 'Configuración guardada.', 'wbi-suite' ), 'updated' );
+
+        return $sanitized;
     }
 
     public function register_settings() {
@@ -1150,18 +1346,7 @@ class WBI_Suite_Loader {
 
         $opts          = $this->options ?: array();
         $active_count  = 0;
-        $toggle_keys   = array(
-            'wbi_enable_b2b','wbi_enable_data','wbi_enable_dashboard','wbi_enable_barcode',
-            'wbi_enable_picking','wbi_enable_costs','wbi_enable_suppliers','wbi_enable_purchase','wbi_enable_scoring',
-            'wbi_enable_remitos','wbi_enable_pricelists','wbi_enable_taxes','wbi_enable_cashflow',
-            'wbi_enable_whatsapp','wbi_enable_invoice','wbi_enable_notifications','wbi_enable_api',
-            'wbi_enable_abandoned_carts','wbi_enable_checkout_validator',
-            'wbi_enable_accounting_reports','wbi_enable_credit_notes',
-            'wbi_enable_email_marketing','wbi_enable_reorder','wbi_enable_crm',
-            'wbi_enable_custom_fields','wbi_enable_employees','wbi_enable_pos',
-            'wbi_enable_offline_payments','wbi_enable_promo_pricing','wbi_enable_mobapp_shipping','wbi_enable_multi_shipping',
-            'wbi_enable_public_wholesale_quick_order',
-        );
+        $toggle_keys   = $this->get_module_toggle_keys();
         $total_modules = count( $toggle_keys );
         foreach ( $toggle_keys as $k ) {
             if ( ! empty( $opts[ $k ] ) ) $active_count++;
@@ -1238,6 +1423,8 @@ class WBI_Suite_Loader {
 
             <form method="post" action="options.php">
                 <?php settings_fields( 'wbi_group' ); ?>
+                <?php settings_errors( 'wbi_modules_settings' ); ?>
+                <input type="hidden" name="wbi_modules_settings[_wbi_full_settings_form]" value="1">
 
                 <?php foreach ( $groups as $group_key => $group ) : ?>
                     <?php if ( empty( $group['modules'] ) ) continue; ?>
