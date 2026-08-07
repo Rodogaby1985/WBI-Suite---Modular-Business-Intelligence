@@ -16,15 +16,32 @@
 
 defined( "ABSPATH" ) or die( "¡sin trampas!" );
 
+// WBI HOTFIX: detect legacy MOBAPP plugin conflict and prevent fatal redeclaration
+$wbi_mobapp_is_primary = ! function_exists( 'mobapp_setup_schedule' );
+if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+    if ( $wbi_mobapp_is_primary ) {
+        error_log( '[WBI MobApp] Module is primary: defining functions and hooks.' );
+    } else {
+        error_log( '[WBI MobApp] Legacy MOBAPP plugin detected: skipping duplicate function/hook registration.' );
+    }
+}
+
 /* ========== MEJORA: PROTECCIÓN FLUSH REDIS/CACHE ========== */
-add_action( 'wp', 'mobapp_setup_schedule' );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'wp', 'mobapp_setup_schedule' );
+}
+if ( ! function_exists( 'mobapp_setup_schedule' ) ) {
 function mobapp_setup_schedule() {
     if ( ! wp_next_scheduled( 'mobapp_daily_event' ) ) {
         wp_schedule_event( time(), 'hourly', 'mobapp_daily_event');
     }
 }
-add_action( 'mobapp_daily_event', 'mobapp_do_this_daily' );
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'mobapp_daily_event', 'mobapp_do_this_daily' );
+}
 
+if ( ! function_exists( 'mobapp_do_this_daily' ) ) {
 function mobapp_do_this_daily() {
     $csvs = array(
         array('url' => 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSm0Q6LN6JIWXLXyX6OJx6YKfdL1PZ1ZXbXYJ8k6TLeKuon1VSiE5mFppvbK3v4-kX5SSOPteA7dzq6/pub?gid=506491561&single=true&output=csv', 'transient' => 'datos_csv_andreani_dom'),
@@ -42,12 +59,18 @@ function mobapp_do_this_daily() {
         if ($csv_data) set_transient($csv['transient'], $csv_data, DAY_IN_SECONDS);
     }
 }
+}
+if ( ! function_exists( 'eliminar_cron_diario' ) ) {
 function eliminar_cron_diario() {
     $timestamp = wp_next_scheduled('mobapp_daily_event');
     wp_unschedule_event($timestamp, 'mobapp_daily_event');
 }
-register_deactivation_hook(__FILE__, 'eliminar_cron_diario');
+}
+if ( $wbi_mobapp_is_primary ) {
+    register_deactivation_hook(__FILE__, 'eliminar_cron_diario');
+}
 
+if ( ! function_exists( 'file_get_contents_curl' ) ) {
 function file_get_contents_curl($url) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_AUTOREFERER, TRUE);
@@ -59,6 +82,8 @@ function file_get_contents_curl($url) {
     curl_close($ch);
     return $data;
 }
+}
+if ( ! function_exists( 'mobapp_get_tarifa_csv' ) ) {
 function mobapp_get_tarifa_csv($transient_name, $url) {
     $csv_data = get_transient($transient_name);
     if (!$csv_data) {
@@ -67,8 +92,10 @@ function mobapp_get_tarifa_csv($transient_name, $url) {
     }
     return $csv_data ? $csv_data : '';
 }
+}
 /* ========== FIN MEJORA REDIS ========== */
 
+if ( ! function_exists( 'ocultar_envios' ) ) {
 function ocultar_envios($rates, $package) {
     $zonas = array();
     $delivery_zones = WC_Shipping_Zones::get_zones();
@@ -96,9 +123,13 @@ function ocultar_envios($rates, $package) {
     }
     return $rates;
 }
-add_filter('woocommerce_package_rates', 'ocultar_envios', 10, 2);
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_filter('woocommerce_package_rates', 'ocultar_envios', 10, 2);
+}
 
 /* ========== MEJORA: DESTACADO EN NEGRITA Y ICONOS EN EL ADMIN ========== */
+if ( ! function_exists( 'mobapp_add_common_fields' ) ) {
 function mobapp_add_common_fields(&$form_fields) {
     $form_fields['featured'] = array(
         'title'   => esc_html__('Destacar este método', 'mobapp-envios'),
@@ -114,6 +145,8 @@ function mobapp_add_common_fields(&$form_fields) {
         'desc_tip'    => true
     );
 }
+}
+if ( ! function_exists( 'mobapp_append_featured_tooltip' ) ) {
 function mobapp_append_featured_tooltip(&$titulo, $method_object) {
     $featured = $method_object->get_option('featured');
     $featured_text = $method_object->get_option('featured_text');
@@ -122,17 +155,23 @@ function mobapp_append_featured_tooltip(&$titulo, $method_object) {
         $titulo .= ' ' . $featured_text;
     }
 }
+}
 /* ========== FIN MEJORA NEGRITA E ICONOS ========== */
 
 /* Permitir HTML en el label en el checkout */
-add_filter('woocommerce_shipping_rate_label', function($label, $rate) {
-    return $label;
-}, 10, 2);
-add_filter('woocommerce_cart_shipping_method_full_label', function($label, $method) {
-    return $label;
-}, 10, 2);
+if ( $wbi_mobapp_is_primary ) {
+    add_filter('woocommerce_shipping_rate_label', function($label, $rate) {
+        return $label;
+    }, 10, 2);
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_filter('woocommerce_cart_shipping_method_full_label', function($label, $method) {
+        return $label;
+    }, 10, 2);
+}
 
 /* ========== NUEVO: FUNCIONES GENERALES PARA EMBALAJE ========== */
+if ( ! function_exists( 'mobapp_set_packing_session' ) ) {
 function mobapp_set_packing_session($method_id, $base, $packing, $label, $total) {
     if ( function_exists('WC') && WC()->session ) {
         WC()->session->set('mobapp_packing', array(
@@ -144,22 +183,30 @@ function mobapp_set_packing_session($method_id, $base, $packing, $label, $total)
         ));
     }
 }
+}
+if ( ! function_exists( 'mobapp_get_packing_session' ) ) {
 function mobapp_get_packing_session() {
     if ( function_exists('WC') && WC()->session ) {
         return WC()->session->get('mobapp_packing');
     }
     return null;
 }
+}
+if ( ! function_exists( 'mobapp_clear_packing_session' ) ) {
 function mobapp_clear_packing_session() {
     if ( function_exists('WC') && WC()->session ) {
         WC()->session->set('mobapp_packing', null);
     }
 }
+}
 
 /* ========== SPLIT EMBALAJE MEJORADO ========== */
 
 // Reemplaza esta función en main.php (hook woocommerce_checkout_update_order_meta)
-add_action( 'woocommerce_checkout_update_order_meta', 'mobapp_split_packing_into_order_meta', 20, 2 );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_checkout_update_order_meta', 'mobapp_split_packing_into_order_meta', 20, 2 );
+}
+if ( ! function_exists( 'mobapp_split_packing_into_order_meta' ) ) {
 function mobapp_split_packing_into_order_meta( $order_id, $data ) {
     // Intentar primero obtener packing desde la sesión (compatibilidad)
     $packing_session = mobapp_get_packing_session();
@@ -242,15 +289,23 @@ function mobapp_split_packing_into_order_meta( $order_id, $data ) {
     // No tocamos shipping_item->set_total ni añadimos fees visibles para el cliente:
     // esto evita que aparezca el item en thank-you/emails. Las metas quedan para backend/PDF.
 }
+}
 /* limpiar la sesión */
-add_action( 'woocommerce_checkout_order_processed', 'mobapp_clear_packing_session_on_processed', 10, 1 );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_checkout_order_processed', 'mobapp_clear_packing_session_on_processed', 10, 1 );
+}
+if ( ! function_exists( 'mobapp_clear_packing_session_on_processed' ) ) {
 function mobapp_clear_packing_session_on_processed( $order_id ) {
     mobapp_clear_packing_session();
+}
 }
 
 /* añadir fila "Costo embalaje" en totales */
 // Reemplaza la función mobapp_add_packing_row_to_order_totals por esta (solo muestra en admin)
-add_filter( 'woocommerce_get_order_item_totals', 'mobapp_add_packing_row_to_order_totals', 10, 3 );
+if ( $wbi_mobapp_is_primary ) {
+    add_filter( 'woocommerce_get_order_item_totals', 'mobapp_add_packing_row_to_order_totals', 10, 3 );
+}
+if ( ! function_exists( 'mobapp_add_packing_row_to_order_totals' ) ) {
 function mobapp_add_packing_row_to_order_totals( $total_rows, $order, $tax_display ) {
     // Mostrar esta fila SOLO EN EL ADMIN (backend). Evitamos que se muestre en emails/thank-you.
     if ( ! is_admin() ) {
@@ -336,11 +391,15 @@ function mobapp_add_packing_row_to_order_totals( $total_rows, $order, $tax_displ
 
     return $new_rows;
 }
+}
 
 /* ========== MÉTODOS DE ENVÍO ========== */
 
 /* ANDREANI DOMICILIO */
-add_action( 'woocommerce_shipping_init', 'mobapp_andreani_domicilio_envios_init' );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_shipping_init', 'mobapp_andreani_domicilio_envios_init' );
+}
+if ( ! function_exists( 'mobapp_andreani_domicilio_envios_init' ) ) {
 function mobapp_andreani_domicilio_envios_init() {
     if ( ! class_exists( 'WC_MOBAPP_ANDREANI_DOMICILIO_ENVIOS' ) ) {
         class WC_MOBAPP_ANDREANI_DOMICILIO_ENVIOS extends WC_Shipping_Method{
@@ -449,14 +508,22 @@ function mobapp_andreani_domicilio_envios_init() {
         }
     }
 }
-add_filter('woocommerce_shipping_methods','agregar_mobapp_andreani_domicilio_envios_method');
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_filter('woocommerce_shipping_methods','agregar_mobapp_andreani_domicilio_envios_method');
+}
+if ( ! function_exists( 'agregar_mobapp_andreani_domicilio_envios_method' ) ) {
 function agregar_mobapp_andreani_domicilio_envios_method( $methods ){
     $methods['mobapp-andreani-domicilio-envios'] = 'WC_MOBAPP_ANDREANI_DOMICILIO_ENVIOS';
     return $methods;
 }
+}
 
 /* ANDREANI SUCURSAL */
-add_action( 'woocommerce_shipping_init', 'mobapp_andreani_sucursal_envios_init' );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_shipping_init', 'mobapp_andreani_sucursal_envios_init' );
+}
+if ( ! function_exists( 'mobapp_andreani_sucursal_envios_init' ) ) {
 function mobapp_andreani_sucursal_envios_init() {
     if ( ! class_exists( 'WC_MOBAPP_ANDREANI_SUCURSAL_ENVIOS' ) ) {
         class WC_MOBAPP_ANDREANI_SUCURSAL_ENVIOS extends WC_Shipping_Method{
@@ -564,14 +631,22 @@ function mobapp_andreani_sucursal_envios_init() {
         }
     }
 }
-add_filter('woocommerce_shipping_methods','agregar_mobapp_andreani_sucursal_envios_method');
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_filter('woocommerce_shipping_methods','agregar_mobapp_andreani_sucursal_envios_method');
+}
+if ( ! function_exists( 'agregar_mobapp_andreani_sucursal_envios_method' ) ) {
 function agregar_mobapp_andreani_sucursal_envios_method( $methods ){
     $methods['mobapp-andreani-sucursal-envios'] = 'WC_MOBAPP_ANDREANI_SUCURSAL_ENVIOS';
     return $methods;
 }
+}
 
 /* CORREO ARGENTINO DOMICILIO */
-add_action( 'woocommerce_shipping_init', 'mobapp_correoargentino_domicilio_envios_init' );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_shipping_init', 'mobapp_correoargentino_domicilio_envios_init' );
+}
+if ( ! function_exists( 'mobapp_correoargentino_domicilio_envios_init' ) ) {
 function mobapp_correoargentino_domicilio_envios_init() {
     if ( ! class_exists( 'WC_MOBAPP_CORREOARGENTINO_DOMICILIO_ENVIOS' ) ) {
         class WC_MOBAPP_CORREOARGENTINO_DOMICILIO_ENVIOS extends WC_Shipping_Method{
@@ -679,14 +754,22 @@ function mobapp_correoargentino_domicilio_envios_init() {
         }
     }
 }
-add_filter('woocommerce_shipping_methods','agregar_mobapp_correoargentino_domicilio_envios_method');
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_filter('woocommerce_shipping_methods','agregar_mobapp_correoargentino_domicilio_envios_method');
+}
+if ( ! function_exists( 'agregar_mobapp_correoargentino_domicilio_envios_method' ) ) {
 function agregar_mobapp_correoargentino_domicilio_envios_method( $methods ){
     $methods['mobapp-correoargentino-domicilio-envios'] = 'WC_MOBAPP_CORREOARGENTINO_DOMICILIO_ENVIOS';
     return $methods;
 }
+}
 
 /* CORREO ARGENTINO SUCURSAL */
-add_action( 'woocommerce_shipping_init', 'mobapp_correoargentino_sucursal_envios_init' );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_shipping_init', 'mobapp_correoargentino_sucursal_envios_init' );
+}
+if ( ! function_exists( 'mobapp_correoargentino_sucursal_envios_init' ) ) {
 function mobapp_correoargentino_sucursal_envios_init() {
     if ( ! class_exists( 'WC_MOBAPP_CORREOARGENTINO_SUCURSAL_ENVIOS' ) ) {
         class WC_MOBAPP_CORREOARGENTINO_SUCURSAL_ENVIOS extends WC_Shipping_Method{
@@ -794,14 +877,22 @@ function mobapp_correoargentino_sucursal_envios_init() {
         }
     }
 }
-add_filter('woocommerce_shipping_methods','agregar_mobapp_correoargentino_sucursal_envios_method');
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_filter('woocommerce_shipping_methods','agregar_mobapp_correoargentino_sucursal_envios_method');
+}
+if ( ! function_exists( 'agregar_mobapp_correoargentino_sucursal_envios_method' ) ) {
 function agregar_mobapp_correoargentino_sucursal_envios_method( $methods ){
     $methods['mobapp-correoargentino-sucursal-envios'] = 'WC_MOBAPP_CORREOARGENTINO_SUCURSAL_ENVIOS';
     return $methods;
 }
+}
 
 /* OCA DOMICILIO */
-add_action( 'woocommerce_shipping_init', 'mobapp_oca_domicilio_envios_init' );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_shipping_init', 'mobapp_oca_domicilio_envios_init' );
+}
+if ( ! function_exists( 'mobapp_oca_domicilio_envios_init' ) ) {
 function mobapp_oca_domicilio_envios_init() {
     if ( ! class_exists( 'WC_MOBAPP_OCA_DOMICILIO_ENVIOS' ) ) {
         class WC_MOBAPP_OCA_DOMICILIO_ENVIOS extends WC_Shipping_Method{
@@ -909,14 +1000,22 @@ function mobapp_oca_domicilio_envios_init() {
         }
     }
 }
-add_filter('woocommerce_shipping_methods','agregar_mobapp_oca_domicilio_envios_method');
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_filter('woocommerce_shipping_methods','agregar_mobapp_oca_domicilio_envios_method');
+}
+if ( ! function_exists( 'agregar_mobapp_oca_domicilio_envios_method' ) ) {
 function agregar_mobapp_oca_domicilio_envios_method( $methods ){
     $methods['mobapp-oca-domicilio-envios'] = 'WC_MOBAPP_OCA_DOMICILIO_ENVIOS';
     return $methods;
 }
+}
 
 /* OCA SUCURSAL */
-add_action( 'woocommerce_shipping_init', 'mobapp_oca_sucursal_envios_init' );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_shipping_init', 'mobapp_oca_sucursal_envios_init' );
+}
+if ( ! function_exists( 'mobapp_oca_sucursal_envios_init' ) ) {
 function mobapp_oca_sucursal_envios_init() {
     if ( ! class_exists( 'WC_MOBAPP_OCA_SUCURSAL_ENVIOS' ) ) {
         class WC_MOBAPP_OCA_SUCURSAL_ENVIOS extends WC_Shipping_Method{
@@ -1024,14 +1123,22 @@ function mobapp_oca_sucursal_envios_init() {
         }
     }
 }
-add_filter('woocommerce_shipping_methods','agregar_mobapp_oca_sucursal_envios_method');
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_filter('woocommerce_shipping_methods','agregar_mobapp_oca_sucursal_envios_method');
+}
+if ( ! function_exists( 'agregar_mobapp_oca_sucursal_envios_method' ) ) {
 function agregar_mobapp_oca_sucursal_envios_method( $methods ){
     $methods['mobapp-oca-sucursal-envios'] = 'WC_MOBAPP_OCA_SUCURSAL_ENVIOS';
     return $methods;
 }
+}
 
 /* URBANO DOMICILIO */
-add_action( 'woocommerce_shipping_init', 'mobapp_urbano_domicilio_envios_init' );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_shipping_init', 'mobapp_urbano_domicilio_envios_init' );
+}
+if ( ! function_exists( 'mobapp_urbano_domicilio_envios_init' ) ) {
 function mobapp_urbano_domicilio_envios_init() {
     if ( ! class_exists( 'WC_MOBAPP_URBANO_DOMICILIO_ENVIOS' ) ) {
         class WC_MOBAPP_URBANO_DOMICILIO_ENVIOS extends WC_Shipping_Method{
@@ -1139,14 +1246,22 @@ function mobapp_urbano_domicilio_envios_init() {
         }
     }
 }
-add_filter('woocommerce_shipping_methods','agregar_mobapp_urbano_domicilio_envios_method');
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_filter('woocommerce_shipping_methods','agregar_mobapp_urbano_domicilio_envios_method');
+}
+if ( ! function_exists( 'agregar_mobapp_urbano_domicilio_envios_method' ) ) {
 function agregar_mobapp_urbano_domicilio_envios_method( $methods ){
     $methods['mobapp-urbano-domicilio-envios'] = 'WC_MOBAPP_URBANO_DOMICILIO_ENVIOS';
     return $methods;
 }
+}
 
 /* MOBAPP FLASH DOMICILIO */
-add_action( 'woocommerce_shipping_init', 'mobapp_flash_domicilio_envios_init' );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_shipping_init', 'mobapp_flash_domicilio_envios_init' );
+}
+if ( ! function_exists( 'mobapp_flash_domicilio_envios_init' ) ) {
 function mobapp_flash_domicilio_envios_init() {
     if ( ! class_exists( 'WC_MOBAPP_FLASH_DOMICILIO_ENVIOS' ) ) {
         class WC_MOBAPP_FLASH_DOMICILIO_ENVIOS extends WC_Shipping_Method{
@@ -1300,10 +1415,15 @@ function mobapp_flash_domicilio_envios_init() {
         }
     }
 }
-add_filter('woocommerce_shipping_methods','agregar_mobapp_flash_domicilio_envios_method');
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_filter('woocommerce_shipping_methods','agregar_mobapp_flash_domicilio_envios_method');
+}
+if ( ! function_exists( 'agregar_mobapp_flash_domicilio_envios_method' ) ) {
 function agregar_mobapp_flash_domicilio_envios_method( $methods ){
     $methods['mobapp-flash-domicilio-envios'] = 'WC_MOBAPP_FLASH_DOMICILIO_ENVIOS';
     return $methods;
+}
 }
 
 /* ========== BLOQUE FORZADO DE GUARDADO DE METAS (fallbacks) ========== */
@@ -1328,7 +1448,10 @@ if ( ! function_exists( 'mobapp_write_packing_meta_to_order' ) ) {
     }
 }
 
-add_action( 'woocommerce_checkout_create_order', 'mobapp_force_save_on_create_order', 25, 2 );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_checkout_create_order', 'mobapp_force_save_on_create_order', 25, 2 );
+}
+if ( ! function_exists( 'mobapp_force_save_on_create_order' ) ) {
 function mobapp_force_save_on_create_order( $order, $data ) {
     $order_id = $order->get_id();
     $packing = null;
@@ -1361,8 +1484,12 @@ function mobapp_force_save_on_create_order( $order, $data ) {
         }
     }
 }
+}
 
-add_action( 'save_post_shop_order', 'mobapp_force_save_on_admin_save', 25, 3 );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'save_post_shop_order', 'mobapp_force_save_on_admin_save', 25, 3 );
+}
+if ( ! function_exists( 'mobapp_force_save_on_admin_save' ) ) {
 function mobapp_force_save_on_admin_save( $post_id, $post, $update ) {
     if ( wp_is_post_revision( $post_id ) ) return;
     if ( get_post_meta( $post_id, '_mobapp_packing_formatted', true ) ) return;
@@ -1378,8 +1505,12 @@ function mobapp_force_save_on_admin_save( $post_id, $post, $update ) {
         }
     }
 }
+}
 
-add_action( 'woocommerce_checkout_order_processed', 'mobapp_force_save_on_processed', 20, 1 );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_checkout_order_processed', 'mobapp_force_save_on_processed', 20, 1 );
+}
+if ( ! function_exists( 'mobapp_force_save_on_processed' ) ) {
 function mobapp_force_save_on_processed( $order_id ) {
     if ( get_post_meta( $order_id, '_mobapp_packing_formatted', true ) ) return;
     $packing = null;
@@ -1393,22 +1524,32 @@ function mobapp_force_save_on_processed( $order_id ) {
         mobapp_write_packing_meta_to_order( $order_id, $packing );
     }
 }
+}
 
 /* debug metabox */
-add_action('add_meta_boxes', function(){
-    add_meta_box('mobapp_packing_meta','Mobapp Packing','mobapp_packing_meta_box','shop_order','side','high');
-});
+if ( $wbi_mobapp_is_primary ) {
+    add_action('add_meta_boxes', function(){
+        add_meta_box('mobapp_packing_meta','Mobapp Packing','mobapp_packing_meta_box','shop_order','side','high');
+    });
+}
+if ( ! function_exists( 'mobapp_packing_meta_box' ) ) {
 function mobapp_packing_meta_box($post){
     echo '<p><strong>_mobapp_packing_formatted</strong>: '.esc_html(get_post_meta($post->ID,'_mobapp_packing_formatted',true)).'</p>';
     echo '<p><strong>_mobapp_packing_amount</strong>: '.esc_html(get_post_meta($post->ID,'_mobapp_packing_amount',true)).'</p>';
     echo '<p><strong>_mobapp_packing_label</strong>: '.esc_html(get_post_meta($post->ID,'_mobapp_packing_label',true)).'</p>';
 }
+}
 
 // --- Mostrar "Costo embalaje" en la pantalla de edición de pedido (ADMIN) ---
 // Pegar este bloque al final de main.php (o antes del cierre del archivo). Solo se ejecuta en admin.
-add_action( 'woocommerce_admin_order_totals_after_shipping', 'mobapp_admin_order_packing_row' );
-add_action( 'woocommerce_admin_order_totals_after_order_total', 'mobapp_admin_order_packing_row' );
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_admin_order_totals_after_shipping', 'mobapp_admin_order_packing_row' );
+}
+if ( $wbi_mobapp_is_primary ) {
+    add_action( 'woocommerce_admin_order_totals_after_order_total', 'mobapp_admin_order_packing_row' );
+}
 
+if ( ! function_exists( 'mobapp_admin_order_packing_row' ) ) {
 function mobapp_admin_order_packing_row( $order ) {
     // El hook pasa $order (WC_Order) en versiones modernas; soportamos ambos (ID o objeto)
     if ( ! $order ) return;
@@ -1431,5 +1572,6 @@ function mobapp_admin_order_packing_row( $order ) {
         echo '<td class="total" style="text-align:right;">' . wp_kses_post( $formatted ) . '</td>';
         echo '</tr>';
     }
+}
 }
 /* FIN PLUGIN */
