@@ -24,7 +24,9 @@ class WBI_MobApp_Shipping_Module {
 
         // Detect legacy MOBAPP plugin conflict before loading the module
         if ( function_exists( 'mobapp_setup_schedule' ) ) {
-            error_log( '[WBI MobApp] Legacy MOBAPP plugin conflict detected in bootstrap. Loading module in compatibility mode.' );
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log( '[WBI MobApp] Legacy MOBAPP plugin conflict detected in bootstrap. Loading module in compatibility mode.' );
+            }
             add_action( 'admin_notices', array( $this, 'legacy_conflict_notice' ) );
         }
 
