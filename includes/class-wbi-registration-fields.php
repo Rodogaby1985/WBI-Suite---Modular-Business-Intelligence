@@ -98,6 +98,14 @@ class WBI_Registration_Fields {
         );
     }
 
+    private function is_valid_customer_type( $customer_type ) {
+        return array_key_exists( $customer_type, $this->get_customer_type_options() );
+    }
+
+    private function is_valid_whatsapp( $phone ) {
+        return '' !== $phone && 1 === preg_match( '/^[0-9+\s-]+$/', $phone );
+    }
+
     public function force_user_defined_password( $default_value, $option, $passed_default ) {
         if ( ! $this->is_feature_enabled() ) {
             return $default_value;
@@ -137,7 +145,6 @@ class WBI_Registration_Fields {
 
         $whatsapp      = $this->get_posted_value( 'billing_phone' );
         $customer_type = $this->get_posted_value( 'customer_type' );
-        $required_attr = $this->is_whatsapp_required() ? 'required="required"' : '';
         ?>
         <p class="woocommerce-FormRow woocommerce-FormRow--wide form-row form-row-wide">
             <label for="billing_phone">
@@ -152,7 +159,7 @@ class WBI_Registration_Fields {
                 id="billing_phone"
                 class="woocommerce-Input woocommerce-Input--text input-text"
                 value="<?php echo esc_attr( $whatsapp ); ?>"
-                <?php echo $required_attr; ?>
+                <?php if ( $this->is_whatsapp_required() ) : ?>required="required"<?php endif; ?>
             />
         </p>
 
@@ -183,17 +190,19 @@ class WBI_Registration_Fields {
             $errors->add( 'billing_phone_required', __( 'El WhatsApp de contacto es obligatorio.', 'wbi-suite' ) );
         }
 
-        if ( '' !== $phone && ! preg_match( '/^[0-9+\s-]+$/', $phone ) ) {
+        if ( '' !== $phone && ! $this->is_valid_whatsapp( $phone ) ) {
             $errors->add( 'billing_phone_invalid', __( 'Ingresá un WhatsApp válido (solo números, +, espacios o guiones).', 'wbi-suite' ) );
         }
 
-        if ( ! array_key_exists( $customer_type, $this->get_customer_type_options() ) ) {
+        if ( ! $this->is_valid_customer_type( $customer_type ) ) {
             $errors->add( 'customer_type_invalid', __( 'Seleccioná el tipo de cliente.', 'wbi-suite' ) );
         }
 
+        $password_length = function_exists( 'mb_strlen' ) ? mb_strlen( $password ) : strlen( $password );
+
         if ( '' === $password ) {
             $errors->add( 'password_required', __( 'La contraseña es obligatoria.', 'wbi-suite' ) );
-        } elseif ( strlen( $password ) < 8 ) {
+        } elseif ( $password_length < 8 ) {
             $errors->add( 'password_too_short', __( 'La contraseña debe tener al menos 8 caracteres.', 'wbi-suite' ) );
         }
 
@@ -208,15 +217,19 @@ class WBI_Registration_Fields {
         $phone         = $this->get_posted_value( 'billing_phone' );
         $customer_type = $this->get_posted_value( 'customer_type' );
 
-        update_user_meta( $customer_id, 'billing_phone', $phone );
-        update_user_meta( $customer_id, 'whatsapp', $phone );
-        update_user_meta( $customer_id, 'customer_type', $customer_type );
+        if ( '' !== $phone && $this->is_valid_whatsapp( $phone ) ) {
+            update_user_meta( $customer_id, 'billing_phone', $phone );
+            update_user_meta( $customer_id, 'whatsapp', $phone );
+        }
 
-        $this->assign_customer_role( $customer_id, $customer_type );
+        if ( $this->is_valid_customer_type( $customer_type ) ) {
+            update_user_meta( $customer_id, 'customer_type', $customer_type );
+            $this->assign_customer_role( $customer_id, $customer_type );
+        }
     }
 
     private function assign_customer_role( $customer_id, $customer_type ) {
-        if ( ! array_key_exists( $customer_type, $this->get_customer_type_options() ) ) {
+        if ( ! $this->is_valid_customer_type( $customer_type ) ) {
             return;
         }
 
@@ -277,8 +290,6 @@ class WBI_Registration_Fields {
             return;
         }
 
-        delete_transient( self::ROLE_NOTICE_TRANSIENT );
-
         foreach ( $payload as $notice ) {
             if ( empty( $notice['role_slug'] ) || empty( $notice['customer_type'] ) ) {
                 continue;
@@ -299,5 +310,7 @@ class WBI_Registration_Fields {
                 )
             );
         }
+
+        delete_transient( self::ROLE_NOTICE_TRANSIENT );
     }
 }
