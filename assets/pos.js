@@ -1150,10 +1150,12 @@
     function updateAdjReasonVisibility() {
         var s    = wbiPos.settings || {};
         var type = $('#pos-adj-type').val();
-        if (s.requireDiscountReason && type === 'discount') {
+        if (type === 'discount' || !s.requireDiscountReason) {
+            // Show reason for discounts always; show for all types when not required
             $('#pos-adj-reason-group').show();
-        } else if (!s.requireDiscountReason) {
-            $('#pos-adj-reason-group').show(); // always show reason field (optional)
+        } else {
+            // Non-discount type and requireDiscountReason is on: hide reason
+            $('#pos-adj-reason-group').hide();
         }
     }
 

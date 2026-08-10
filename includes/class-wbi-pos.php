@@ -1037,10 +1037,10 @@ class WBI_POS_Module {
             if ( ! is_email( $email ) ) {
                 wp_send_json_error( array( 'message' => 'El formato del email no es válido.' ) );
             }
-            if ( email_exists( $email ) ) {
+            $existing_id = email_exists( $email );
+            if ( $existing_id ) {
                 // If the user already exists, return that user instead of creating a new one
-                $existing_id = email_exists( $email );
-                $existing    = get_userdata( $existing_id );
+                $existing = get_userdata( $existing_id );
                 wp_send_json_error( array(
                     'message'   => 'Ya existe un cliente con ese email.',
                     'existing'  => array(
@@ -1338,18 +1338,20 @@ class WBI_POS_Module {
         }
 
         // --- Apply adjustments as fee lines ---
-        $adjustments_net = 0.0;
-        $adj_notes       = array();
+        $adjustments_net  = 0.0;
+        $adj_notes        = array();
+        $running_total    = $order_subtotal; // track running total for percent calculations
         foreach ( $clean_adjustments as $adj ) {
             $type   = $adj['type'];
             $mode   = $adj['mode'];
             $value  = $adj['value'];
             $reason = $adj['reason'];
 
-            // Calculate amount
+            // Calculate amount against the running total so each percent adjustment
+            // is applied on the effective total after previous adjustments.
             $amount = 0.0;
             if ( 'percent' === $mode ) {
-                $amount = round( $order_subtotal * $value / 100, 2 );
+                $amount = round( max( 0.0, $running_total ) * $value / 100, 2 );
             } else {
                 $amount = $value;
             }
@@ -1357,6 +1359,7 @@ class WBI_POS_Module {
             // Discounts reduce total; others add to it
             $is_reduction = ( 'discount' === $type );
             $fee_amount   = $is_reduction ? - $amount : $amount;
+            $running_total += $fee_amount;
 
             $type_labels = array(
                 'discount'   => 'Descuento',
