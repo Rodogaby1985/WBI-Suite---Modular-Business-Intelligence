@@ -24,6 +24,10 @@ class WBI_POS_Module {
         add_action( 'admin_menu',            array( $this, 'add_submenu' ), 100 );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 
+        // POS settings page
+        add_action( 'admin_menu',  array( $this, 'add_pos_settings_submenu' ), 101 );
+        add_action( 'admin_init',  array( $this, 'register_pos_settings' ) );
+
         // Ensure cash sessions and movements tables exist
         WBI_POS_Cash_Sessions::maybe_create_table();
         WBI_POS_Cash_Movements::maybe_create_table();
@@ -34,6 +38,7 @@ class WBI_POS_Module {
         // AJAX endpoints — products, customers, orders
         add_action( 'wp_ajax_wbi_pos_search_products',  array( $this, 'ajax_search_products' ) );
         add_action( 'wp_ajax_wbi_pos_search_customers', array( $this, 'ajax_search_customers' ) );
+        add_action( 'wp_ajax_wbi_pos_create_customer',  array( $this, 'ajax_create_customer' ) );
         add_action( 'wp_ajax_wbi_pos_create_order',     array( $this, 'ajax_create_order' ) );
         add_action( 'wp_ajax_wbi_pos_try_invoice',      array( $this, 'ajax_try_invoice' ) );
 
@@ -46,6 +51,152 @@ class WBI_POS_Module {
         // AJAX endpoints — manual movements (income / expense / withdrawal / deposit)
         add_action( 'wp_ajax_wbi_pos_add_movement',     array( $this, 'ajax_add_movement' ) );
         add_action( 'wp_ajax_wbi_pos_get_movements',    array( $this, 'ajax_get_movements' ) );
+    }
+
+    // =========================================================================
+    // POS SETTINGS HELPERS
+    // =========================================================================
+
+    /**
+     * Returns the current POS settings array.
+     *
+     * @return array<string,mixed>
+     */
+    public static function get_pos_settings() {
+        $defaults = array(
+            'pos_require_customer'          => 0,
+            'pos_allow_quick_create'        => 1,
+            'pos_allow_no_email'            => 1,
+            'pos_placeholder_email_enabled' => 0,
+            'pos_placeholder_email_pattern' => 'pos_{phone}@poslocal.internal',
+            'pos_enable_adjustments'        => 1,
+            'pos_enable_discount'           => 1,
+            'pos_enable_surcharge'          => 1,
+            'pos_enable_shipping'           => 1,
+            'pos_enable_manual_tax'         => 1,
+            'pos_max_discount_pct'          => 100,
+            'pos_require_discount_reason'   => 0,
+        );
+        $saved = get_option( 'wbi_pos_settings', array() );
+        return wp_parse_args( is_array( $saved ) ? $saved : array(), $defaults );
+    }
+
+    /**
+     * Register POS settings page as submenu under WBI Dashboard.
+     */
+    public function add_pos_settings_submenu() {
+        add_submenu_page(
+            'wbi-dashboard-view',
+            'POS — Configuración',
+            'POS — Config.',
+            'manage_woocommerce',
+            'wbi-pos-settings',
+            array( $this, 'render_pos_settings_page' )
+        );
+    }
+
+    /**
+     * Register the wbi_pos_settings option.
+     */
+    public function register_pos_settings() {
+        register_setting( 'wbi_pos_settings_group', 'wbi_pos_settings', array(
+            'sanitize_callback' => array( $this, 'sanitize_pos_settings' ),
+        ) );
+    }
+
+    /**
+     * Sanitize POS settings on save.
+     *
+     * @param  mixed $input Raw input.
+     * @return array<string,mixed>
+     */
+    public function sanitize_pos_settings( $input ) {
+        if ( ! is_array( $input ) ) {
+            return array();
+        }
+        $clean = array();
+        $toggles = array(
+            'pos_require_customer', 'pos_allow_quick_create', 'pos_allow_no_email',
+            'pos_placeholder_email_enabled', 'pos_enable_adjustments', 'pos_enable_discount',
+            'pos_enable_surcharge', 'pos_enable_shipping', 'pos_enable_manual_tax',
+            'pos_require_discount_reason',
+        );
+        foreach ( $toggles as $key ) {
+            $clean[ $key ] = ! empty( $input[ $key ] ) ? 1 : 0;
+        }
+        $clean['pos_max_discount_pct']          = absint( $input['pos_max_discount_pct'] ?? 100 );
+        $clean['pos_placeholder_email_pattern'] = sanitize_text_field( $input['pos_placeholder_email_pattern'] ?? 'pos_{phone}@poslocal.internal' );
+        return $clean;
+    }
+
+    /**
+     * Render POS settings admin page.
+     */
+    public function render_pos_settings_page() {
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( esc_html__( 'Sin permisos.', 'wbi-suite' ) );
+        }
+        $s = self::get_pos_settings();
+        ?>
+        <div class="wrap">
+            <h1>🏪 POS — Configuración</h1>
+            <form method="post" action="options.php">
+                <?php settings_fields( 'wbi_pos_settings_group' ); ?>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row">Requerir cliente antes de confirmar</th>
+                        <td><label><input type="checkbox" name="wbi_pos_settings[pos_require_customer]" value="1" <?php checked( 1, $s['pos_require_customer'] ); ?>> Activado</label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Permitir creación rápida de clientes</th>
+                        <td><label><input type="checkbox" name="wbi_pos_settings[pos_allow_quick_create]" value="1" <?php checked( 1, $s['pos_allow_quick_create'] ); ?>> Activado</label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Permitir cliente sin email</th>
+                        <td><label><input type="checkbox" name="wbi_pos_settings[pos_allow_no_email]" value="1" <?php checked( 1, $s['pos_allow_no_email'] ); ?>> Activado</label><p class="description">Si está desactivado, se creará un perfil de invitado en el pedido sin usuario WordPress.</p></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Auto-generar email placeholder</th>
+                        <td><label><input type="checkbox" name="wbi_pos_settings[pos_placeholder_email_enabled]" value="1" <?php checked( 1, $s['pos_placeholder_email_enabled'] ); ?>> Activado</label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Patrón de email placeholder</th>
+                        <td><input type="text" name="wbi_pos_settings[pos_placeholder_email_pattern]" value="<?php echo esc_attr( $s['pos_placeholder_email_pattern'] ); ?>" class="regular-text"><p class="description">Variables disponibles: <code>{phone}</code>, <code>{timestamp}</code></p></td>
+                    </tr>
+                    <tr><th scope="row" colspan="2"><h2 style="margin:0">Ajustes al pedido</h2></th></tr>
+                    <tr>
+                        <th scope="row">Habilitar panel de ajustes</th>
+                        <td><label><input type="checkbox" name="wbi_pos_settings[pos_enable_adjustments]" value="1" <?php checked( 1, $s['pos_enable_adjustments'] ); ?>> Activado</label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Habilitar descuentos</th>
+                        <td><label><input type="checkbox" name="wbi_pos_settings[pos_enable_discount]" value="1" <?php checked( 1, $s['pos_enable_discount'] ); ?>> Activado</label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Habilitar recargos</th>
+                        <td><label><input type="checkbox" name="wbi_pos_settings[pos_enable_surcharge]" value="1" <?php checked( 1, $s['pos_enable_surcharge'] ); ?>> Activado</label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Habilitar envío manual</th>
+                        <td><label><input type="checkbox" name="wbi_pos_settings[pos_enable_shipping]" value="1" <?php checked( 1, $s['pos_enable_shipping'] ); ?>> Activado</label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Habilitar impuesto manual</th>
+                        <td><label><input type="checkbox" name="wbi_pos_settings[pos_enable_manual_tax]" value="1" <?php checked( 1, $s['pos_enable_manual_tax'] ); ?>> Activado</label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Descuento máximo (%)</th>
+                        <td><input type="number" name="wbi_pos_settings[pos_max_discount_pct]" value="<?php echo esc_attr( $s['pos_max_discount_pct'] ); ?>" min="0" max="100" class="small-text"> %</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Requerir motivo en descuentos</th>
+                        <td><label><input type="checkbox" name="wbi_pos_settings[pos_require_discount_reason]" value="1" <?php checked( 1, $s['pos_require_discount_reason'] ); ?>> Activado</label></td>
+                    </tr>
+                </table>
+                <?php submit_button( 'Guardar configuración POS' ); ?>
+            </form>
+        </div>
+        <?php
     }
 
     // =========================================================================
@@ -65,6 +216,13 @@ class WBI_POS_Module {
         if ( in_array( 'wbi_pos_access', (array) $caps, true ) ) {
             if ( ! empty( $allcaps['manage_woocommerce'] ) ) {
                 $allcaps['wbi_pos_access'] = true;
+            }
+        }
+        // Also grant customer-creation and adjustments caps to manage_woocommerce users
+        $pos_caps = array( 'wbi_pos_create_customer', 'wbi_pos_apply_adjustments' );
+        foreach ( $pos_caps as $cap ) {
+            if ( in_array( $cap, (array) $caps, true ) && ! empty( $allcaps['manage_woocommerce'] ) ) {
+                $allcaps[ $cap ] = true;
             }
         }
         return $allcaps;
@@ -138,11 +296,26 @@ class WBI_POS_Module {
             true
         );
 
+        $pos_settings = self::get_pos_settings();
+
         wp_localize_script( 'wbi-pos-js', 'wbiPos', array(
-            'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-            'nonce'   => wp_create_nonce( 'wbi_pos_nonce' ),
-            'currency'=> get_woocommerce_currency_symbol(),
-            'i18n'    => array(
+            'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
+            'nonce'    => wp_create_nonce( 'wbi_pos_nonce' ),
+            'currency' => get_woocommerce_currency_symbol(),
+            'settings' => array(
+                'requireCustomer'         => (bool) $pos_settings['pos_require_customer'],
+                'allowQuickCreate'        => (bool) $pos_settings['pos_allow_quick_create'],
+                'allowNoEmail'            => (bool) $pos_settings['pos_allow_no_email'],
+                'placeholderEmailEnabled' => (bool) $pos_settings['pos_placeholder_email_enabled'],
+                'enableAdjustments'       => (bool) $pos_settings['pos_enable_adjustments'],
+                'enableDiscount'          => (bool) $pos_settings['pos_enable_discount'],
+                'enableSurcharge'         => (bool) $pos_settings['pos_enable_surcharge'],
+                'enableShipping'          => (bool) $pos_settings['pos_enable_shipping'],
+                'enableManualTax'         => (bool) $pos_settings['pos_enable_manual_tax'],
+                'maxDiscountPct'          => (int)  $pos_settings['pos_max_discount_pct'],
+                'requireDiscountReason'   => (bool) $pos_settings['pos_require_discount_reason'],
+            ),
+            'i18n'     => array(
                 'searchPlaceholder'  => 'Buscar por nombre, SKU o código de barras…',
                 'addProduct'         => 'Agregar',
                 'removeItem'         => 'Quitar',
@@ -224,6 +397,43 @@ class WBI_POS_Module {
                 'movementError'      => 'Error al registrar el movimiento.',
                 'noCashForMovement'  => 'Debés abrir la caja antes de registrar un movimiento.',
                 'expectedCash'       => 'Efectivo esperado',
+                // Customer flow
+                'customerSearchPlaceholder' => 'Buscar por nombre, apellido, email, teléfono, DNI/CUIT…',
+                'newCustomer'               => '+ Nuevo cliente',
+                'createCustomer'            => 'Crear cliente',
+                'customerCreated'           => 'Cliente creado correctamente.',
+                'customerError'             => 'Error al crear el cliente.',
+                'customerRequired'          => 'Seleccioná un cliente antes de confirmar el pedido.',
+                'wholesale'                 => 'Mayorista',
+                'retail'                    => 'Minorista',
+                'consumidorFinal'           => 'Consumidor Final',
+                'customerTypeRequired'      => 'Seleccioná el tipo de cliente.',
+                'phoneRequired'             => 'El teléfono/WhatsApp es obligatorio.',
+                'firstNameRequired'         => 'El nombre es obligatorio.',
+                'lastNameRequired'          => 'El apellido es obligatorio.',
+                'emailInvalid'              => 'El email no tiene un formato válido.',
+                'wholesalePrices'           => '✅ Precios mayoristas activos.',
+                // Adjustments
+                'adjustments'               => 'Ajustes',
+                'addAdjustment'             => '＋ Ajuste',
+                'adjustmentTitle'           => 'Agregar ajuste al pedido',
+                'adjustmentType'            => 'Tipo',
+                'adjustmentTypes'           => array(
+                    'discount'   => '🏷️ Descuento',
+                    'surcharge'  => '➕ Recargo',
+                    'shipping'   => '🚚 Envío manual',
+                    'manual_tax' => '📋 Impuesto manual',
+                ),
+                'adjustmentMode'            => 'Modo',
+                'adjustmentModeFixed'       => 'Fijo ($)',
+                'adjustmentModePct'         => 'Porcentaje (%)',
+                'adjustmentValue'           => 'Valor',
+                'adjustmentReason'          => 'Motivo',
+                'adjustmentReasonRequired'  => 'El motivo es obligatorio para descuentos.',
+                'adjustmentAdd'             => 'Agregar',
+                'adjustmentValueRequired'   => 'El valor debe ser mayor a cero.',
+                'adjustmentMaxDiscount'     => 'El descuento supera el máximo permitido (%s%).',
+                'noAdjustments'             => 'Sin ajustes',
             ),
         ) );
     }
@@ -384,6 +594,122 @@ class WBI_POS_Module {
                 </div>
             </div>
 
+            <!-- ── QUICK CREATE CUSTOMER MODAL ──────────────────────── -->
+            <div id="pos-modal-create-customer" class="pos-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="pos-modal-create-customer-title">
+                <div class="pos-modal-backdrop"></div>
+                <div class="pos-modal-box pos-modal-box-xl">
+                    <h2 id="pos-modal-create-customer-title">👤 <?php esc_html_e( 'Nuevo cliente', 'wbi-suite' ); ?></h2>
+                    <div class="pos-modal-body">
+                        <div class="pos-form-grid">
+                            <div class="pos-field-group">
+                                <label for="pos-cc-first-name"><?php esc_html_e( 'Nombre *', 'wbi-suite' ); ?></label>
+                                <input type="text" id="pos-cc-first-name" class="pos-input" autocomplete="off">
+                            </div>
+                            <div class="pos-field-group">
+                                <label for="pos-cc-last-name"><?php esc_html_e( 'Apellido *', 'wbi-suite' ); ?></label>
+                                <input type="text" id="pos-cc-last-name" class="pos-input" autocomplete="off">
+                            </div>
+                            <div class="pos-field-group">
+                                <label for="pos-cc-phone"><?php esc_html_e( 'Teléfono / WhatsApp *', 'wbi-suite' ); ?></label>
+                                <input type="text" id="pos-cc-phone" class="pos-input" placeholder="<?php esc_attr_e( 'Ej: +5491112345678', 'wbi-suite' ); ?>" autocomplete="off">
+                            </div>
+                            <div class="pos-field-group">
+                                <label for="pos-cc-customer-type"><?php esc_html_e( 'Tipo de cliente *', 'wbi-suite' ); ?></label>
+                                <select id="pos-cc-customer-type" class="pos-input">
+                                    <option value=""><?php esc_html_e( '— Seleccioná —', 'wbi-suite' ); ?></option>
+                                    <option value="retail"><?php esc_html_e( 'Minorista', 'wbi-suite' ); ?></option>
+                                    <option value="wholesale"><?php esc_html_e( 'Mayorista', 'wbi-suite' ); ?></option>
+                                </select>
+                            </div>
+                            <div class="pos-field-group">
+                                <label for="pos-cc-email"><?php esc_html_e( 'Email (opcional)', 'wbi-suite' ); ?></label>
+                                <input type="email" id="pos-cc-email" class="pos-input" autocomplete="off">
+                            </div>
+                            <div class="pos-field-group">
+                                <label for="pos-cc-document-type"><?php esc_html_e( 'Tipo de documento', 'wbi-suite' ); ?></label>
+                                <select id="pos-cc-document-type" class="pos-input">
+                                    <option value=""><?php esc_html_e( '— Ninguno —', 'wbi-suite' ); ?></option>
+                                    <option value="DNI">DNI</option>
+                                    <option value="CUIT">CUIT</option>
+                                    <option value="other"><?php esc_html_e( 'Otro', 'wbi-suite' ); ?></option>
+                                </select>
+                            </div>
+                            <div class="pos-field-group">
+                                <label for="pos-cc-document-number"><?php esc_html_e( 'Número de documento', 'wbi-suite' ); ?></label>
+                                <input type="text" id="pos-cc-document-number" class="pos-input" autocomplete="off">
+                            </div>
+                            <div class="pos-field-group">
+                                <label for="pos-cc-company-name"><?php esc_html_e( 'Empresa / Razón social', 'wbi-suite' ); ?></label>
+                                <input type="text" id="pos-cc-company-name" class="pos-input" autocomplete="off">
+                            </div>
+                            <div class="pos-field-group pos-field-full">
+                                <label for="pos-cc-address-1"><?php esc_html_e( 'Dirección', 'wbi-suite' ); ?></label>
+                                <input type="text" id="pos-cc-address-1" class="pos-input" autocomplete="off">
+                            </div>
+                            <div class="pos-field-group">
+                                <label for="pos-cc-city"><?php esc_html_e( 'Ciudad', 'wbi-suite' ); ?></label>
+                                <input type="text" id="pos-cc-city" class="pos-input" autocomplete="off">
+                            </div>
+                            <div class="pos-field-group">
+                                <label for="pos-cc-postcode"><?php esc_html_e( 'Código postal', 'wbi-suite' ); ?></label>
+                                <input type="text" id="pos-cc-postcode" class="pos-input" autocomplete="off">
+                            </div>
+                        </div>
+                        <div id="pos-cc-error" class="pos-cc-error" style="display:none;"></div>
+                    </div>
+                    <div class="pos-modal-actions">
+                        <button id="pos-btn-cc-confirm" class="pos-btn pos-btn-primary">
+                            👤 <?php esc_html_e( 'Crear cliente', 'wbi-suite' ); ?>
+                        </button>
+                        <button class="pos-btn pos-btn-secondary pos-modal-close" data-modal="pos-modal-create-customer">
+                            <?php esc_html_e( 'Cancelar', 'wbi-suite' ); ?>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── ADJUSTMENTS MODAL ─────────────────────────────────── -->
+            <div id="pos-modal-adjustment" class="pos-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="pos-modal-adjustment-title">
+                <div class="pos-modal-backdrop"></div>
+                <div class="pos-modal-box">
+                    <h2 id="pos-modal-adjustment-title">🏷️ <?php esc_html_e( 'Agregar ajuste al pedido', 'wbi-suite' ); ?></h2>
+                    <div class="pos-modal-body">
+                        <div class="pos-field-group">
+                            <label for="pos-adj-type"><?php esc_html_e( 'Tipo de ajuste', 'wbi-suite' ); ?></label>
+                            <select id="pos-adj-type" class="pos-input">
+                                <option value="discount">🏷️ <?php esc_html_e( 'Descuento', 'wbi-suite' ); ?></option>
+                                <option value="surcharge">➕ <?php esc_html_e( 'Recargo', 'wbi-suite' ); ?></option>
+                                <option value="shipping">🚚 <?php esc_html_e( 'Envío manual', 'wbi-suite' ); ?></option>
+                                <option value="manual_tax">📋 <?php esc_html_e( 'Impuesto manual', 'wbi-suite' ); ?></option>
+                            </select>
+                        </div>
+                        <div class="pos-field-group">
+                            <label for="pos-adj-mode"><?php esc_html_e( 'Modo', 'wbi-suite' ); ?></label>
+                            <select id="pos-adj-mode" class="pos-input">
+                                <option value="fixed"><?php esc_html_e( 'Fijo ($)', 'wbi-suite' ); ?></option>
+                                <option value="percent"><?php esc_html_e( 'Porcentaje (%)', 'wbi-suite' ); ?></option>
+                            </select>
+                        </div>
+                        <div class="pos-field-group">
+                            <label for="pos-adj-value"><?php esc_html_e( 'Valor', 'wbi-suite' ); ?></label>
+                            <input type="number" id="pos-adj-value" min="0.01" step="0.01" class="pos-input">
+                        </div>
+                        <div class="pos-field-group" id="pos-adj-reason-group">
+                            <label for="pos-adj-reason"><?php esc_html_e( 'Motivo', 'wbi-suite' ); ?></label>
+                            <input type="text" id="pos-adj-reason" class="pos-input" placeholder="<?php esc_attr_e( 'Motivo del ajuste…', 'wbi-suite' ); ?>">
+                        </div>
+                    </div>
+                    <div class="pos-modal-actions">
+                        <button id="pos-btn-adj-confirm" class="pos-btn pos-btn-primary">
+                            ✅ <?php esc_html_e( 'Agregar', 'wbi-suite' ); ?>
+                        </button>
+                        <button class="pos-btn pos-btn-secondary pos-modal-close" data-modal="pos-modal-adjustment">
+                            <?php esc_html_e( 'Cancelar', 'wbi-suite' ); ?>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- ── MAIN LAYOUT ──────────────────────────────────────── -->
             <div class="pos-main">
 
@@ -425,10 +751,13 @@ class WBI_POS_Module {
                         <label class="pos-label"><?php esc_html_e( 'Cliente', 'wbi-suite' ); ?></label>
                         <div class="pos-customer-search-row">
                             <input type="text" id="pos-customer-search"
-                                   placeholder="<?php esc_attr_e( 'Buscar por email o nombre…', 'wbi-suite' ); ?>"
+                                   placeholder="<?php esc_attr_e( 'Buscar por nombre, apellido, email, teléfono, DNI/CUIT…', 'wbi-suite' ); ?>"
                                    autocomplete="off">
                             <button id="pos-btn-consumer" class="pos-btn pos-btn-outline pos-btn-sm">
                                 <?php esc_html_e( 'Consumidor Final', 'wbi-suite' ); ?>
+                            </button>
+                            <button id="pos-btn-new-customer" class="pos-btn pos-btn-success pos-btn-sm" style="display:none;">
+                                + <?php esc_html_e( 'Nuevo cliente', 'wbi-suite' ); ?>
                             </button>
                         </div>
                         <div id="pos-customer-results" class="pos-dropdown"></div>
@@ -443,6 +772,14 @@ class WBI_POS_Module {
                     <!-- Totals -->
                     <div class="pos-totals-box">
                         <div class="pos-total-row">
+                            <span><?php esc_html_e( 'Subtotal', 'wbi-suite' ); ?></span>
+                            <strong id="pos-subtotal">$0.00</strong>
+                        </div>
+                        <div class="pos-total-row pos-adjustments-row" style="display:none;">
+                            <span><?php esc_html_e( 'Ajustes', 'wbi-suite' ); ?></span>
+                            <strong id="pos-adjustments-total" class="pos-adj-amount">$0.00</strong>
+                        </div>
+                        <div class="pos-total-row pos-total-final-row">
                             <span><?php esc_html_e( 'Total', 'wbi-suite' ); ?></span>
                             <strong id="pos-total">$0.00</strong>
                         </div>
@@ -454,6 +791,17 @@ class WBI_POS_Module {
                             <span><?php esc_html_e( 'Saldo', 'wbi-suite' ); ?></span>
                             <strong id="pos-balance">$0.00</strong>
                         </div>
+                    </div>
+
+                    <!-- Adjustments panel (shown when enabled in settings) -->
+                    <div class="pos-adjustments-wrap" id="pos-adjustments-wrap" style="display:none;">
+                        <div class="pos-payments-header">
+                            <span class="pos-label"><?php esc_html_e( 'Ajustes', 'wbi-suite' ); ?></span>
+                            <button id="pos-btn-add-adjustment" class="pos-btn pos-btn-outline pos-btn-sm">
+                                ＋ <?php esc_html_e( 'Ajuste', 'wbi-suite' ); ?>
+                            </button>
+                        </div>
+                        <div id="pos-adjustments-list"></div>
                     </div>
 
                     <!-- Payments -->
@@ -567,7 +915,7 @@ class WBI_POS_Module {
     }
 
     // =========================================================================
-    // AJAX: SEARCH CUSTOMERS
+    // AJAX: SEARCH CUSTOMERS (enhanced)
     // =========================================================================
 
     public function ajax_search_customers() {
@@ -582,22 +930,258 @@ class WBI_POS_Module {
             wp_send_json_success( array() );
         }
 
-        $users = get_users( array(
+        // Search by standard WP fields (login, email, display_name, nicename)
+        $user_query_std = new WP_User_Query( array(
             'search'         => '*' . $query . '*',
             'search_columns' => array( 'user_login', 'user_email', 'display_name', 'user_nicename' ),
-            'number'         => 15,
+            'number'         => 20,
         ) );
 
+        // Search by billing meta fields (phone, first_name, last_name, document_number)
+        $user_query_meta = new WP_User_Query( array(
+            'meta_query' => array(
+                'relation' => 'OR',
+                array( 'key' => 'billing_first_name',    'value' => $query, 'compare' => 'LIKE' ),
+                array( 'key' => 'billing_last_name',     'value' => $query, 'compare' => 'LIKE' ),
+                array( 'key' => 'billing_phone',         'value' => $query, 'compare' => 'LIKE' ),
+                array( 'key' => '_wbi_whatsapp',         'value' => $query, 'compare' => 'LIKE' ),
+                array( 'key' => '_wbi_document_number',  'value' => $query, 'compare' => 'LIKE' ),
+            ),
+            'number' => 20,
+        ) );
+
+        $all_users = array_merge(
+            $user_query_std->get_results(),
+            $user_query_meta->get_results()
+        );
+
+        $seen    = array();
         $results = array();
-        foreach ( $users as $user ) {
+        foreach ( $all_users as $user ) {
+            if ( isset( $seen[ $user->ID ] ) ) continue;
+            $seen[ $user->ID ] = true;
+
+            $customer_type = get_user_meta( $user->ID, '_wbi_customer_type', true );
+            $phone         = get_user_meta( $user->ID, 'billing_phone', true );
+            $whatsapp      = get_user_meta( $user->ID, '_wbi_whatsapp', true );
+            $doc_number    = get_user_meta( $user->ID, '_wbi_document_number', true );
+
             $results[] = array(
-                'id'    => $user->ID,
-                'name'  => $user->display_name,
-                'email' => $user->user_email,
+                'id'            => $user->ID,
+                'name'          => $user->display_name,
+                'email'         => $user->user_email,
+                'phone'         => $phone ?: $whatsapp,
+                'customer_type' => $customer_type ?: 'retail',
+                'doc_number'    => $doc_number,
             );
+
+            if ( count( $results ) >= 15 ) break;
         }
 
         wp_send_json_success( $results );
+    }
+
+    // =========================================================================
+    // AJAX: CREATE CUSTOMER
+    // =========================================================================
+
+    public function ajax_create_customer() {
+        check_ajax_referer( 'wbi_pos_nonce', 'nonce' );
+
+        if ( ! $this->current_user_can_pos() ) {
+            wp_send_json_error( array( 'message' => 'Sin permisos.' ), 403 );
+        }
+
+        // Check if quick create is allowed
+        $pos_settings = self::get_pos_settings();
+        if ( empty( $pos_settings['pos_allow_quick_create'] ) ) {
+            wp_send_json_error( array( 'message' => 'La creación rápida de clientes no está habilitada.' ) );
+        }
+
+        // Capability: must be able to create customers
+        if ( ! current_user_can( 'wbi_pos_create_customer' ) && ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_send_json_error( array( 'message' => 'No tenés permisos para crear clientes.' ), 403 );
+        }
+
+        // --- Required fields ---
+        $first_name     = sanitize_text_field( wp_unslash( $_POST['first_name']     ?? '' ) );
+        $last_name      = sanitize_text_field( wp_unslash( $_POST['last_name']      ?? '' ) );
+        $phone          = sanitize_text_field( wp_unslash( $_POST['phone']          ?? '' ) );
+        $customer_type  = sanitize_text_field( wp_unslash( $_POST['customer_type']  ?? '' ) );
+
+        if ( ! $first_name ) {
+            wp_send_json_error( array( 'message' => 'El nombre es obligatorio.' ) );
+        }
+        if ( ! $last_name ) {
+            wp_send_json_error( array( 'message' => 'El apellido es obligatorio.' ) );
+        }
+        if ( ! $phone ) {
+            wp_send_json_error( array( 'message' => 'El teléfono/WhatsApp es obligatorio.' ) );
+        }
+        if ( ! in_array( $customer_type, array( 'wholesale', 'retail' ), true ) ) {
+            wp_send_json_error( array( 'message' => 'El tipo de cliente es obligatorio.' ) );
+        }
+
+        // --- Optional fields ---
+        $email          = sanitize_email( wp_unslash( $_POST['email']           ?? '' ) );
+        $document_type  = sanitize_text_field( wp_unslash( $_POST['document_type']  ?? '' ) );
+        $document_number= sanitize_text_field( wp_unslash( $_POST['document_number']?? '' ) );
+        $company_name   = sanitize_text_field( wp_unslash( $_POST['company_name']   ?? '' ) );
+        $address_1      = sanitize_text_field( wp_unslash( $_POST['address_1']      ?? '' ) );
+        $city           = sanitize_text_field( wp_unslash( $_POST['city']           ?? '' ) );
+        $state          = sanitize_text_field( wp_unslash( $_POST['state']          ?? '' ) );
+        $postcode       = sanitize_text_field( wp_unslash( $_POST['postcode']       ?? '' ) );
+
+        // --- Email validation ---
+        if ( $email ) {
+            if ( ! is_email( $email ) ) {
+                wp_send_json_error( array( 'message' => 'El formato del email no es válido.' ) );
+            }
+            $existing_id = email_exists( $email );
+            if ( $existing_id ) {
+                // If the user already exists, return that user instead of creating a new one
+                $existing = get_userdata( $existing_id );
+                wp_send_json_error( array(
+                    'message'   => 'Ya existe un cliente con ese email.',
+                    'existing'  => array(
+                        'id'    => $existing_id,
+                        'name'  => $existing ? $existing->display_name : '',
+                        'email' => $email,
+                    ),
+                ) );
+            }
+        }
+
+        $cashier_id   = get_current_user_id();
+        $cashier_data = get_userdata( $cashier_id );
+        $cashier_name = $cashier_data ? $cashier_data->display_name : 'Cajero';
+        $timestamp    = current_time( 'mysql' );
+
+        $customer_id = 0;
+        $is_guest    = false;
+        $final_email = $email;
+
+        if ( $email ) {
+            // Create full WP user + WooCommerce customer with provided email
+            if ( function_exists( 'wc_create_new_customer' ) ) {
+                $username = wc_create_new_customer_username( $email );
+                $result   = wc_create_new_customer( $email, $username, wp_generate_password( 12, false ) );
+            } else {
+                $result = wp_insert_user( array(
+                    'user_login' => sanitize_user( $email, true ),
+                    'user_email' => $email,
+                    'user_pass'  => wp_generate_password( 12, false ),
+                    'role'       => 'customer',
+                ) );
+            }
+            if ( is_wp_error( $result ) ) {
+                wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+            }
+            $customer_id = (int) $result;
+
+        } elseif ( ! empty( $pos_settings['pos_allow_no_email'] ) ) {
+
+            if ( ! empty( $pos_settings['pos_placeholder_email_enabled'] ) ) {
+                // Generate placeholder email
+                $pattern     = $pos_settings['pos_placeholder_email_pattern'] ?: 'pos_{phone}@poslocal.internal';
+                $final_email = str_replace(
+                    array( '{phone}', '{timestamp}' ),
+                    array( preg_replace( '/[^0-9]/', '', $phone ), time() ),
+                    $pattern
+                );
+
+                // Ensure uniqueness
+                $attempt = $final_email;
+                $suffix  = 1;
+                while ( email_exists( $attempt ) ) {
+                    $attempt = str_replace( '@', '_' . $suffix . '@', $final_email );
+                    $suffix++;
+                }
+                $final_email = $attempt;
+
+                if ( function_exists( 'wc_create_new_customer' ) ) {
+                    $username = wc_create_new_customer_username( $final_email );
+                    $result   = wc_create_new_customer( $final_email, $username, wp_generate_password( 12, false ) );
+                } else {
+                    $result = wp_insert_user( array(
+                        'user_login' => sanitize_user( $final_email, true ),
+                        'user_email' => $final_email,
+                        'user_pass'  => wp_generate_password( 12, false ),
+                        'role'       => 'customer',
+                    ) );
+                }
+                if ( is_wp_error( $result ) ) {
+                    wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+                }
+                $customer_id = (int) $result;
+            } else {
+                // Guest profile — no WP user created
+                $is_guest = true;
+            }
+
+        } else {
+            // Policy disallows creating users without email and placeholder is off
+            $is_guest = true;
+        }
+
+        // --- Save metas if a WP user was created ---
+        if ( $customer_id > 0 ) {
+            $display_name = trim( $first_name . ' ' . $last_name );
+            wp_update_user( array(
+                'ID'           => $customer_id,
+                'first_name'   => $first_name,
+                'last_name'    => $last_name,
+                'display_name' => $display_name,
+                'role'         => 'customer',
+            ) );
+
+            update_user_meta( $customer_id, 'billing_first_name',    $first_name );
+            update_user_meta( $customer_id, 'billing_last_name',     $last_name );
+            update_user_meta( $customer_id, 'billing_phone',         $phone );
+            update_user_meta( $customer_id, 'billing_email',         $final_email );
+            update_user_meta( $customer_id, 'billing_address_1',     $address_1 );
+            update_user_meta( $customer_id, 'billing_city',          $city );
+            update_user_meta( $customer_id, 'billing_state',         $state );
+            update_user_meta( $customer_id, 'billing_postcode',      $postcode );
+            update_user_meta( $customer_id, '_wbi_whatsapp',         $phone );
+            update_user_meta( $customer_id, '_wbi_customer_type',    $customer_type );
+            update_user_meta( $customer_id, '_wbi_document_type',    $document_type );
+            update_user_meta( $customer_id, '_wbi_document_number',  $document_number );
+            update_user_meta( $customer_id, '_wbi_company_name',     $company_name );
+            update_user_meta( $customer_id, '_wbi_pos_created_by',   $cashier_id );
+
+            if ( 'wholesale' === $customer_type ) {
+                update_user_meta( $customer_id, 'wholesale_customer', 'yes' );
+            }
+        }
+
+        $display_name = trim( $first_name . ' ' . $last_name );
+
+        wp_send_json_success( array(
+            'customer_id'   => $customer_id,
+            'is_guest'      => $is_guest,
+            'name'          => $display_name,
+            'email'         => $final_email,
+            'phone'         => $phone,
+            'customer_type' => $customer_type,
+            'doc_number'    => $document_number,
+            'guest_data'    => $is_guest ? array(
+                'first_name'      => $first_name,
+                'last_name'       => $last_name,
+                'phone'           => $phone,
+                'customer_type'   => $customer_type,
+                'document_type'   => $document_type,
+                'document_number' => $document_number,
+                'company_name'    => $company_name,
+                'address_1'       => $address_1,
+                'city'            => $city,
+                'state'           => $state,
+                'postcode'        => $postcode,
+                'created_by'      => $cashier_name,
+                'created_at'      => $timestamp,
+            ) : null,
+            'log'           => sprintf( '[POS] Cliente creado por %s el %s', $cashier_name, $timestamp ),
+        ) );
     }
 
     // =========================================================================
@@ -611,10 +1195,14 @@ class WBI_POS_Module {
             wp_send_json_error( array( 'message' => 'Sin permisos.' ), 403 );
         }
 
+        $pos_settings = self::get_pos_settings();
+
         // Seller / operator / cash session
         $seller_user_id   = absint( $_POST['seller_user_id'] ?? 0 );
         $cash_session_id  = absint( $_POST['cash_session_id'] ?? 0 );
         $operator_user_id = get_current_user_id();
+        $cashier_data     = get_userdata( $operator_user_id );
+        $cashier_name     = $cashier_data ? $cashier_data->display_name : 'Cajero';
 
         // Parse items from form-encoded POST: items[0][id], items[0][qty], etc.
         $raw_items = isset( $_POST['items'] ) && is_array( $_POST['items'] ) ? $_POST['items'] : array();
@@ -649,8 +1237,75 @@ class WBI_POS_Module {
             }
         }
 
-        $customer_id = absint( $_POST['customer_id'] ?? 0 );
-        $note        = sanitize_textarea_field( wp_unslash( $_POST['note'] ?? '' ) );
+        // --- Customer ---
+        $customer_id      = absint( $_POST['customer_id'] ?? 0 );
+        $customer_type    = sanitize_text_field( wp_unslash( $_POST['customer_type'] ?? '' ) );
+        $is_consumer_final = ! empty( $_POST['is_consumer_final'] );
+        $is_guest          = ! empty( $_POST['is_guest'] );
+
+        // Parse guest_data if provided
+        $guest_data = null;
+        if ( $is_guest && ! empty( $_POST['guest_data'] ) ) {
+            $raw_gd = wp_unslash( $_POST['guest_data'] );
+            if ( is_string( $raw_gd ) ) {
+                $raw_gd = json_decode( $raw_gd, true );
+            }
+            if ( is_array( $raw_gd ) ) {
+                $guest_data = array_map( 'sanitize_text_field', $raw_gd );
+            }
+        }
+
+        // Enforce require_customer policy
+        if ( ! empty( $pos_settings['pos_require_customer'] ) && ! $customer_id && ! $is_guest && ! $is_consumer_final ) {
+            wp_send_json_error( array( 'message' => 'Seleccioná un cliente antes de confirmar el pedido.' ) );
+        }
+
+        // --- Parse adjustments ---
+        $raw_adjustments = isset( $_POST['adjustments'] ) && is_array( $_POST['adjustments'] )
+            ? $_POST['adjustments'] : array();
+
+        $clean_adjustments = array();
+        $has_discount      = false;
+
+        if ( ! empty( $raw_adjustments ) ) {
+            // Capability check for adjustments
+            if ( ! current_user_can( 'wbi_pos_apply_adjustments' ) && ! current_user_can( 'manage_woocommerce' ) ) {
+                wp_send_json_error( array( 'message' => 'No tenés permisos para aplicar ajustes al pedido.' ), 403 );
+            }
+
+            $allowed_types = array( 'discount', 'surcharge', 'shipping', 'manual_tax' );
+            foreach ( $raw_adjustments as $adj ) {
+                $type   = sanitize_text_field( wp_unslash( $adj['type']   ?? '' ) );
+                $mode   = sanitize_text_field( wp_unslash( $adj['mode']   ?? 'fixed' ) );
+                $value  = abs( (float) ( $adj['value'] ?? 0 ) );
+                $reason = sanitize_text_field( wp_unslash( $adj['reason'] ?? '' ) );
+
+                if ( ! in_array( $type, $allowed_types, true ) || $value <= 0 ) continue;
+                if ( ! in_array( $mode, array( 'fixed', 'percent' ), true ) ) continue;
+
+                // Check per-type settings
+                if ( 'discount'   === $type && empty( $pos_settings['pos_enable_discount'] ) ) continue;
+                if ( 'surcharge'  === $type && empty( $pos_settings['pos_enable_surcharge'] ) ) continue;
+                if ( 'shipping'   === $type && empty( $pos_settings['pos_enable_shipping'] ) ) continue;
+                if ( 'manual_tax' === $type && empty( $pos_settings['pos_enable_manual_tax'] ) ) continue;
+
+                // Validate discount reason if required
+                if ( 'discount' === $type && ! empty( $pos_settings['pos_require_discount_reason'] ) && ! $reason ) {
+                    wp_send_json_error( array( 'message' => 'El motivo es obligatorio para descuentos.' ) );
+                }
+
+                if ( 'discount' === $type ) $has_discount = true;
+
+                $clean_adjustments[] = array(
+                    'type'   => $type,
+                    'mode'   => $mode,
+                    'value'  => $value,
+                    'reason' => $reason,
+                );
+            }
+        }
+
+        $note = sanitize_textarea_field( wp_unslash( $_POST['note'] ?? '' ) );
 
         // --- Create WC_Order ---
         $order = wc_create_order( array(
@@ -663,7 +1318,7 @@ class WBI_POS_Module {
         }
 
         // Add items
-        $order_total = 0.0;
+        $order_subtotal = 0.0;
         foreach ( $items as $item ) {
             $product_id = absint( $item['id'] ?? 0 );
             $qty        = max( 1, absint( $item['qty'] ?? 1 ) );
@@ -679,28 +1334,123 @@ class WBI_POS_Module {
             $line->set_total( $price * $qty );
             $order->add_item( $line );
 
-            $order_total += $price * $qty;
+            $order_subtotal += $price * $qty;
         }
 
+        // --- Apply adjustments as fee lines ---
+        $adjustments_net  = 0.0;
+        $adj_notes        = array();
+        $running_total    = $order_subtotal; // track running total for percent calculations
+        foreach ( $clean_adjustments as $adj ) {
+            $type   = $adj['type'];
+            $mode   = $adj['mode'];
+            $value  = $adj['value'];
+            $reason = $adj['reason'];
+
+            // Calculate amount against the running total so each percent adjustment
+            // is applied on the effective total after previous adjustments.
+            $amount = 0.0;
+            if ( 'percent' === $mode ) {
+                $amount = round( max( 0.0, $running_total ) * $value / 100, 2 );
+            } else {
+                $amount = $value;
+            }
+
+            // Discounts reduce total; others add to it
+            $is_reduction = ( 'discount' === $type );
+            $fee_amount   = $is_reduction ? - $amount : $amount;
+            $running_total += $fee_amount;
+
+            $type_labels = array(
+                'discount'   => 'Descuento',
+                'surcharge'  => 'Recargo',
+                'shipping'   => 'Envío manual',
+                'manual_tax' => 'Impuesto manual',
+            );
+            $label = ( $type_labels[ $type ] ?? $type );
+            if ( $reason ) $label .= ' (' . $reason . ')';
+
+            $fee = new WC_Order_Item_Fee();
+            $fee->set_name( $label );
+            $fee->set_amount( $fee_amount );
+            $fee->set_total( $fee_amount );
+            $fee->set_tax_status( 'none' );
+            $order->add_item( $fee );
+
+            $adjustments_net += $fee_amount;
+
+            // Prepare audit note
+            $mode_label = ( 'percent' === $mode )
+                ? number_format( $value, 2 ) . '%'
+                : wc_price( $value );
+            $note_text = sprintf(
+                '[POS] %s %s (%s) aplicado por %s',
+                $label,
+                $mode_label,
+                wc_price( abs( $fee_amount ) ),
+                $cashier_name
+            );
+            if ( $reason ) {
+                $note_text .= ' — Motivo: ' . $reason;
+            }
+            $adj_notes[] = $note_text;
+        }
+
+        $order_total = max( 0.0, $order_subtotal + $adjustments_net );
         $order->set_total( $order_total );
 
-        // Set billing from customer if available
+        // Set billing from WP customer if available
         if ( $customer_id ) {
-            $customer = new WC_Customer( $customer_id );
-            $order->set_billing_first_name( $customer->get_billing_first_name() );
-            $order->set_billing_last_name( $customer->get_billing_last_name() );
-            $order->set_billing_email( $customer->get_billing_email() );
-            $order->set_billing_phone( $customer->get_billing_phone() );
-            $order->set_billing_address_1( $customer->get_billing_address_1() );
-            $order->set_billing_city( $customer->get_billing_city() );
-            $order->set_billing_state( $customer->get_billing_state() );
-            $order->set_billing_postcode( $customer->get_billing_postcode() );
-            $order->set_billing_country( $customer->get_billing_country() );
+            $wc_customer = new WC_Customer( $customer_id );
+            $order->set_billing_first_name( $wc_customer->get_billing_first_name() );
+            $order->set_billing_last_name( $wc_customer->get_billing_last_name() );
+            $order->set_billing_email( $wc_customer->get_billing_email() );
+            $order->set_billing_phone( $wc_customer->get_billing_phone() );
+            $order->set_billing_address_1( $wc_customer->get_billing_address_1() );
+            $order->set_billing_city( $wc_customer->get_billing_city() );
+            $order->set_billing_state( $wc_customer->get_billing_state() );
+            $order->set_billing_postcode( $wc_customer->get_billing_postcode() );
+            $order->set_billing_country( $wc_customer->get_billing_country() );
+        }
+
+        // Set billing from guest_data if guest
+        if ( $is_guest && ! empty( $guest_data ) ) {
+            $order->set_billing_first_name( $guest_data['first_name'] ?? '' );
+            $order->set_billing_last_name( $guest_data['last_name']  ?? '' );
+            $order->set_billing_phone(     $guest_data['phone']       ?? '' );
+            $order->set_billing_address_1( $guest_data['address_1']  ?? '' );
+            $order->set_billing_city(      $guest_data['city']        ?? '' );
+            $order->set_billing_state(     $guest_data['state']       ?? '' );
+            $order->set_billing_postcode(  $guest_data['postcode']    ?? '' );
         }
 
         // Note
         if ( $note ) {
             $order->add_order_note( $note, 0, false );
+        }
+
+        // Add per-adjustment audit notes
+        foreach ( $adj_notes as $adj_note ) {
+            $order->add_order_note( $adj_note, 0, false );
+        }
+
+        // Cashier assignment note
+        $order->add_order_note(
+            sprintf( '[POS] Pedido creado por %s el %s', $cashier_name, current_time( 'mysql' ) ),
+            0,
+            false
+        );
+
+        if ( $customer_id && $customer_type ) {
+            $order->add_order_note(
+                sprintf( '[POS] Cliente #%d (%s) asignado por %s', $customer_id, $customer_type, $cashier_name ),
+                0,
+                false
+            );
+        }
+
+        if ( $is_consumer_final ) {
+            $order->add_order_note( '[POS] Consumidor Final', 0, false );
         }
 
         // Set payment method label
@@ -721,7 +1471,7 @@ class WBI_POS_Module {
 
         // Save POS metas
         $order->update_meta_data( '_wbi_origin',                  'pos' );
-        $order->update_meta_data( '_wbi_pos_created_by',          get_current_user_id() );
+        $order->update_meta_data( '_wbi_pos_created_by',          $operator_user_id );
         $order->update_meta_data( '_wbi_pos_operator_user_id',    $operator_user_id );
         $order->update_meta_data( '_wbi_pos_seller_user_id',      $seller_user_id > 0 ? $seller_user_id : $operator_user_id );
         $order->update_meta_data( '_wbi_pos_cash_session_id',     $cash_session_id );
@@ -729,6 +1479,23 @@ class WBI_POS_Module {
         $order->update_meta_data( '_wbi_pos_paid_total',          $paid_total );
         $order->update_meta_data( '_wbi_pos_balance_due',         $balance_due );
         $order->update_meta_data( '_wbi_pos_invoice_status',      'pending' );
+        $order->update_meta_data( '_wbi_pos_customer_type',       $customer_type );
+        $order->update_meta_data( '_wbi_pos_is_consumer_final',   $is_consumer_final ? 1 : 0 );
+
+        if ( $is_guest && ! empty( $guest_data ) ) {
+            $order->update_meta_data( '_wbi_pos_guest_first_name',      $guest_data['first_name']      ?? '' );
+            $order->update_meta_data( '_wbi_pos_guest_last_name',       $guest_data['last_name']       ?? '' );
+            $order->update_meta_data( '_wbi_pos_guest_phone',           $guest_data['phone']           ?? '' );
+            $order->update_meta_data( '_wbi_pos_guest_customer_type',   $guest_data['customer_type']   ?? '' );
+            $order->update_meta_data( '_wbi_pos_guest_document_type',   $guest_data['document_type']   ?? '' );
+            $order->update_meta_data( '_wbi_pos_guest_document_number', $guest_data['document_number'] ?? '' );
+            $order->update_meta_data( '_wbi_pos_guest_company_name',    $guest_data['company_name']    ?? '' );
+            $order->update_meta_data( '_wbi_pos_guest_created_by',      $cashier_name );
+        }
+
+        if ( ! empty( $clean_adjustments ) ) {
+            $order->update_meta_data( '_wbi_pos_adjustments', wp_json_encode( $clean_adjustments ) );
+        }
 
         $order->save();
 
@@ -748,7 +1515,7 @@ class WBI_POS_Module {
                     $payment['amount'],
                     (string) $order_id,
                     '',
-                    get_current_user_id()
+                    $operator_user_id
                 );
             }
         }
@@ -756,6 +1523,7 @@ class WBI_POS_Module {
         wp_send_json_success( array(
             'order_id'    => $order_id,
             'order_url'   => $order_url,
+            'subtotal'    => $order_subtotal,
             'total'       => $order_total,
             'paid_total'  => $paid_total,
             'balance_due' => $balance_due,
