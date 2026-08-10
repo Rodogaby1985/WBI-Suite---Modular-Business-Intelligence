@@ -298,7 +298,7 @@ class WBI_POS_Module {
 
         $pos_settings = self::get_pos_settings();
 
-        wp_localize_script( 'wbi-pos-js', 'wbiPos', array(
+        wp_localize_script( 'wbi-pos-js', 'wbiPos', apply_filters( 'wbi_pos_localize_data', array(
             'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
             'nonce'    => wp_create_nonce( 'wbi_pos_nonce' ),
             'currency' => get_woocommerce_currency_symbol(),
@@ -438,7 +438,7 @@ class WBI_POS_Module {
                 'adjustmentMaxDiscount'     => 'El descuento supera el máximo permitido (%s%).',
                 'noAdjustments'             => 'Sin ajustes',
             ),
-        ) );
+        ) ) );
     }
 
     // =========================================================================
