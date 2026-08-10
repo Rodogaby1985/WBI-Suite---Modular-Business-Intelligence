@@ -283,8 +283,8 @@
     function looksLikeQrCode(q) {
         if (!wbiPos.qr || !wbiPos.qr.enabled || !q) return false;
         if (q.indexOf('wbi_qr=') !== -1) return true;
-        // Bare token: long base64url string, unlike names/SKUs/barcodes
-        return /^[A-Za-z0-9_-]{24,200}$/.test(q) && !/^\d+$/.test(q);
+        // Bare v1 token: base64url of "1|…" always starts with "MXw"
+        return /^MXw[A-Za-z0-9_-]{21,197}$/.test(q);
     }
 
     function resolveQrCode(code) {
