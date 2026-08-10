@@ -335,7 +335,10 @@ class WBI_POS_Module {
                 'invoiceSuccess'     => 'Factura generada correctamente',
                 'invoiceError'       => 'Error al facturar. El pedido ya fue guardado.',
                 'noProducts'         => 'No se encontraron productos.',
+                'noSearchResults'    => 'Sin resultados',
                 'noCustomers'        => 'No se encontraron clientes.',
+                'loadingProducts'    => 'Cargando productos…',
+                'loadingMoreProducts'=> 'Cargando más…',
                 'finalConsumer'      => 'Consumidor Final',
                 'recoverDraft'       => 'Hay un borrador guardado. ¿Deseás recuperarlo?',
                 'scannerMode'        => 'Modo escáner',
@@ -850,68 +853,148 @@ class WBI_POS_Module {
             wp_send_json_error( array( 'message' => 'Sin permisos.' ), 403 );
         }
 
-        $query = sanitize_text_field( wp_unslash( $_GET['q'] ?? '' ) );
-        if ( strlen( $query ) < 1 ) {
-            wp_send_json_success( array() );
-        }
+        $query            = trim( sanitize_text_field( wp_unslash( $_GET['q'] ?? '' ) ) );
+        $page             = max( 1, absint( $_GET['page'] ?? 1 ) );
+        $requested_per    = absint( $_GET['per_page'] ?? 20 );
+        $per_page         = min( 20, max( 1, $requested_per ) );
+        $offset           = ( $page - 1 ) * $per_page;
+        $products         = array();
+        $candidate_ids    = array();
+        $has_more         = false;
 
-        $products = array();
+        if ( '' === $query ) {
+            $default_orderby = get_option( 'woocommerce_default_catalog_orderby', 'menu_order' );
+            if ( 'menu_order' === $default_orderby ) {
+                $default_orderby = 'menu_order';
+            }
 
-        // Search by title
-        $args = array(
-            'post_type'      => array( 'product', 'product_variation' ),
-            'post_status'    => 'publish',
-            'posts_per_page' => 20,
-            'orderby'        => 'relevance',
-        );
+            $ordering_args = wc_get_catalog_ordering_args( $default_orderby, 'asc' );
 
-        // Try SKU / barcode first (exact meta matches)
-        $sku_args = $args;
-        $sku_args['meta_query'] = array(
-            'relation' => 'OR',
-            array( 'key' => '_sku',      'value' => $query, 'compare' => 'LIKE' ),
-            array( 'key' => '_ean',      'value' => $query, 'compare' => 'LIKE' ),
-            array( 'key' => '_barcode',  'value' => $query, 'compare' => 'LIKE' ),
-            array( 'key' => 'ean',       'value' => $query, 'compare' => 'LIKE' ),
-            array( 'key' => 'barcode',   'value' => $query, 'compare' => 'LIKE' ),
-        );
-
-        $sku_query = new WP_Query( $sku_args );
-
-        // Search by name
-        $name_args = $args;
-        $name_args['s'] = $query;
-        $name_query = new WP_Query( $name_args );
-
-        $all_posts = array_merge(
-            $sku_query->posts ?? array(),
-            $name_query->posts ?? array()
-        );
-
-        $seen = array();
-        foreach ( $all_posts as $post ) {
-            if ( isset( $seen[ $post->ID ] ) ) continue;
-            $seen[ $post->ID ] = true;
-
-            $product = wc_get_product( $post->ID );
-            if ( ! $product || ! $product->is_purchasable() ) continue;
-
-            $price = (float) $product->get_price();
-            $sku   = $product->get_sku();
-
-            $products[] = array(
-                'id'    => $product->get_id(),
-                'name'  => $product->get_name(),
-                'sku'   => $sku,
-                'price' => $price,
-                'stock' => $product->get_stock_quantity(),
-                'image' => wp_get_attachment_url( $product->get_image_id() ) ?: '',
+            $catalog_args = array(
+                'post_type'              => array( 'product', 'product_variation' ),
+                'post_status'            => 'publish',
+                'posts_per_page'         => $per_page + 1,
+                'offset'                 => $offset,
+                'fields'                 => 'ids',
+                'no_found_rows'          => true,
+                'ignore_sticky_posts'    => true,
+                'update_post_meta_cache' => false,
+                'update_post_term_cache' => false,
+                'orderby'                => array( 'menu_order' => 'ASC', 'title' => 'ASC' ),
+                'order'                  => 'ASC',
             );
 
-            if ( count( $products ) >= 20 ) break;
+            if ( ! empty( $ordering_args['orderby'] ) ) {
+                $catalog_args['orderby'] = $ordering_args['orderby'];
+            }
+            if ( ! empty( $ordering_args['order'] ) ) {
+                $catalog_args['order'] = $ordering_args['order'];
+            }
+            if ( ! empty( $ordering_args['meta_key'] ) ) {
+                $catalog_args['meta_key'] = $ordering_args['meta_key'];
+            }
+
+            $catalog_query  = new WP_Query( $catalog_args );
+            $candidate_ids  = is_array( $catalog_query->posts ) ? $catalog_query->posts : array();
+        } else {
+            $window_size = ( $page * $per_page ) + 1;
+            $base_args   = array(
+                'post_type'              => array( 'product', 'product_variation' ),
+                'post_status'            => 'publish',
+                'posts_per_page'         => $window_size,
+                'fields'                 => 'ids',
+                'no_found_rows'          => true,
+                'ignore_sticky_posts'    => true,
+                'update_post_meta_cache' => false,
+                'update_post_term_cache' => false,
+            );
+
+            $sku_args = $base_args;
+            $sku_args['meta_query'] = array(
+                'relation' => 'OR',
+                array( 'key' => '_sku',      'value' => $query, 'compare' => 'LIKE' ),
+                array( 'key' => '_ean',      'value' => $query, 'compare' => 'LIKE' ),
+                array( 'key' => '_barcode',  'value' => $query, 'compare' => 'LIKE' ),
+                array( 'key' => 'ean',       'value' => $query, 'compare' => 'LIKE' ),
+                array( 'key' => 'barcode',   'value' => $query, 'compare' => 'LIKE' ),
+            );
+
+            $name_args = $base_args;
+            $name_args['s']       = $query;
+            $name_args['orderby'] = 'relevance';
+
+            $sku_query  = new WP_Query( $sku_args );
+            $name_query = new WP_Query( $name_args );
+
+            $merged_ids = array_merge(
+                $sku_query->posts ?? array(),
+                $name_query->posts ?? array()
+            );
+
+            $seen = array();
+            foreach ( $merged_ids as $product_id ) {
+                $product_id = absint( $product_id );
+                if ( ! $product_id || isset( $seen[ $product_id ] ) ) {
+                    continue;
+                }
+                $seen[ $product_id ] = true;
+                $candidate_ids[]     = $product_id;
+            }
+
+            if ( $offset > 0 ) {
+                $candidate_ids = array_slice( $candidate_ids, $offset );
+            }
         }
 
-        wp_send_json_success( $products );
+        $candidate_ids = array_values( array_filter( array_map( 'absint', $candidate_ids ) ) );
+
+        foreach ( $candidate_ids as $product_id ) {
+            $product = wc_get_product( $product_id );
+            if ( ! $product || ! $product->is_purchasable() ) {
+                continue;
+            }
+
+            $products[] = $this->format_pos_product_payload( $product );
+
+            if ( count( $products ) >= ( $per_page + 1 ) ) {
+                break;
+            }
+        }
+
+        if ( count( $products ) > $per_page ) {
+            $has_more = true;
+            $products = array_slice( $products, 0, $per_page );
+        }
+
+        wp_send_json_success( array(
+            'items'      => $products,
+            'pagination' => array(
+                'page'     => $page,
+                'per_page' => $per_page,
+                'has_more' => $has_more,
+            ),
+            'mode'       => '' === $query ? 'catalog' : 'search',
+        ) );
+    }
+
+    private function format_pos_product_payload( WC_Product $product ) {
+        $stock_qty = $product->get_stock_quantity();
+        $price     = (float) $product->get_price();
+        $payload   = array(
+            'product_id'    => $product->get_id(),
+            'title'         => $product->get_name(),
+            'sku'           => $product->get_sku(),
+            'price'         => $price,
+            'image_url'     => wp_get_attachment_url( $product->get_image_id() ) ?: '',
+            'stock_status'  => $product->get_stock_status(),
+            // Backward compatible fields used by current POS UI.
+            'id'            => $product->get_id(),
+            'name'          => $product->get_name(),
+            'stock'         => null !== $stock_qty ? (int) $stock_qty : null,
+            'image'         => wp_get_attachment_url( $product->get_image_id() ) ?: '',
+        );
+
+        return $payload;
     }
 
     // =========================================================================

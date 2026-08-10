@@ -18,6 +18,15 @@
     var scannerMode = false;
     var productSearchTimer = null;
     var customerSearchTimer = null;
+    var productDropdownState = {
+        query: '',
+        page: 1,
+        perPage: 20,
+        hasMore: false,
+        isLoading: false,
+        mode: 'catalog',
+        requestId: 0
+    };
 
     // Seller / cash session state
     var activeSeller  = null;   // { id, name } — selected seller
@@ -38,15 +47,24 @@
     function bindEvents() {
         // Product search
         $('#pos-product-search').on('input', function () {
-            clearTimeout(productSearchTimer);
-            var q = $(this).val().trim();
-            if (q.length < 1) {
-                closeDropdown('#pos-product-results');
-                return;
+            handleProductQueryChange($(this).val());
+        });
+
+        $('#pos-product-search').on('focus click', function () {
+            if ($(this).val().trim().length === 0) {
+                loadProducts('', 1, false);
             }
-            productSearchTimer = setTimeout(function () {
-                searchProducts(q);
-            }, 220);
+        });
+
+        $('#pos-product-results').on('scroll', function () {
+            if (!productDropdownState.hasMore || productDropdownState.isLoading) return;
+            if (!$(this).hasClass('open')) return;
+
+            var threshold = 48;
+            var nearBottom = this.scrollTop + this.clientHeight >= this.scrollHeight - threshold;
+            if (nearBottom) {
+                loadProducts(productDropdownState.query, productDropdownState.page + 1, true);
+            }
         });
 
         // Close dropdowns on outside click
@@ -79,6 +97,14 @@
                 if ($first.length) {
                     $first.trigger('click');
                 }
+            } else if (e.key === 'ArrowDown') {
+                var $items = $('#pos-product-results .pos-dropdown-item');
+                if ($items.length) {
+                    e.preventDefault();
+                    $items.first().focus();
+                }
+            } else if (e.key === 'Escape') {
+                closeDropdown('#pos-product-results');
             }
         });
 
@@ -230,38 +256,124 @@
     }
 
     // ── Product Search ─────────────────────────────────────────────────────
-    function searchProducts(q) {
+    function handleProductQueryChange(rawValue) {
+        clearTimeout(productSearchTimer);
+        var q = String(rawValue || '').trim();
+        productSearchTimer = setTimeout(function () {
+            loadProducts(q, 1, false);
+        }, 220);
+    }
+
+    function loadProducts(q, page, append) {
+        q = String(q || '').trim();
+        page = Math.max(1, parseInt(page || 1, 10));
+        append = !!append;
+
+        if (productDropdownState.isLoading) {
+            if (append) return;
+            productDropdownState.requestId += 1;
+        }
+
+        productDropdownState.isLoading = true;
+        if (!append) {
+            productDropdownState.query = q;
+            productDropdownState.page = 1;
+            productDropdownState.hasMore = false;
+            productDropdownState.mode = q ? 'search' : 'catalog';
+            showProductDropdownLoading(false);
+        } else {
+            showProductDropdownLoading(true);
+        }
+
+        var requestId = ++productDropdownState.requestId;
+
         $.ajax({
             url: wbiPos.ajaxUrl,
             type: 'GET',
             data: {
                 action: 'wbi_pos_search_products',
                 nonce: wbiPos.nonce,
-                q: q
+                q: q,
+                page: page,
+                per_page: productDropdownState.perPage
             },
             success: function (resp) {
-                if (!resp.success) {
-                    showProductDropdown([]);
+                if (requestId !== productDropdownState.requestId) return;
+                if (!resp || !resp.success || !resp.data) {
+                    showProductDropdown([], false, q ? 'search' : 'catalog');
+                    productDropdownState.isLoading = false;
                     return;
                 }
-                showProductDropdown(resp.data);
+
+                var payload = resp.data || {};
+                var items = $.isArray(payload) ? payload : (payload.items || []);
+                var normalized = [];
+
+                $.each(items, function (i, p) {
+                    var id = parseInt((p && (p.product_id || p.id)) || 0, 10);
+                    if (!id) return;
+                    normalized.push({
+                        id: id,
+                        name: p.title || p.name || '',
+                        sku: p.sku || '',
+                        price: parseFloat(p.price || 0) || 0,
+                        stock: (typeof p.stock === 'undefined') ? null : p.stock,
+                        stock_status: p.stock_status || '',
+                        image: p.image_url || p.image || ''
+                    });
+                });
+
+                var hasMore = !!(payload.pagination && payload.pagination.has_more);
+                productDropdownState.query = q;
+                productDropdownState.page = page;
+                productDropdownState.hasMore = hasMore;
+                productDropdownState.mode = q ? 'search' : 'catalog';
+                showProductDropdown(normalized, append, productDropdownState.mode);
+                productDropdownState.isLoading = false;
             },
             error: function () {
-                showProductDropdown([]);
+                if (requestId !== productDropdownState.requestId) return;
+                productDropdownState.isLoading = false;
+                showProductDropdown([], false, q ? 'search' : 'catalog');
             }
         });
     }
 
-    function showProductDropdown(products) {
+    function showProductDropdownLoading(append) {
         var $d = $('#pos-product-results');
-        $d.empty();
+        if (!append) {
+            $d.empty().append('<div class="pos-dropdown-loading">' + escHtml(wbiPos.i18n.loadingProducts || 'Cargando productos…') + '</div>').addClass('open');
+            return;
+        }
+
+        $d.find('.pos-dropdown-loading-more').remove();
+        $d.append('<div class="pos-dropdown-loading-more">' + escHtml(wbiPos.i18n.loadingMoreProducts || 'Cargando más…') + '</div>');
+    }
+
+    function showProductDropdown(products, append, mode) {
+        var $d = $('#pos-product-results');
+        append = !!append;
+        mode = mode || 'catalog';
+        $d.find('.pos-dropdown-loading-more').remove();
+
+        if (!append) {
+            $d.empty();
+        }
 
         if (!products || products.length === 0) {
-            $d.append('<div class="pos-dropdown-empty">' + wbiPos.i18n.noProducts + '</div>');
+            if (append) {
+                productDropdownState.hasMore = false;
+                return;
+            }
+            var emptyText = mode === 'search'
+                ? (wbiPos.i18n.noSearchResults || 'Sin resultados')
+                : wbiPos.i18n.noProducts;
+            $d.append('<div class="pos-dropdown-empty">' + escHtml(emptyText) + '</div>');
             $d.addClass('open');
             return;
         }
 
+        var $items = [];
         $.each(products, function (i, p) {
             var imgHtml = p.image
                 ? '<img src="' + escAttr(p.image) + '" alt="">'
@@ -271,25 +383,58 @@
                 ? ' &bull; Stock: ' + parseInt(p.stock, 10)
                 : '';
 
-            var $item = $('<div class="pos-dropdown-item" tabindex="0">')
+            var stockStatus = p.stock_status ? ' &bull; ' + escHtml(p.stock_status) : '';
+
+            var $item = $('<div class="pos-dropdown-item" tabindex="0" role="option">')
                 .data('product', p)
                 .html(
                     imgHtml +
                     '<div class="pos-dropdown-item-info">' +
                         '<div class="pos-dropdown-item-name">' + escHtml(p.name) + '</div>' +
-                        '<div class="pos-dropdown-item-meta">SKU: ' + escHtml(p.sku || '—') + stockHtml + '</div>' +
+                        '<div class="pos-dropdown-item-meta">SKU: ' + escHtml(p.sku || '—') + stockHtml + stockStatus + '</div>' +
                     '</div>' +
                     '<span class="pos-dropdown-item-price">' + wbiPos.currency + formatNumber(p.price) + '</span>'
                 );
 
-            $item.on('click keydown', function (e) {
-                if (e.type === 'keydown' && e.key !== 'Enter') return;
+            $item.on('click', function () {
                 addToCart($(this).data('product'));
                 $('#pos-product-search').val('').focus();
                 closeDropdown('#pos-product-results');
             });
 
+            $item.on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    addToCart($(this).data('product'));
+                    $('#pos-product-search').val('').focus();
+                    closeDropdown('#pos-product-results');
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    $(this).nextAll('.pos-dropdown-item').first().focus();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    var $prev = $(this).prevAll('.pos-dropdown-item').first();
+                    if ($prev.length) {
+                        $prev.focus();
+                    } else {
+                        $('#pos-product-search').focus();
+                    }
+                } else if (e.key === 'Escape') {
+                    closeDropdown('#pos-product-results');
+                    $('#pos-product-search').focus();
+                }
+            });
+
             $d.append($item);
+            $items.push($item);
+        });
+
+        $('#pos-product-search').off('keydown.productNav').on('keydown.productNav', function (e) {
+            if (e.key === 'ArrowDown' && $items.length) {
+                e.preventDefault();
+                $items[0].focus();
+            } else if (e.key === 'Escape') {
+                closeDropdown('#pos-product-results');
+            }
         });
 
         $d.addClass('open');
