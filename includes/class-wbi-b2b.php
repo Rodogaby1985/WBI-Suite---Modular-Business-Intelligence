@@ -152,6 +152,12 @@ class WBI_B2B_Module {
      */
     public function maybe_auto_approve_registration( $user_id ) {
         $opts = get_option( 'wbi_modules_settings', array() );
+        $registration_segmentation_enabled = ! isset( $opts['wbi_enable_registration_fields'] ) || ! empty( $opts['wbi_enable_registration_fields'] );
+
+        if ( $registration_segmentation_enabled ) {
+            return;
+        }
+
         if ( empty( $opts['wbi_b2b_auto_approve'] ) ) {
             return; // Aprobación manual: comportamiento actual, no hacer nada.
         }
@@ -213,7 +219,7 @@ class WBI_B2B_Module {
             }
             return $roles;
         }
-        return array( 'administrator', 'mayorista' );
+        return array( 'administrator', 'mayorista', 'wholesale_customer' );
     }
 
     /**
