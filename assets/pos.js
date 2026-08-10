@@ -11,7 +11,9 @@
     // ── State ──────────────────────────────────────────────────────────────
     var cart       = [];          // [ { id, name, sku, price, qty, image } ]
     var payments   = [];          // [ { method, amount, reference } ]
-    var customer   = null;        // { id, name, email } or null = consumidor final
+    var adjustments = [];         // [ { type, mode, value, reason, amount } ]
+    var customer   = null;        // { id, name, email, customer_type, is_guest, guest_data } or null = consumidor final
+    var isConsumerFinal = false;
     var paymentIdx = 0;           // counter for unique payment row IDs
     var scannerMode = false;
     var productSearchTimer = null;
@@ -29,6 +31,7 @@
         loadSellers();
         maybeRecoverDraft();
         updateTotals();
+        initSettingsUI();
     });
 
     // ── Event binding ──────────────────────────────────────────────────────
@@ -95,9 +98,41 @@
         // Consumidor Final button
         $('#pos-btn-consumer').on('click', function () {
             customer = null;
+            isConsumerFinal = true;
             $('#pos-customer-search').val('');
-            $('#pos-customer-selected').hide();
+            $('#pos-customer-selected')
+                .html('<span class="pos-customer-type-badge pos-badge-consumer">Consumidor Final</span>' +
+                      '<span class="pos-clear-customer" title="Quitar">✕</span>')
+                .show();
+            $('#pos-customer-selected .pos-clear-customer').on('click', clearCustomer);
             closeDropdown('#pos-customer-results');
+            updateTotals();
+            saveDraft();
+        });
+
+        // + Nuevo cliente button
+        $('#pos-btn-new-customer').on('click', function () {
+            openCreateCustomerModal();
+        });
+
+        // Quick create customer confirm
+        $('#pos-btn-cc-confirm').on('click', function () {
+            submitCreateCustomer();
+        });
+
+        // Adjustment add button
+        $('#pos-btn-add-adjustment').on('click', function () {
+            openAdjustmentModal();
+        });
+
+        // Adjustment confirm
+        $('#pos-btn-adj-confirm').on('click', function () {
+            submitAddAdjustment();
+        });
+
+        // Adjustment type change: show/hide reason group based on require setting
+        $('#pos-adj-type').on('change', function () {
+            updateAdjReasonVisibility();
         });
 
         // Customer search
@@ -404,6 +439,21 @@
         return t;
     }
 
+    function getAdjustmentsNet(cartSubtotal) {
+        var net = 0;
+        $.each(adjustments, function (i, adj) {
+            var amount = adj.mode === 'percent'
+                ? Math.round(cartSubtotal * adj.value / 100 * 100) / 100
+                : adj.value;
+            if (adj.type === 'discount') {
+                net -= amount;
+            } else {
+                net += amount;
+            }
+        });
+        return net;
+    }
+
     function getPaidTotal() {
         var p = 0;
         $('#pos-payments-list .pos-payment-row').each(function () {
@@ -413,13 +463,27 @@
     }
 
     function updateTotals() {
-        var total   = getCartTotal();
-        var paid    = getPaidTotal();
-        var balance = Math.max(0, total - paid);
+        var subtotal = getCartTotal();
+        var adjNet   = getAdjustmentsNet(subtotal);
+        var total    = Math.max(0, subtotal + adjNet);
+        var paid     = getPaidTotal();
+        var balance  = Math.max(0, total - paid);
 
+        $('#pos-subtotal').text(wbiPos.currency + formatNumber(subtotal));
         $('#pos-total').text(wbiPos.currency + formatNumber(total));
         $('#pos-paid').text(wbiPos.currency + formatNumber(paid));
         $('#pos-balance').text(wbiPos.currency + formatNumber(balance));
+
+        // Show adjustments row when there are any
+        if (adjustments.length > 0) {
+            var adjDisplay = adjNet >= 0
+                ? '+' + wbiPos.currency + formatNumber(adjNet)
+                : '-' + wbiPos.currency + formatNumber(Math.abs(adjNet));
+            $('#pos-adjustments-total').text(adjDisplay).toggleClass('pos-adj-negative', adjNet < 0);
+            $('.pos-adjustments-row').show();
+        } else {
+            $('.pos-adjustments-row').hide();
+        }
 
         if (balance <= 0) {
             $('.pos-balance-row').addClass('zero');
@@ -427,9 +491,14 @@
             $('.pos-balance-row').removeClass('zero');
         }
 
-        // Enable confirm button only if cart has items AND cash session is open
+        // Enable confirm button
         var cashOk = cashSession && cashSession.status === 'open';
-        $('#pos-btn-confirm').prop('disabled', cart.length === 0 || !cashOk);
+        var customerOk = true;
+        var settings = wbiPos.settings || {};
+        if (settings.requireCustomer && !customer && !isConsumerFinal) {
+            customerOk = false;
+        }
+        $('#pos-btn-confirm').prop('disabled', cart.length === 0 || !cashOk || !customerOk);
     }
 
     // ── Customer Search ────────────────────────────────────────────────────
@@ -465,24 +534,65 @@
             return;
         }
 
+        var $items = [];
         $.each(customers, function (i, c) {
-            var $item = $('<div class="pos-dropdown-item" tabindex="0">')
+            var typeLabel = c.customer_type === 'wholesale'
+                ? '<span class="pos-customer-type-badge pos-badge-wholesale">' + wbiPos.i18n.wholesale + '</span>'
+                : '<span class="pos-customer-type-badge pos-badge-retail">' + wbiPos.i18n.retail + '</span>';
+
+            var metaLine = escHtml(c.email || '');
+            if (c.phone) metaLine += (metaLine ? ' · ' : '') + escHtml(c.phone);
+            if (c.doc_number) metaLine += ' · ' + escHtml(c.doc_number);
+
+            var $item = $('<div class="pos-dropdown-item" tabindex="0" role="option">')
                 .data('customer', c)
                 .html(
                     '<div class="pos-item-no-img">👤</div>' +
                     '<div class="pos-dropdown-item-info">' +
-                        '<div class="pos-dropdown-item-name">' + escHtml(c.name) + '</div>' +
-                        '<div class="pos-dropdown-item-meta">' + escHtml(c.email) + '</div>' +
+                        '<div class="pos-dropdown-item-name">' + escHtml(c.name) + ' ' + typeLabel + '</div>' +
+                        '<div class="pos-dropdown-item-meta">' + metaLine + '</div>' +
                     '</div>'
                 );
 
-            $item.on('click keydown', function (e) {
-                if (e.type === 'keydown' && e.key !== 'Enter') return;
+            $item.on('click', function () {
                 selectCustomer($(this).data('customer'));
                 closeDropdown('#pos-customer-results');
             });
 
+            $item.on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    selectCustomer($(this).data('customer'));
+                    closeDropdown('#pos-customer-results');
+                    $('#pos-customer-search').focus();
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    $(this).next().focus();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    var $prev = $(this).prev();
+                    if ($prev.length) {
+                        $prev.focus();
+                    } else {
+                        $('#pos-customer-search').focus();
+                    }
+                } else if (e.key === 'Escape') {
+                    closeDropdown('#pos-customer-results');
+                    $('#pos-customer-search').focus();
+                }
+            });
+
+            $items.push($item);
             $d.append($item);
+        });
+
+        // Keyboard nav from input: ArrowDown focuses first result
+        $('#pos-customer-search').off('keydown.nav').on('keydown.nav', function (e) {
+            if (e.key === 'ArrowDown' && $items.length) {
+                e.preventDefault();
+                $items[0].focus();
+            } else if (e.key === 'Escape') {
+                closeDropdown('#pos-customer-results');
+            }
         });
 
         $d.addClass('open');
@@ -490,17 +600,37 @@
 
     function selectCustomer(c) {
         customer = c;
+        isConsumerFinal = false;
         $('#pos-customer-search').val('');
+
+        var typeBadge = c.customer_type === 'wholesale'
+            ? '<span class="pos-customer-type-badge pos-badge-wholesale">' + wbiPos.i18n.wholesale + '</span>'
+            : '<span class="pos-customer-type-badge pos-badge-retail">' + wbiPos.i18n.retail + '</span>';
+
+        var info = escHtml(c.name) + ' ' + typeBadge;
+        if (c.email) info += '<br><small>' + escHtml(c.email) + '</small>';
+        if (c.phone) info += '<small> · ' + escHtml(c.phone) + '</small>';
+
         $('#pos-customer-selected')
-            .html(
-                '<strong>' + escHtml(c.name) + '</strong> — ' + escHtml(c.email) +
-                '<span class="pos-clear-customer" title="Quitar">✕</span>'
-            )
+            .html(info + '<span class="pos-clear-customer" title="Quitar">✕</span>')
             .show();
-        $('#pos-customer-selected .pos-clear-customer').on('click', function () {
-            customer = null;
-            $('#pos-customer-selected').hide().empty();
-        });
+        $('#pos-customer-selected .pos-clear-customer').on('click', clearCustomer);
+
+        // Show wholesale notice
+        if (c.customer_type === 'wholesale' && wbiPos.i18n.wholesalePrices) {
+            showResultPanel('success', wbiPos.i18n.wholesalePrices);
+            setTimeout(function () { $('#pos-result-panel').hide(); }, 2500);
+        }
+
+        updateTotals();
+        saveDraft();
+    }
+
+    function clearCustomer() {
+        customer = null;
+        isConsumerFinal = false;
+        $('#pos-customer-selected').hide().empty();
+        updateTotals();
         saveDraft();
     }
 
@@ -511,19 +641,30 @@
             return;
         }
 
+        var settings = wbiPos.settings || {};
+        if (settings.requireCustomer && !customer && !isConsumerFinal) {
+            showResultPanel('error', '⚠️ ' + wbiPos.i18n.customerRequired);
+            return;
+        }
+
         var $btn = $('#pos-btn-confirm');
         $btn.prop('disabled', true).html('<span class="pos-spinner"></span> Procesando…');
 
         var payload = {
-            items:            cart,
-            payments:         collectPayments(),
-            customer_id:      customer ? customer.id : 0,
-            note:             $('#pos-order-note').val().trim(),
-            seller_user_id:   activeSeller ? activeSeller.id : 0,
-            cash_session_id:  cashSession ? cashSession.session_id : 0
+            items:              cart,
+            payments:           collectPayments(),
+            customer_id:        customer && !customer.is_guest ? (customer.id || 0) : 0,
+            customer_type:      customer ? (customer.customer_type || '') : '',
+            is_guest:           customer && customer.is_guest ? 1 : 0,
+            is_consumer_final:  isConsumerFinal ? 1 : 0,
+            guest_data:         customer && customer.is_guest && customer.guest_data
+                                    ? JSON.stringify(customer.guest_data) : '',
+            adjustments:        adjustments,
+            note:               $('#pos-order-note').val().trim(),
+            seller_user_id:     activeSeller ? activeSeller.id : 0,
+            cash_session_id:    cashSession ? cashSession.session_id : 0
         };
 
-        // Use a standard form-encoded POST so WordPress handles it properly
         $.ajax({
             url: wbiPos.ajaxUrl,
             type: 'POST',
@@ -546,11 +687,14 @@
 
     /**
      * Flatten nested payload into form-data-compatible object.
-     * items[0][id], items[0][qty], payments[0][method], etc.
      */
     function flattenPayload(payload) {
         var flat = {};
         flat.customer_id      = payload.customer_id;
+        flat.customer_type    = payload.customer_type || '';
+        flat.is_guest         = payload.is_guest || 0;
+        flat.is_consumer_final = payload.is_consumer_final || 0;
+        flat.guest_data       = payload.guest_data || '';
         flat.note             = payload.note;
         flat.seller_user_id   = payload.seller_user_id || 0;
         flat.cash_session_id  = payload.cash_session_id || 0;
@@ -566,6 +710,13 @@
             flat['payments[' + i + '][method]']    = p.method;
             flat['payments[' + i + '][amount]']    = p.amount;
             flat['payments[' + i + '][reference]'] = p.reference;
+        });
+
+        $.each(payload.adjustments, function (i, adj) {
+            flat['adjustments[' + i + '][type]']   = adj.type;
+            flat['adjustments[' + i + '][mode]']   = adj.mode;
+            flat['adjustments[' + i + '][value]']  = adj.value;
+            flat['adjustments[' + i + '][reason]'] = adj.reason || '';
         });
 
         return flat;
@@ -958,12 +1109,15 @@
 
     // ── Reset ──────────────────────────────────────────────────────────────
     function resetPos() {
-        cart       = [];
-        payments   = [];
-        customer   = null;
-        paymentIdx = 0;
+        cart           = [];
+        payments       = [];
+        adjustments    = [];
+        customer       = null;
+        isConsumerFinal = false;
+        paymentIdx     = 0;
 
         renderCart();
+        renderAdjustmentsList();
         $('#pos-payments-list').empty();
         $('#pos-customer-search').val('');
         $('#pos-customer-selected').hide().empty();
@@ -974,13 +1128,224 @@
         clearDraft();
     }
 
+    // ── Settings-driven UI ─────────────────────────────────────────────────
+    function initSettingsUI() {
+        var s = wbiPos.settings || {};
+        // Show/hide "new customer" button
+        if (s.allowQuickCreate) {
+            $('#pos-btn-new-customer').show();
+        }
+        // Show/hide adjustments panel
+        if (s.enableAdjustments) {
+            $('#pos-adjustments-wrap').show();
+            // Hide adjustment types that are disabled
+            if (!s.enableDiscount)   $('#pos-adj-type option[value="discount"]').remove();
+            if (!s.enableSurcharge)  $('#pos-adj-type option[value="surcharge"]').remove();
+            if (!s.enableShipping)   $('#pos-adj-type option[value="shipping"]').remove();
+            if (!s.enableManualTax)  $('#pos-adj-type option[value="manual_tax"]').remove();
+        }
+        updateAdjReasonVisibility();
+    }
+
+    function updateAdjReasonVisibility() {
+        var s    = wbiPos.settings || {};
+        var type = $('#pos-adj-type').val();
+        if (s.requireDiscountReason && type === 'discount') {
+            $('#pos-adj-reason-group').show();
+        } else if (!s.requireDiscountReason) {
+            $('#pos-adj-reason-group').show(); // always show reason field (optional)
+        }
+    }
+
+    // ── Quick Create Customer ──────────────────────────────────────────────
+    function openCreateCustomerModal() {
+        // Reset form
+        $('#pos-cc-first-name, #pos-cc-last-name, #pos-cc-phone, #pos-cc-email').val('');
+        $('#pos-cc-document-type, #pos-cc-document-number, #pos-cc-company-name').val('');
+        $('#pos-cc-address-1, #pos-cc-city, #pos-cc-postcode').val('');
+        $('#pos-cc-customer-type').val('');
+        $('#pos-cc-error').hide().empty();
+        openModal('pos-modal-create-customer');
+    }
+
+    function submitCreateCustomer() {
+        var firstName    = $('#pos-cc-first-name').val().trim();
+        var lastName     = $('#pos-cc-last-name').val().trim();
+        var phone        = $('#pos-cc-phone').val().trim();
+        var customerType = $('#pos-cc-customer-type').val();
+        var email        = $('#pos-cc-email').val().trim();
+
+        // Client-side validation
+        if (!firstName) { showCCError(wbiPos.i18n.firstNameRequired); return; }
+        if (!lastName)  { showCCError(wbiPos.i18n.lastNameRequired);  return; }
+        if (!phone)     { showCCError(wbiPos.i18n.phoneRequired);      return; }
+        if (!customerType) { showCCError(wbiPos.i18n.customerTypeRequired); return; }
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            showCCError(wbiPos.i18n.emailInvalid);
+            return;
+        }
+
+        var $btn = $('#pos-btn-cc-confirm');
+        $btn.prop('disabled', true).html('<span class="pos-spinner"></span>');
+
+        $.ajax({
+            url: wbiPos.ajaxUrl,
+            type: 'POST',
+            data: {
+                action:          'wbi_pos_create_customer',
+                nonce:           wbiPos.nonce,
+                first_name:      firstName,
+                last_name:       lastName,
+                phone:           phone,
+                customer_type:   customerType,
+                email:           email,
+                document_type:   $('#pos-cc-document-type').val(),
+                document_number: $('#pos-cc-document-number').val().trim(),
+                company_name:    $('#pos-cc-company-name').val().trim(),
+                address_1:       $('#pos-cc-address-1').val().trim(),
+                city:            $('#pos-cc-city').val().trim(),
+                postcode:        $('#pos-cc-postcode').val().trim()
+            },
+            success: function (resp) {
+                $btn.prop('disabled', false).text('👤 ' + wbiPos.i18n.createCustomer);
+                if (!resp.success) {
+                    // If existing customer was found, offer to select them
+                    if (resp.data && resp.data.existing) {
+                        if (window.confirm(resp.data.message + '\n¿Deseas seleccionar ese cliente?')) {
+                            selectCustomer({
+                                id:            resp.data.existing.id,
+                                name:          resp.data.existing.name,
+                                email:         resp.data.existing.email,
+                                customer_type: customerType,
+                                is_guest:      false,
+                                guest_data:    null
+                            });
+                            closeModal('pos-modal-create-customer');
+                        }
+                        return;
+                    }
+                    showCCError(resp.data.message || wbiPos.i18n.customerError);
+                    return;
+                }
+                var d = resp.data;
+                closeModal('pos-modal-create-customer');
+                selectCustomer({
+                    id:            d.customer_id || 0,
+                    name:          d.name,
+                    email:         d.email || '',
+                    phone:         d.phone || '',
+                    customer_type: d.customer_type,
+                    is_guest:      d.is_guest,
+                    guest_data:    d.guest_data || null
+                });
+                showResultPanel('success', '✅ ' + wbiPos.i18n.customerCreated);
+                setTimeout(function () { $('#pos-result-panel').hide(); }, 3000);
+            },
+            error: function () {
+                $btn.prop('disabled', false).text('👤 ' + wbiPos.i18n.createCustomer);
+                showCCError(wbiPos.i18n.customerError);
+            }
+        });
+    }
+
+    function showCCError(msg) {
+        $('#pos-cc-error').text(msg).show();
+    }
+
+    // ── Adjustments ────────────────────────────────────────────────────────
+    function openAdjustmentModal() {
+        $('#pos-adj-value').val('');
+        $('#pos-adj-reason').val('');
+        updateAdjReasonVisibility();
+        openModal('pos-modal-adjustment');
+    }
+
+    function submitAddAdjustment() {
+        var s      = wbiPos.settings || {};
+        var type   = $('#pos-adj-type').val();
+        var mode   = $('#pos-adj-mode').val();
+        var value  = parseFloat($('#pos-adj-value').val()) || 0;
+        var reason = $('#pos-adj-reason').val().trim();
+
+        if (value <= 0) {
+            alert(wbiPos.i18n.adjustmentValueRequired);
+            return;
+        }
+
+        // Validate discount reason
+        if (type === 'discount' && s.requireDiscountReason && !reason) {
+            alert(wbiPos.i18n.adjustmentReasonRequired);
+            return;
+        }
+
+        // Validate max discount
+        if (type === 'discount' && mode === 'percent' && s.maxDiscountPct && value > s.maxDiscountPct) {
+            alert((wbiPos.i18n.adjustmentMaxDiscount || 'El descuento supera el máximo permitido (%s%).').replace('%s', s.maxDiscountPct));
+            return;
+        }
+        if (type === 'discount' && mode === 'fixed' && s.maxDiscountPct && s.maxDiscountPct < 100) {
+            var subtotal = getCartTotal();
+            if (subtotal > 0 && (value / subtotal * 100) > s.maxDiscountPct) {
+                alert((wbiPos.i18n.adjustmentMaxDiscount || 'El descuento supera el máximo permitido (%s%).').replace('%s', s.maxDiscountPct));
+                return;
+            }
+        }
+
+        adjustments.push({ type: type, mode: mode, value: value, reason: reason });
+        renderAdjustmentsList();
+        closeModal('pos-modal-adjustment');
+        updateTotals();
+        saveDraft();
+    }
+
+    function renderAdjustmentsList() {
+        var $list = $('#pos-adjustments-list');
+        $list.empty();
+
+        if (!adjustments.length) {
+            return;
+        }
+
+        var subtotal = getCartTotal();
+        var typeLabels = wbiPos.i18n.adjustmentTypes || {};
+
+        $.each(adjustments, function (i, adj) {
+            var amount = adj.mode === 'percent'
+                ? Math.round(subtotal * adj.value / 100 * 100) / 100
+                : adj.value;
+            var isReduction = adj.type === 'discount';
+            var sign = isReduction ? '-' : '+';
+            var label = typeLabels[adj.type] || adj.type;
+            if (adj.reason) label += ' (' + escHtml(adj.reason) + ')';
+
+            var $row = $('<div class="pos-adjustment-row" data-idx="' + i + '">').html(
+                '<span class="pos-adj-label">' + label + '</span>' +
+                '<span class="pos-adj-amount ' + (isReduction ? 'pos-adj-negative' : '') + '">' +
+                    sign + wbiPos.currency + formatNumber(amount) +
+                '</span>' +
+                '<button class="pos-btn-remove pos-btn-remove-adj" data-idx="' + i + '" title="Quitar">✕</button>'
+            );
+
+            $list.append($row);
+        });
+
+        $list.find('.pos-btn-remove-adj').on('click', function () {
+            adjustments.splice(parseInt($(this).data('idx'), 10), 1);
+            renderAdjustmentsList();
+            updateTotals();
+            saveDraft();
+        });
+    }
+
     // ── Draft (localStorage) ───────────────────────────────────────────────
     function saveDraft() {
         try {
             localStorage.setItem(DRAFT_KEY, JSON.stringify({
-                cart: cart,
-                customer: customer,
-                payments: collectPayments()
+                cart:           cart,
+                customer:       customer,
+                isConsumerFinal: isConsumerFinal,
+                adjustments:    adjustments,
+                payments:       collectPayments()
             }));
         } catch (e) {}
     }
@@ -1001,13 +1366,22 @@
                 return;
             }
             if (window.confirm(wbiPos.i18n.recoverDraft)) {
-                cart     = draft.cart || [];
-                customer = draft.customer || null;
+                cart            = draft.cart || [];
+                customer        = draft.customer || null;
+                isConsumerFinal = draft.isConsumerFinal || false;
+                adjustments     = draft.adjustments || [];
 
                 renderCart();
+                renderAdjustmentsList();
 
                 if (customer) {
                     selectCustomer(customer);
+                } else if (isConsumerFinal) {
+                    $('#pos-customer-selected')
+                        .html('<span class="pos-customer-type-badge pos-badge-consumer">Consumidor Final</span>' +
+                              '<span class="pos-clear-customer" title="Quitar">✕</span>')
+                        .show();
+                    $('#pos-customer-selected .pos-clear-customer').on('click', clearCustomer);
                 }
 
                 if (draft.payments && draft.payments.length) {

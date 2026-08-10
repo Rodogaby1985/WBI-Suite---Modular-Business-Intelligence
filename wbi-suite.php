@@ -2038,16 +2038,33 @@ class WBI_Suite_Loader {
 
         if ( ! get_role( 'wbi_cashier' ) ) {
             add_role( 'wbi_cashier', 'Cajero POS', array(
-                'read'            => true,
-                'wbi_pos_access'  => true,
+                'read'                       => true,
+                'wbi_pos_access'             => true,
+                'wbi_pos_create_customer'    => true,
+                'wbi_pos_apply_adjustments'  => true,
             ) );
+        } else {
+            // Ensure existing role has new caps
+            $cashier_role = get_role( 'wbi_cashier' );
+            if ( $cashier_role ) {
+                $cashier_role->add_cap( 'wbi_pos_create_customer' );
+                $cashier_role->add_cap( 'wbi_pos_apply_adjustments' );
+            }
         }
 
         if ( ! get_role( 'wbi_vendedor' ) ) {
             add_role( 'wbi_vendedor', 'Vendedor POS', array(
-                'read'            => true,
-                'wbi_pos_access'  => true,
+                'read'                       => true,
+                'wbi_pos_access'             => true,
+                'wbi_pos_create_customer'    => true,
+                'wbi_pos_apply_adjustments'  => true,
             ) );
+        } else {
+            $vendedor_role = get_role( 'wbi_vendedor' );
+            if ( $vendedor_role ) {
+                $vendedor_role->add_cap( 'wbi_pos_create_customer' );
+                $vendedor_role->add_cap( 'wbi_pos_apply_adjustments' );
+            }
         }
     }
 
