@@ -78,15 +78,17 @@ class WBI_Pricelists_Module {
         $lists = $this->get_all_lists();
         $id    = sanitize_text_field( isset( $_POST['pl_id'] ) ? wp_unslash( $_POST['pl_id'] ) : '' );
 
+        $raw_min = isset( $_POST['pl_minimum_order_amount'] ) ? wp_unslash( $_POST['pl_minimum_order_amount'] ) : '';
         $entry = array(
-            'id'         => $id ?: uniqid( 'wbi_pl_', true ),
-            'name'       => sanitize_text_field( wp_unslash( isset( $_POST['pl_name'] ) ? $_POST['pl_name'] : '' ) ),
-            'slug'       => sanitize_title( wp_unslash( isset( $_POST['pl_name'] ) ? $_POST['pl_name'] : '' ) ),
-            'discount'   => max( 0, min( 100, floatval( isset( $_POST['pl_discount'] ) ? $_POST['pl_discount'] : 0 ) ) ),
-            'roles'      => isset( $_POST['pl_roles'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['pl_roles'] ) ) : array(),
-            'valid_from' => sanitize_text_field( wp_unslash( isset( $_POST['pl_valid_from'] ) ? $_POST['pl_valid_from'] : '' ) ),
-            'valid_to'   => sanitize_text_field( wp_unslash( isset( $_POST['pl_valid_to'] )   ? $_POST['pl_valid_to']   : '' ) ),
-            'active'     => ! empty( $_POST['pl_active'] ),
+            'id'                   => $id ?: uniqid( 'wbi_pl_', true ),
+            'name'                 => sanitize_text_field( wp_unslash( isset( $_POST['pl_name'] ) ? $_POST['pl_name'] : '' ) ),
+            'slug'                 => sanitize_title( wp_unslash( isset( $_POST['pl_name'] ) ? $_POST['pl_name'] : '' ) ),
+            'discount'             => max( 0, min( 100, floatval( isset( $_POST['pl_discount'] ) ? $_POST['pl_discount'] : 0 ) ) ),
+            'roles'                => isset( $_POST['pl_roles'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['pl_roles'] ) ) : array(),
+            'valid_from'           => sanitize_text_field( wp_unslash( isset( $_POST['pl_valid_from'] ) ? $_POST['pl_valid_from'] : '' ) ),
+            'valid_to'             => sanitize_text_field( wp_unslash( isset( $_POST['pl_valid_to'] )   ? $_POST['pl_valid_to']   : '' ) ),
+            'active'               => ! empty( $_POST['pl_active'] ),
+            'minimum_order_amount' => ( '' !== $raw_min && is_numeric( $raw_min ) ) ? max( 0, floatval( $raw_min ) ) : '',
         );
 
         // Update existing or add new
@@ -167,6 +169,7 @@ class WBI_Pricelists_Module {
                             <tr>
                                 <th>Nombre</th>
                                 <th>Descuento</th>
+                                <th>Mínimo</th>
                                 <th>Roles Asignados</th>
                                 <th>Desde</th>
                                 <th>Hasta</th>
@@ -186,6 +189,10 @@ class WBI_Pricelists_Module {
                             <tr>
                                 <td><strong><?php echo esc_html( $l['name'] ); ?></strong></td>
                                 <td><?php echo esc_html( $l['discount'] ); ?>%</td>
+                                <td><?php
+                                    $min_val = isset( $l['minimum_order_amount'] ) && '' !== $l['minimum_order_amount'] ? floatval( $l['minimum_order_amount'] ) : '';
+                                    echo ( '' !== $min_val && $min_val > 0 ) ? ( function_exists( 'wc_price' ) ? wp_kses_post( wc_price( $min_val ) ) : esc_html( $min_val ) ) : esc_html__( '—', 'wbi-suite' );
+                                ?></td>
                                 <td><?php echo esc_html( implode( ', ', $role_names ) ?: '—' ); ?></td>
                                 <td><?php echo esc_html( $l['valid_from'] ?: '—' ); ?></td>
                                 <td><?php echo esc_html( $l['valid_to']   ?: '—' ); ?></td>
@@ -232,6 +239,15 @@ class WBI_Pricelists_Module {
                                     <input type="number" id="pl_discount" name="pl_discount" min="0" max="100" step="0.01"
                                            class="small-text"
                                            value="<?php echo esc_attr( $editing ? $editing['discount'] : '' ); ?>" required>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th style="padding:8px 0;"><label for="pl_minimum_order_amount"><?php esc_html_e( 'Monto mínimo de compra', 'wbi-suite' ); ?></label></th>
+                                <td style="padding:8px 0;">
+                                    <input type="number" id="pl_minimum_order_amount" name="pl_minimum_order_amount" min="0" step="0.01"
+                                           class="small-text"
+                                           value="<?php echo esc_attr( $editing && isset( $editing['minimum_order_amount'] ) ? $editing['minimum_order_amount'] : '' ); ?>">
+                                    <p class="description"><?php esc_html_e( 'Se usa como mínimo para clientes asignados a esta lista, salvo overrides por rol/usuario. Dejar vacío para sin mínimo.', 'wbi-suite' ); ?></p>
                                 </td>
                             </tr>
                             <tr>
