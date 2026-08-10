@@ -871,6 +871,8 @@ class WBI_Suite_Loader {
         $checkbox_keys = array_merge(
             $this->get_module_toggle_keys(),
             array(
+                'wbi_enable_registration_fields',
+                'wbi_require_registration_whatsapp',
                 'wbi_b2b_auto_approve',
                 'wbi_b2b_enable_minimum_order_amount',
                 'wbi_b2b_enable_hide_prices',
@@ -914,6 +916,20 @@ class WBI_Suite_Loader {
 
         if ( array_key_exists( 'wbi_b2b_notification_email', $raw_input ) ) {
             $sanitized['wbi_b2b_notification_email'] = sanitize_email( $raw_input['wbi_b2b_notification_email'] );
+        }
+
+        if ( array_key_exists( 'wbi_registration_wholesale_role_slug', $raw_input ) ) {
+            $sanitized['wbi_registration_wholesale_role_slug'] = sanitize_key( $raw_input['wbi_registration_wholesale_role_slug'] );
+            if ( '' === $sanitized['wbi_registration_wholesale_role_slug'] ) {
+                $sanitized['wbi_registration_wholesale_role_slug'] = 'wholesale_customer';
+            }
+        }
+
+        if ( array_key_exists( 'wbi_registration_retail_role_slug', $raw_input ) ) {
+            $sanitized['wbi_registration_retail_role_slug'] = sanitize_key( $raw_input['wbi_registration_retail_role_slug'] );
+            if ( '' === $sanitized['wbi_registration_retail_role_slug'] ) {
+                $sanitized['wbi_registration_retail_role_slug'] = 'customer';
+            }
         }
 
         if ( array_key_exists( 'wbi_b2b_authorized_roles', $raw_input ) && is_array( $raw_input['wbi_b2b_authorized_roles'] ) ) {
@@ -1425,6 +1441,63 @@ class WBI_Suite_Loader {
                 <?php settings_fields( 'wbi_group' ); ?>
                 <?php settings_errors( 'wbi_modules_settings' ); ?>
                 <input type="hidden" name="wbi_modules_settings[_wbi_full_settings_form]" value="1">
+                <?php
+                $registration_enabled  = isset( $opts['wbi_enable_registration_fields'] ) ? ! empty( $opts['wbi_enable_registration_fields'] ) : true;
+                $whatsapp_required     = isset( $opts['wbi_require_registration_whatsapp'] ) ? ! empty( $opts['wbi_require_registration_whatsapp'] ) : true;
+                $wholesale_role_slug   = ! empty( $opts['wbi_registration_wholesale_role_slug'] ) ? $opts['wbi_registration_wholesale_role_slug'] : 'wholesale_customer';
+                $retail_role_slug      = ! empty( $opts['wbi_registration_retail_role_slug'] ) ? $opts['wbi_registration_retail_role_slug'] : 'customer';
+                ?>
+
+                <div class="wbi-group-title"><?php echo esc_html__( '🧾 Registro WooCommerce', 'wbi-suite' ); ?></div>
+                <div class="wbi-module-card active" style="max-width:760px; margin-bottom:20px;">
+                    <div style="display:flex; align-items:flex-start; gap:10px;">
+                        <span class="card-icon">🧾</span>
+                        <div style="flex:1;">
+                            <p class="card-name"><?php echo esc_html__( 'Segmentación de registro', 'wbi-suite' ); ?></p>
+                            <p class="card-desc"><?php echo esc_html__( 'Agrega WhatsApp, tipo de cliente y contraseña obligatoria al registro de WooCommerce sin romper el flujo nativo.', 'wbi-suite' ); ?></p>
+                        </div>
+                    </div>
+                    <div style="margin-top:14px; display:grid; gap:12px;">
+                        <label style="display:block;">
+                            <input type="checkbox" name="wbi_modules_settings[wbi_enable_registration_fields]" value="1" <?php checked( $registration_enabled, true ); ?>>
+                            <strong><?php echo esc_html__( 'Habilitar campos de registro personalizados', 'wbi-suite' ); ?></strong>
+                            <span style="display:block; color:#888; font-size:11px; margin-top:2px;">
+                                <?php echo esc_html__( 'Cuando está apagado, WooCommerce vuelve a usar el registro nativo por defecto.', 'wbi-suite' ); ?>
+                            </span>
+                        </label>
+
+                        <label style="display:block;">
+                            <input type="checkbox" name="wbi_modules_settings[wbi_require_registration_whatsapp]" value="1" <?php checked( $whatsapp_required, true ); ?>>
+                            <strong><?php echo esc_html__( 'Requerir WhatsApp en el registro', 'wbi-suite' ); ?></strong>
+                        </label>
+
+                        <label style="display:block;">
+                            <strong><?php echo esc_html__( 'Rol para clientes mayoristas', 'wbi-suite' ); ?></strong>
+                            <input
+                                type="text"
+                                name="wbi_modules_settings[wbi_registration_wholesale_role_slug]"
+                                value="<?php echo esc_attr( $wholesale_role_slug ); ?>"
+                                style="display:block; width:100%; margin-top:4px;"
+                            >
+                            <span style="display:block; color:#888; font-size:11px; margin-top:2px;">
+                                <?php echo esc_html__( 'Slug por defecto: wholesale_customer. Si no existe, se usa customer y se muestra un aviso.', 'wbi-suite' ); ?>
+                            </span>
+                        </label>
+
+                        <label style="display:block;">
+                            <strong><?php echo esc_html__( 'Rol para clientes minoristas', 'wbi-suite' ); ?></strong>
+                            <input
+                                type="text"
+                                name="wbi_modules_settings[wbi_registration_retail_role_slug]"
+                                value="<?php echo esc_attr( $retail_role_slug ); ?>"
+                                style="display:block; width:100%; margin-top:4px;"
+                            >
+                            <span style="display:block; color:#888; font-size:11px; margin-top:2px;">
+                                <?php echo esc_html__( 'Slug por defecto: customer.', 'wbi-suite' ); ?>
+                            </span>
+                        </label>
+                    </div>
+                </div>
 
                 <?php foreach ( $groups as $group_key => $group ) : ?>
                     <?php if ( empty( $group['modules'] ) ) continue; ?>
@@ -1898,6 +1971,13 @@ class WBI_Suite_Loader {
      * - wbi_vendedor: POS seller  (read + wbi_pos_access)
      */
     private static function maybe_create_wbi_roles() {
+        if ( ! get_role( 'wholesale_customer' ) ) {
+            $customer_role = get_role( 'customer' );
+            $caps          = $customer_role ? $customer_role->capabilities : array( 'read' => true );
+
+            add_role( 'wholesale_customer', __( 'Cliente mayorista', 'wbi-suite' ), $caps );
+        }
+
         if ( ! get_role( 'wbi_armador' ) ) {
             add_role( 'wbi_armador', 'Armador WBI', array( 'read' => true ) );
         }

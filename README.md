@@ -40,7 +40,7 @@ La licencia se gestiona desde **WooCommerce → wooErp → Configuración** (pes
 
 Desde **WooCommerce → wooErp → Configuración**, cada módulo tiene su propio toggle. Activá solo los que necesitás — el resto no carga código.
 
-El módulo de **Campos de Registro** (provincia, localidad, teléfono en el registro de clientes) se carga siempre, independientemente de la configuración.
+La configuración de **Registro WooCommerce** también se administra desde esa pantalla: permite activar o desactivar los campos segmentados de registro, exigir WhatsApp y definir roles distintos para clientes mayoristas y minoristas.
 
 ---
 
@@ -124,11 +124,11 @@ Los 31 módulos se agrupan en 7 categorías:
 
 ---
 
-### ✅ Siempre activo
+### ✅ Configurable desde Ajustes
 
 | Módulo | Descripción |
 |--------|-------------|
-| **Campos de Registro** | Agrega campos de provincia, localidad y teléfono al formulario de registro de clientes. Se carga siempre, sin necesidad de activación. |
+| **Registro WooCommerce** | Puede agregar WhatsApp de contacto, tipo de cliente y contraseña obligatoria al formulario de registro de WooCommerce, con asignación de roles configurable para mayoristas y minoristas. |
 
 ---
 
@@ -159,7 +159,7 @@ Los 31 módulos se agrupan en 7 categorías:
 wbi-suite.php                        ← Plugin principal y loader central
 includes/
   class-wbi-license.php              ← Gestión de licencias
-  class-wbi-registration-fields.php  ← Campos de registro (siempre activo)
+  class-wbi-registration-fields.php  ← Segmentación de registro WooCommerce
   class-wbi-b2b.php                  ← Módulo B2B
   class-wbi-pricelists.php           ← Listas de precios
   class-wbi-promo-pricing.php        ← Precio Promo
