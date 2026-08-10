@@ -51,6 +51,12 @@ class WBI_B2B_Module {
 
         // 9. Auto-aprobación al registrarse (si está habilitada la opción)
         add_action( 'user_register', array( $this, 'maybe_auto_approve_registration' ) );
+
+        // 10. User-level minimum order override — show and save field in wp-admin user profiles
+        add_action( 'show_user_profile',        array( $this, 'render_minimum_order_user_field' ) );
+        add_action( 'edit_user_profile',        array( $this, 'render_minimum_order_user_field' ) );
+        add_action( 'personal_options_update',  array( $this, 'save_minimum_order_user_field' ) );
+        add_action( 'edit_user_profile_update', array( $this, 'save_minimum_order_user_field' ) );
     }
 
     /**
@@ -416,25 +422,83 @@ class WBI_B2B_Module {
     // --- MONTO MÍNIMO DE COMPRA ---
     public function check_minimum_order() {
         if ( ! $this->minimum_order_feature_enabled() ) return;
-        if ( ! is_user_logged_in() ) return;
-        $user = wp_get_current_user();
-        if ( ! in_array( 'mayorista', (array) $user->roles, true ) ) return;
-
-        $opts    = $this->get_settings();
-        $minimum = floatval( ! empty( $opts['wbi_b2b_minimum_order'] ) ? $opts['wbi_b2b_minimum_order'] : 0 );
-        if ( $minimum <= 0 ) return;
         if ( ! function_exists( 'WC' ) || ! WC() || ! isset( WC()->cart ) || ! WC()->cart ) return;
 
+        $user_id = is_user_logged_in() ? get_current_user_id() : 0;
+
+        // Only enforce for logged-in users in the mayorista role OR guests if global fallback set.
+        if ( $user_id > 0 ) {
+            $user = wp_get_current_user();
+            if ( ! in_array( 'mayorista', (array) $user->roles, true ) ) return;
+        }
+
+        if ( ! class_exists( 'WBI_Minimum_Order_Resolver' ) ) return;
+
+        $resolved = WBI_Minimum_Order_Resolver::resolve_for_user( $user_id );
+        if ( null === $resolved['amount'] || $resolved['amount'] <= 0 ) return;
+
+        $minimum    = $resolved['amount'];
         $cart_total = floatval( WC()->cart->get_subtotal() );
         if ( $cart_total < $minimum ) {
             wc_add_notice(
                 sprintf(
-                    'El monto mínimo de compra mayorista es de %s. Tu carrito actual es de %s.',
+                    /* translators: 1: minimum amount, 2: current cart amount */
+                    esc_html__( 'El monto mínimo de compra es de %1$s. Tu carrito actual es de %2$s.', 'wbi-suite' ),
                     wc_price( $minimum ),
                     wc_price( $cart_total )
                 ),
                 'error'
             );
+        }
+    }
+
+    // --- USER PROFILE: Minimum order override ---
+
+    /**
+     * Render the "Monto mínimo personalizado" field on wp-admin user profile pages.
+     *
+     * @param WP_User $user The user being edited.
+     */
+    public function render_minimum_order_user_field( $user ) {
+        if ( ! current_user_can( 'edit_users' ) ) return;
+        $value = get_user_meta( $user->ID, 'wbi_minimum_order_amount_override', true );
+        ?>
+        <h3><?php esc_html_e( 'WBI — Monto Mínimo de Compra', 'wbi-suite' ); ?></h3>
+        <table class="form-table">
+            <tr>
+                <th><label for="wbi_minimum_order_amount_override"><?php esc_html_e( 'Monto mínimo personalizado', 'wbi-suite' ); ?></label></th>
+                <td>
+                    <?php wp_nonce_field( 'wbi_save_user_min_order_' . $user->ID, '_wbi_user_min_nonce' ); ?>
+                    <input type="number" name="wbi_minimum_order_amount_override"
+                           id="wbi_minimum_order_amount_override"
+                           value="<?php echo esc_attr( '' !== $value ? $value : '' ); ?>"
+                           min="0" step="0.01" class="small-text">
+                    <p class="description"><?php esc_html_e( 'Vacío = sin override personal (se usa el mínimo de lista de precios, rol o global). 0 = sin mínimo para este usuario.', 'wbi-suite' ); ?></p>
+                </td>
+            </tr>
+        </table>
+        <?php
+    }
+
+    /**
+     * Save the user-level minimum order override meta.
+     *
+     * @param int $user_id The user ID being updated.
+     */
+    public function save_minimum_order_user_field( $user_id ) {
+        if ( ! current_user_can( 'edit_user', $user_id ) ) return;
+        if ( ! isset( $_POST['_wbi_user_min_nonce'] ) ||
+             ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wbi_user_min_nonce'] ) ), 'wbi_save_user_min_order_' . $user_id ) ) {
+            return;
+        }
+
+        if ( isset( $_POST['wbi_minimum_order_amount_override'] ) ) {
+            $raw = sanitize_text_field( wp_unslash( $_POST['wbi_minimum_order_amount_override'] ) );
+            if ( '' === $raw ) {
+                delete_user_meta( $user_id, 'wbi_minimum_order_amount_override' );
+            } else {
+                update_user_meta( $user_id, 'wbi_minimum_order_amount_override', max( 0, floatval( $raw ) ) );
+            }
         }
     }
 

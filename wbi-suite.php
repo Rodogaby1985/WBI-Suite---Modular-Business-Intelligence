@@ -122,6 +122,7 @@ class WBI_Suite_Loader {
             'wbi_b2b_enable_minimum_order_amount',
             'wbi_b2b_enable_hide_prices',
             'wbi_b2b_minimum_order',
+            'wbi_b2b_role_minimum_map',
             'wbi_b2b_hidden_price_text',
             'wbi_b2b_hidden_price_url',
             'wbi_b2b_notification_email',
@@ -251,6 +252,7 @@ class WBI_Suite_Loader {
     public function load_modules() {
         // ALWAYS load the license manager first
         require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-license.php';
+        require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-minimum-order-resolver.php';
 
         // If license is NOT active, don't load any modules
         if ( ! WBI_License_Manager::is_active() ) {
@@ -904,6 +906,23 @@ class WBI_Suite_Loader {
 
         if ( array_key_exists( 'wbi_b2b_minimum_order', $raw_input ) ) {
             $sanitized['wbi_b2b_minimum_order'] = $this->sanitize_decimal_setting( $raw_input['wbi_b2b_minimum_order'] );
+        }
+
+        if ( array_key_exists( 'wbi_b2b_role_minimum_map', $raw_input ) && is_array( $raw_input['wbi_b2b_role_minimum_map'] ) ) {
+            $role_map = array();
+            foreach ( $raw_input['wbi_b2b_role_minimum_map'] as $role_slug => $amount ) {
+                $slug = sanitize_key( $role_slug );
+                if ( '' === $amount || null === $amount ) {
+                    continue; // empty = no override for this role
+                }
+                $float_amount = floatval( $amount );
+                if ( $float_amount > 0 ) {
+                    $role_map[ $slug ] = $float_amount;
+                }
+            }
+            $sanitized['wbi_b2b_role_minimum_map'] = $role_map;
+        } elseif ( isset( $raw_input['wbi_b2b_role_minimum_map'] ) ) {
+            $sanitized['wbi_b2b_role_minimum_map'] = array();
         }
 
         if ( array_key_exists( 'wbi_b2b_hidden_price_text', $raw_input ) ) {
@@ -1560,11 +1579,46 @@ class WBI_Suite_Loader {
                                 </label>
                                 <fieldset style="margin:0; padding:0; border:0; <?php echo $minimum_toggle_enabled ? '' : 'opacity:0.55;'; ?>">
                                     <label style="display:block; margin-bottom:4px;">
-                                        <?php echo esc_html__( 'Monto mínimo ($):', 'wbi-suite' ); ?>
+                                        <?php echo esc_html__( 'Monto mínimo global (fallback) ($):', 'wbi-suite' ); ?>
                                         <input type="number" name="wbi_modules_settings[wbi_b2b_minimum_order]"
                                             value="<?php echo esc_attr( $opts['wbi_b2b_minimum_order'] ?? '' ); ?>"
                                             min="0" step="0.01" style="width:90px; margin-left:4px;">
+                                        <span style="display:block; color:#888; font-size:11px; margin-top:2px;"><?php esc_html_e( 'Fallback global. Se aplica cuando no hay override de usuario, rol ni lista de precios.', 'wbi-suite' ); ?></span>
                                     </label>
+                                    <?php
+                                    // Role minimum overrides
+                                    global $wp_roles;
+                                    $all_roles_for_min   = $wp_roles->get_names();
+                                    $role_minimum_map    = isset( $opts['wbi_b2b_role_minimum_map'] ) && is_array( $opts['wbi_b2b_role_minimum_map'] ) ? $opts['wbi_b2b_role_minimum_map'] : array();
+                                    ?>
+                                    <div style="margin-top:10px;">
+                                        <strong><?php esc_html_e( 'Overrides de mínimo por rol/perfil (opcional):', 'wbi-suite' ); ?></strong>
+                                        <p style="color:#888; font-size:11px; margin:2px 0 6px;"><?php esc_html_e( 'Define un monto mínimo específico por rol. Tiene precedencia sobre la lista de precios y el fallback global, pero no sobre el override de usuario.', 'wbi-suite' ); ?></p>
+                                        <table style="border-collapse:collapse; width:100%;">
+                                            <thead>
+                                                <tr>
+                                                    <th style="text-align:left; font-size:12px; padding:4px 8px; background:#f0f0f1;"><?php esc_html_e( 'Rol', 'wbi-suite' ); ?></th>
+                                                    <th style="text-align:left; font-size:12px; padding:4px 8px; background:#f0f0f1;"><?php esc_html_e( 'Monto mínimo ($)', 'wbi-suite' ); ?></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                            <?php foreach ( $all_roles_for_min as $role_key => $role_label ) :
+                                                $role_min_val = isset( $role_minimum_map[ $role_key ] ) ? $role_minimum_map[ $role_key ] : '';
+                                            ?>
+                                                <tr>
+                                                    <td style="padding:3px 8px; font-size:12px;"><?php echo esc_html( translate_user_role( $role_label ) ); ?> <code style="font-size:10px;">(<?php echo esc_html( $role_key ); ?>)</code></td>
+                                                    <td style="padding:3px 8px;">
+                                                        <input type="number"
+                                                               name="wbi_modules_settings[wbi_b2b_role_minimum_map][<?php echo esc_attr( $role_key ); ?>]"
+                                                               value="<?php echo esc_attr( '' !== $role_min_val ? $role_min_val : '' ); ?>"
+                                                               min="0" step="0.01" style="width:90px;"
+                                                               placeholder="<?php esc_attr_e( 'Sin override', 'wbi-suite' ); ?>">
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </fieldset>
                             </div>
                             <div style="margin:10px 0 0; padding:10px; border:1px solid #e0e0e0; border-radius:8px;">
