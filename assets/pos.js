@@ -93,6 +93,12 @@
         $('#pos-product-search').on('keydown', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
+                var val = String($(this).val() || '').trim();
+                if (looksLikeQrCode(val)) {
+                    clearTimeout(productSearchTimer);
+                    resolveQrCode(val);
+                    return;
+                }
                 var $first = $('#pos-product-results .pos-dropdown-item').first();
                 if ($first.length) {
                     $first.trigger('click');
@@ -259,9 +265,78 @@
     function handleProductQueryChange(rawValue) {
         clearTimeout(productSearchTimer);
         var q = String(rawValue || '').trim();
+
+        // QR scan detection: full resolver URL or bare signed token
+        if (looksLikeQrCode(q)) {
+            productSearchTimer = setTimeout(function () {
+                resolveQrCode(q);
+            }, 220);
+            return;
+        }
+
         productSearchTimer = setTimeout(function () {
             loadProducts(q, 1, false);
         }, 220);
+    }
+
+    // ── QR scan support ─────────────────────────────────────────────────────
+    function looksLikeQrCode(q) {
+        if (!wbiPos.qr || !wbiPos.qr.enabled || !q) return false;
+        if (q.indexOf('wbi_qr=') !== -1) return true;
+        // Bare token: long base64url string, unlike names/SKUs/barcodes
+        return /^[A-Za-z0-9_-]{24,200}$/.test(q) && !/^\d+$/.test(q);
+    }
+
+    function resolveQrCode(code) {
+        $.post(wbiPos.ajaxUrl, {
+            action: wbiPos.qr.action,
+            nonce: wbiPos.nonce,
+            code: code
+        }).done(function (resp) {
+            if (resp && resp.success && resp.data && resp.data.product) {
+                var p   = resp.data.product;
+                var qty = Math.max(1, parseInt(resp.data.qty || 1, 10));
+                addToCart({
+                    id:    p.id,
+                    name:  p.name,
+                    sku:   p.sku || '',
+                    price: parseFloat(p.price || 0) || 0,
+                    image: p.image || ''
+                }, qty);
+                $('#pos-product-search').val('').focus();
+                closeDropdown('#pos-product-results');
+                showPosToast('✅ ' + p.name, 'success');
+            } else if (resp && resp.data && resp.data.not_qr) {
+                // Not actually a QR token — fall back to normal search
+                loadProducts(code, 1, false);
+            } else {
+                showPosToast('⚠️ ' + ((resp && resp.data && resp.data.message) || 'QR inválido'), 'error');
+                $('#pos-product-search').val('').focus();
+            }
+        }).fail(function () {
+            loadProducts(code, 1, false);
+        });
+    }
+
+    function showPosToast(message, type) {
+        var $toast = $('<div class="pos-qr-toast"></div>')
+            .text(message)
+            .css({
+                position: 'fixed',
+                top: '48px',
+                right: '24px',
+                zIndex: 100000,
+                padding: '10px 16px',
+                borderRadius: '6px',
+                color: '#fff',
+                fontSize: '14px',
+                boxShadow: '0 2px 8px rgba(0,0,0,.25)',
+                background: type === 'error' ? '#d63638' : '#00a32a'
+            });
+        $('body').append($toast);
+        setTimeout(function () {
+            $toast.fadeOut(300, function () { $(this).remove(); });
+        }, 2500);
     }
 
     function loadProducts(q, page, append) {
@@ -441,7 +516,8 @@
     }
 
     // ── Cart ───────────────────────────────────────────────────────────────
-    function addToCart(product) {
+    function addToCart(product, qty) {
+        qty = Math.max(1, parseInt(qty || 1, 10));
         var existing = null;
         $.each(cart, function (i, item) {
             if (item.id === product.id) {
@@ -451,14 +527,14 @@
         });
 
         if (existing) {
-            existing.qty += 1;
+            existing.qty += qty;
         } else {
             cart.push({
                 id:    product.id,
                 name:  product.name,
                 sku:   product.sku,
                 price: product.price,
-                qty:   1,
+                qty:   qty,
                 image: product.image
             });
         }

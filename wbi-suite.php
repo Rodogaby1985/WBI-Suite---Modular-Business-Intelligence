@@ -101,7 +101,7 @@ class WBI_Suite_Loader {
             'wbi_enable_credit_notes','wbi_enable_email_marketing','wbi_enable_reorder','wbi_enable_crm',
             'wbi_enable_custom_fields','wbi_enable_employees','wbi_enable_pos','wbi_enable_offline_payments',
             'wbi_enable_promo_pricing','wbi_enable_mobapp_shipping','wbi_enable_multi_shipping',
-            'wbi_enable_public_wholesale_quick_order',
+            'wbi_enable_public_wholesale_quick_order','wbi_enable_product_qr',
         );
     }
 
@@ -415,6 +415,14 @@ class WBI_Suite_Loader {
             if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-barcode.php' ) ) {
                 require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-barcode.php';
                 new WBI_Barcode_Module();
+            }
+        }
+
+        // 4b. Módulo de QR de Productos
+        if ( ! empty( $this->options['wbi_enable_product_qr'] ) ) {
+            if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/class-wbi-product-qr.php' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-product-qr.php';
+                new WBI_Product_QR_Module();
             }
         }
 
@@ -985,6 +993,7 @@ class WBI_Suite_Loader {
         add_settings_field( 'wbi_enable_data', 'Modelo de Datos Extra (Origen)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_data'] );
         add_settings_field( 'wbi_enable_dashboard', 'Suite de BI (Dashboard + Reportes + Stock)', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_dashboard'] );
         add_settings_field( 'wbi_enable_barcode', 'Módulo de Códigos de Barra', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_barcode'] );
+        add_settings_field( 'wbi_enable_product_qr', 'QR de Productos', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_product_qr'] );
         add_settings_field( 'wbi_enable_picking', 'Módulo de Picking & Armado', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_picking'] );
         add_settings_field( 'wbi_enable_costs', 'Módulo de Costos y Márgenes', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_costs'] );
         add_settings_field( 'wbi_enable_suppliers', 'Módulo de Proveedores', array($this, 'checkbox_field'), 'wbi-settings', 'wbi_main_section', ['id' => 'wbi_enable_suppliers'] );
@@ -1175,6 +1184,7 @@ class WBI_Suite_Loader {
             array( 'slug' => 'b2b',                 'name' => 'Modo Mayorista B2B',          'enable_key' => 'wbi_enable_b2b' ),
             array( 'slug' => 'dashboard',           'name' => 'Dashboard BI Suite',          'enable_key' => 'wbi_enable_dashboard' ),
             array( 'slug' => 'barcode',             'name' => 'Códigos de Barra',             'enable_key' => 'wbi_enable_barcode' ),
+            array( 'slug' => 'product_qr',          'name' => 'QR de Productos',              'enable_key' => 'wbi_enable_product_qr' ),
             array( 'slug' => 'picking',             'name' => 'Picking & Armado',            'enable_key' => 'wbi_enable_picking' ),
             array( 'slug' => 'costs',               'name' => 'Costos y Márgenes',           'enable_key' => 'wbi_enable_costs' ),
             array( 'slug' => 'suppliers',           'name' => 'Proveedores',                 'enable_key' => 'wbi_enable_suppliers' ),
@@ -1224,6 +1234,7 @@ class WBI_Suite_Loader {
             'wbi-new-supplier'       => 'suppliers',
             'wbi-scoring'            => 'scoring',
             'wbi-barcodes'           => 'barcode',
+            'wbi-product-qr'         => 'product_qr',
             'wbi-costs-report'       => 'costs',
             'wbi-pricelists'         => 'pricelists',
             'wbi-documents'          => 'documents',
@@ -1402,6 +1413,7 @@ class WBI_Suite_Loader {
             array( 'wbi_enable_dashboard',      '📊', 'Dashboard BI Suite',       'Dashboard ejecutivo, reportes y alertas de stock',                        'wbi-dashboard-view', 'inteligencia' ),
             array( 'wbi_enable_scoring',        '⭐', 'Scoring de Clientes',      'Scoring RFM de clientes con recálculo automático diario',                 'wbi-scoring',    'inteligencia' ),
             array( 'wbi_enable_barcode',        '📊', 'Códigos de Barra',         'Gestión de códigos de barra EAN/UPC para productos',                      'wbi-barcode',    'operaciones'  ),
+            array( 'wbi_enable_product_qr',     '🔳', 'QR de Productos',          'QR únicos por producto para agregado rápido en POS y web, con etiquetas imprimibles', 'wbi-product-qr', 'operaciones' ),
             array( 'wbi_enable_picking',        '📦', 'Picking & Armado',         'Armado de pedidos con escaneo de códigos de barra',                       'wbi-picking',    'operaciones'  ),
             array( 'wbi_enable_mobapp_shipping','🚚', 'MobApp Envíos',            'Tarifas de envío para Andreani, Correo Argentino, OCA, Urbano y Flash',  null,             'operaciones'  ),
             array( 'wbi_enable_multi_shipping', '🚌', 'Transporte Multiopciones', 'Método de envío con selección de transportista o micro personalizado',    null,             'operaciones'  ),

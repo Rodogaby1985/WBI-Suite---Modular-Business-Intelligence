@@ -1,0 +1,121 @@
+/* WBI Product QR — Admin metabox & printable labels */
+
+/* Metabox */
+.wbi-qr-metabox .wbi-qr-target {
+    border-bottom: 1px solid #eee;
+    padding: 8px 0;
+}
+.wbi-qr-metabox .wbi-qr-target:last-child {
+    border-bottom: 0;
+}
+.wbi-qr-previews {
+    display: flex;
+    gap: 12px;
+    margin: 8px 0;
+}
+.wbi-qr-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.wbi-qr-preview .wbi-qr-canvas {
+    width: 110px;
+    height: 110px;
+    background: #fff;
+    border: 1px solid #ddd;
+    padding: 4px;
+    box-sizing: content-box;
+}
+.wbi-qr-preview .wbi-qr-canvas img,
+.wbi-qr-preview .wbi-qr-canvas canvas {
+    width: 110px !important;
+    height: 110px !important;
+}
+.wbi-qr-caption {
+    font-size: 11px;
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+}
+.wbi-qr-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* Labels grid */
+.wbi-qr-label-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4mm;
+    background: #fff;
+    padding: 6mm;
+}
+.wbi-qr-label {
+    width: var(--wbi-label-w, 50mm);
+    height: var(--wbi-label-h, 30mm);
+    border: 1px dashed #bbb;
+    display: flex;
+    align-items: center;
+    gap: 2mm;
+    padding: 1.5mm;
+    box-sizing: border-box;
+    overflow: hidden;
+    background: #fff;
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+.wbi-qr-label-qr {
+    flex: 0 0 auto;
+    width: calc(var(--wbi-label-h, 30mm) - 4mm);
+    height: calc(var(--wbi-label-h, 30mm) - 4mm);
+}
+.wbi-qr-label-qr img,
+.wbi-qr-label-qr canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+.wbi-qr-label-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #000;
+}
+.wbi-qr-label-name {
+    font-size: 8pt;
+    font-weight: 700;
+    line-height: 1.15;
+    max-height: 3.5em;
+    overflow: hidden;
+}
+.wbi-qr-label-sku,
+.wbi-qr-label-code {
+    font-size: 7pt;
+    color: #222;
+}
+.wbi-qr-label-price {
+    font-size: 9pt;
+    font-weight: 700;
+}
+
+@media print {
+    .wbi-qr-no-print,
+    #adminmenumain,
+    #wpadminbar,
+    #wpfooter,
+    .notice {
+        display: none !important;
+    }
+    #wpcontent,
+    #wpbody-content {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .wbi-qr-label-grid {
+        padding: 0;
+    }
+    .wbi-qr-label {
+        border: none;
+    }
+}
