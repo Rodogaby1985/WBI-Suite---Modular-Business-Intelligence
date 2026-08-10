@@ -16,6 +16,10 @@ class WBI_Registration_Fields {
     private const WHOLESALE_ROLE_OPTION  = 'wbi_registration_wholesale_role_slug';
     private const RETAIL_ROLE_OPTION     = 'wbi_registration_retail_role_slug';
     private const ROLE_NOTICE_TRANSIENT  = 'wbi_registration_role_notice';
+    private $settings_cache              = null;
+    private $feature_enabled_cache       = null;
+    private $whatsapp_required_cache     = null;
+    private $account_page_cache          = null;
 
     public function __construct() {
         add_action( 'woocommerce_register_form', array( $this, 'render_fields' ) );
@@ -28,21 +32,47 @@ class WBI_Registration_Fields {
     }
 
     private function get_settings() {
+        if ( null !== $this->settings_cache ) {
+            return $this->settings_cache;
+        }
+
         $settings = get_option( self::SETTINGS_OPTION, array() );
 
-        return is_array( $settings ) ? $settings : array();
+        $this->settings_cache = is_array( $settings ) ? $settings : array();
+
+        return $this->settings_cache;
     }
 
     private function is_feature_enabled() {
-        $settings = $this->get_settings();
+        if ( null !== $this->feature_enabled_cache ) {
+            return $this->feature_enabled_cache;
+        }
 
-        return ! array_key_exists( self::ENABLE_OPTION, $settings ) || ! empty( $settings[ self::ENABLE_OPTION ] );
+        $settings                    = $this->get_settings();
+        $this->feature_enabled_cache = ! array_key_exists( self::ENABLE_OPTION, $settings ) || ! empty( $settings[ self::ENABLE_OPTION ] );
+
+        return $this->feature_enabled_cache;
     }
 
     private function is_whatsapp_required() {
-        $settings = $this->get_settings();
+        if ( null !== $this->whatsapp_required_cache ) {
+            return $this->whatsapp_required_cache;
+        }
 
-        return ! array_key_exists( self::REQUIRE_WHATSAPP, $settings ) || ! empty( $settings[ self::REQUIRE_WHATSAPP ] );
+        $settings                      = $this->get_settings();
+        $this->whatsapp_required_cache = ! array_key_exists( self::REQUIRE_WHATSAPP, $settings ) || ! empty( $settings[ self::REQUIRE_WHATSAPP ] );
+
+        return $this->whatsapp_required_cache;
+    }
+
+    private function is_registration_account_page() {
+        if ( null !== $this->account_page_cache ) {
+            return $this->account_page_cache;
+        }
+
+        $this->account_page_cache = function_exists( 'is_account_page' ) && is_account_page();
+
+        return $this->account_page_cache;
     }
 
     private function get_posted_value( $key ) {
@@ -85,7 +115,7 @@ class WBI_Registration_Fields {
     }
 
     public function translate_registration_strings( $translation, $text, $domain ) {
-        if ( is_admin() || ! $this->is_feature_enabled() || ! function_exists( 'is_account_page' ) || ! is_account_page() ) {
+        if ( is_admin() || ! $this->is_feature_enabled() || ! $this->is_registration_account_page() ) {
             return $translation;
         }
 
@@ -107,7 +137,7 @@ class WBI_Registration_Fields {
 
         $whatsapp      = $this->get_posted_value( 'billing_phone' );
         $customer_type = $this->get_posted_value( 'customer_type' );
-        $required_attr = $this->is_whatsapp_required() ? 'required' : '';
+        $required_attr = $this->is_whatsapp_required() ? 'required="required"' : '';
         ?>
         <p class="woocommerce-FormRow woocommerce-FormRow--wide form-row form-row-wide">
             <label for="billing_phone">
@@ -122,7 +152,7 @@ class WBI_Registration_Fields {
                 id="billing_phone"
                 class="woocommerce-Input woocommerce-Input--text input-text"
                 value="<?php echo esc_attr( $whatsapp ); ?>"
-                <?php echo esc_attr( $required_attr ); ?>
+                <?php echo $required_attr; ?>
             />
         </p>
 

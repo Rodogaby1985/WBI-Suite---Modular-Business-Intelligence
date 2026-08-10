@@ -154,12 +154,28 @@ class WBI_B2B_Module {
         $opts = get_option( 'wbi_modules_settings', array() );
         $registration_segmentation_enabled = ! isset( $opts['wbi_enable_registration_fields'] ) || ! empty( $opts['wbi_enable_registration_fields'] );
 
-        if ( $registration_segmentation_enabled ) {
-            return;
-        }
-
         if ( empty( $opts['wbi_b2b_auto_approve'] ) ) {
             return; // Aprobación manual: comportamiento actual, no hacer nada.
+        }
+
+        if ( $registration_segmentation_enabled ) {
+            $customer_type = isset( $_POST['customer_type'] ) ? sanitize_text_field( wp_unslash( $_POST['customer_type'] ) ) : '';
+
+            if ( 'wholesale' !== $customer_type ) {
+                return;
+            }
+
+            $role = ! empty( $opts['wbi_registration_wholesale_role_slug'] )
+                ? sanitize_key( $opts['wbi_registration_wholesale_role_slug'] )
+                : 'wholesale_customer';
+
+            if ( ! get_role( $role ) ) {
+                $role = 'customer';
+            }
+
+            $user = new WP_User( $user_id );
+            $user->set_role( $role );
+            return;
         }
 
         $user = new WP_User( $user_id );
