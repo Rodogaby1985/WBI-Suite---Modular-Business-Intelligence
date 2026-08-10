@@ -52,7 +52,8 @@ class WBI_Minimum_Order_Resolver {
             }
         }
 
-        $user_roles = $user_id > 0 ? (array) ( get_userdata( $user_id ) )->roles : array();
+        $user_data  = $user_id > 0 ? get_userdata( $user_id ) : false;
+        $user_roles = ( $user_data instanceof WP_User ) ? (array) $user_data->roles : array();
         $opts       = get_option( 'wbi_modules_settings', array() );
 
         // ── 2. Role override ─────────────────────────────────────────────────
@@ -86,7 +87,7 @@ class WBI_Minimum_Order_Resolver {
         // ── 3. Price List minimum ────────────────────────────────────────────
         if ( ! empty( $user_roles ) ) {
             $all_lists = get_option( 'wbi_pricelists', array() );
-            $today     = date( 'Y-m-d' );
+            $today     = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : date_i18n( 'Y-m-d' );
 
             $best_list_amount   = null;
             $best_list_id       = null;

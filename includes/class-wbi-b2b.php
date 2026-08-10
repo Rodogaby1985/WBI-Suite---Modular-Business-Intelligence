@@ -426,11 +426,10 @@ class WBI_B2B_Module {
 
         $user_id = is_user_logged_in() ? get_current_user_id() : 0;
 
-        // Only enforce for logged-in users in the mayorista role OR guests if global fallback set.
-        if ( $user_id > 0 ) {
-            $user = wp_get_current_user();
-            if ( ! in_array( 'mayorista', (array) $user->roles, true ) ) return;
-        }
+        // Only enforce for logged-in mayorista users.
+        if ( 0 === $user_id ) return;
+        $user = wp_get_current_user();
+        if ( ! in_array( 'mayorista', (array) $user->roles, true ) ) return;
 
         if ( ! class_exists( 'WBI_Minimum_Order_Resolver' ) ) return;
 
