@@ -614,11 +614,16 @@
                     commitCartPriceInput($(this));
                 } else if (e.key === 'Escape') {
                     e.preventDefault();
+                    $(this).data('skipNextBlurPriceCommit', true);
                     resetCartPriceInput($(this));
                     $(this).blur();
                 }
             })
             .on('blur.priceEdit', function () {
+                if ($(this).data('skipNextBlurPriceCommit')) {
+                    $(this).removeData('skipNextBlurPriceCommit');
+                    return;
+                }
                 commitCartPriceInput($(this));
             });
 
@@ -1713,6 +1718,9 @@
 
         if (hasDecimalSep) {
             var decimalParts = raw.split(decimalSeparator);
+            if (decimalParts.length > 2) {
+                return { valid: false };
+            }
             var decimalTail = decimalParts.pop().replace(new RegExp('[^0-9]', 'g'), '');
             var decimalHead = decimalParts.join('').replace(new RegExp('[' + escapedThousand + ']', 'g'), '');
             decimalHead = decimalHead.replace(new RegExp('[^0-9]', 'g'), '');
