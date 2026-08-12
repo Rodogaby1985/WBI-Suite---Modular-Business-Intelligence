@@ -300,6 +300,20 @@
     font-size: 13px;
 }
 
+.pos-cart-price-input.pos-input-error {
+    border-color: #d63638;
+    box-shadow: 0 0 0 1px #d63638;
+}
+
+.pos-cart-inline-error {
+    display: none;
+    margin-top: 4px;
+    color: #d63638;
+    font-size: 11px;
+    line-height: 1.25;
+    max-width: 160px;
+}
+
 .pos-cart-subtotal {
     font-weight: 600;
     color: #1d2327;

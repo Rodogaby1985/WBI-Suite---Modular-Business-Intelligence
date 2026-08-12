@@ -299,9 +299,11 @@ class WBI_POS_Module {
         $pos_settings = self::get_pos_settings();
 
         wp_localize_script( 'wbi-pos-js', 'wbiPos', apply_filters( 'wbi_pos_localize_data', array(
-            'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
-            'nonce'    => wp_create_nonce( 'wbi_pos_nonce' ),
-            'currency' => get_woocommerce_currency_symbol(),
+            'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
+            'nonce'            => wp_create_nonce( 'wbi_pos_nonce' ),
+            'currency'         => get_woocommerce_currency_symbol(),
+            'priceDecimals'    => (int) wc_get_price_decimals(),
+            'decimalSeparator' => wc_get_price_decimal_separator(),
             'settings' => array(
                 'requireCustomer'         => (bool) $pos_settings['pos_require_customer'],
                 'allowQuickCreate'        => (bool) $pos_settings['pos_allow_quick_create'],
@@ -321,6 +323,7 @@ class WBI_POS_Module {
                 'removeItem'         => 'Quitar',
                 'qty'                => 'Cant.',
                 'price'              => 'Precio',
+                'priceInvalid'       => 'Precio inválido. Se restauró el último valor válido.',
                 'subtotal'           => 'Subtotal',
                 'total'              => 'Total',
                 'paid'               => 'Pagado',
