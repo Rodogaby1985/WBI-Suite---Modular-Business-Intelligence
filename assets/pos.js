@@ -610,15 +610,25 @@
             .on('keydown.priceEdit', function (e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
+                    $(this).data('skipBlurCommit', true);
                     commitCartPriceInput($(this));
                     $(this).blur();
                 } else if (e.key === 'Escape') {
                     e.preventDefault();
+                    $(this).data('skipBlurCommit', true);
                     resetCartPriceInput($(this));
                     $(this).blur();
                 }
             })
-            .on('change.priceEdit blur.priceEdit', function () {
+            .on('change.priceEdit', function () {
+                $(this).data('skipBlurCommit', true);
+                commitCartPriceInput($(this));
+            })
+            .on('blur.priceEdit', function () {
+                if ($(this).data('skipBlurCommit')) {
+                    $(this).removeData('skipBlurCommit');
+                    return;
+                }
                 commitCartPriceInput($(this));
             });
 
@@ -1704,17 +1714,30 @@
             return { valid: false };
         }
 
-        var lastComma = raw.lastIndexOf(',');
-        var lastDot = raw.lastIndexOf('.');
-        var sepIndex = Math.max(lastComma, lastDot);
+        var decimalSeparator = (wbiPos && wbiPos.decimalSeparator === ',') ? ',' : '.';
+        var thousandSeparator = decimalSeparator === ',' ? '.' : ',';
+        var escapedThousand = thousandSeparator === '.' ? '\\.' : thousandSeparator;
+        var hasDecimalSep = raw.indexOf(decimalSeparator) !== -1;
+        var hasThousandSep = raw.indexOf(thousandSeparator) !== -1;
         var normalized;
 
-        if (sepIndex >= 0) {
-            var intPart = raw.substring(0, sepIndex).replace(/[.,]/g, '');
-            var decPart = raw.substring(sepIndex + 1).replace(/[.,]/g, '');
-            normalized = intPart + (decPart.length ? '.' + decPart : '');
+        if (hasDecimalSep) {
+            var decimalParts = raw.split(decimalSeparator);
+            var decimalTail = decimalParts.pop().replace(new RegExp('[^0-9]', 'g'), '');
+            var decimalHead = decimalParts.join('').replace(new RegExp('[' + escapedThousand + ']', 'g'), '');
+            decimalHead = decimalHead.replace(new RegExp('[^0-9]', 'g'), '');
+            normalized = decimalHead + (decimalTail.length ? '.' + decimalTail : '');
+        } else if (hasThousandSep) {
+            var parts = raw.split(thousandSeparator);
+            var tail = parts.length > 1 ? String(parts[parts.length - 1] || '') : '';
+            var canUseAsAltDecimal = parts.length === 2 && tail.length > 0 && tail.length <= PRICE_DECIMALS;
+            if (canUseAsAltDecimal) {
+                normalized = parts[0].replace(new RegExp('[^0-9]', 'g'), '') + '.' + tail.replace(new RegExp('[^0-9]', 'g'), '');
+            } else {
+                normalized = raw.replace(new RegExp('[' + escapedThousand + ']', 'g'), '').replace(new RegExp('[^0-9]', 'g'), '');
+            }
         } else {
-            normalized = raw.replace(/[.,]/g, '');
+            normalized = raw.replace(new RegExp('[^0-9]', 'g'), '');
         }
 
         if (!normalized || normalized === '.') {
