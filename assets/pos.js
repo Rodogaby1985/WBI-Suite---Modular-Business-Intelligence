@@ -16,6 +16,7 @@
     var isConsumerFinal = false;
     var paymentIdx = 0;           // counter for unique payment row IDs
     var scannerMode = false;
+    var priceDraftsByIdx = {};
     var productSearchTimer = null;
     var customerSearchTimer = null;
     var productDropdownState = {
@@ -33,6 +34,7 @@
     var cashSession   = null;   // { session_id, status, opening_cash, opened_at } or null
 
     var DRAFT_KEY = 'wbi_pos_draft';
+    var PRICE_DECIMALS = Math.max(0, parseInt((wbiPos && wbiPos.priceDecimals), 10) || 2);
 
     // ── Init ───────────────────────────────────────────────────────────────
     $(function () {
@@ -570,7 +572,8 @@
             $row.html(
                 '<td>' + escHtml(item.name) + (item.sku ? '<br><small style="color:#888">SKU: ' + escHtml(item.sku) + '</small>' : '') + '</td>' +
                 '<td><input type="number" class="pos-cart-qty-input" min="1" step="1" value="' + parseInt(item.qty, 10) + '" data-idx="' + idx + '"></td>' +
-                '<td><input type="number" class="pos-cart-price-input" min="0" step="0.01" value="' + item.price.toFixed(2) + '" data-idx="' + idx + '"></td>' +
+                '<td><input type="text" class="pos-cart-price-input" inputmode="decimal" value="' + escAttr(getCartPriceDisplayValue(idx, item.price)) + '" data-idx="' + idx + '">' +
+                '<div class="pos-cart-inline-error" aria-live="polite"></div></td>' +
                 '<td class="pos-cart-subtotal">' + wbiPos.currency + formatNumber(subtotal) + '</td>' +
                 '<td><button class="pos-btn-remove" data-idx="' + idx + '" title="Quitar">✕</button></td>'
             );
@@ -589,14 +592,35 @@
         });
 
         // Price change
-        $tbody.find('.pos-cart-price-input').off('change input').on('change input', function () {
-            var idx = parseInt($(this).data('idx'), 10);
-            var val = Math.max(0, parseFloat($(this).val()) || 0);
-            cart[idx].price = val;
-            renderCart();
-            updateTotals();
-            saveDraft();
-        });
+        $tbody.find('.pos-cart-price-input')
+            .off('.priceEdit')
+            .on('mousedown.priceEdit touchstart.priceEdit click.priceEdit', function (e) {
+                e.stopPropagation();
+            })
+            .on('focus.priceEdit', function () {
+                var idx = parseInt($(this).data('idx'), 10);
+                priceDraftsByIdx[idx] = $(this).val();
+                clearPriceInputError($(this));
+            })
+            .on('input.priceEdit', function () {
+                var idx = parseInt($(this).data('idx'), 10);
+                priceDraftsByIdx[idx] = $(this).val();
+                clearPriceInputError($(this));
+            })
+            .on('keydown.priceEdit', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitCartPriceInput($(this));
+                    $(this).blur();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    resetCartPriceInput($(this));
+                    $(this).blur();
+                }
+            })
+            .on('change.priceEdit blur.priceEdit', function () {
+                commitCartPriceInput($(this));
+            });
 
         // Remove
         $tbody.find('.pos-btn-remove').off('click').on('click', function () {
@@ -1627,8 +1651,108 @@
         $(selector).removeClass('open').empty();
     }
 
+    function getCartPriceDisplayValue(idx, fallbackPrice) {
+        if (Object.prototype.hasOwnProperty.call(priceDraftsByIdx, idx)) {
+            return String(priceDraftsByIdx[idx] || '');
+        }
+        return formatNumber(fallbackPrice);
+    }
+
+    function resetCartPriceInput($input, keepError) {
+        var idx = parseInt($input.data('idx'), 10);
+        if (!isFinite(idx) || !cart[idx]) return;
+        delete priceDraftsByIdx[idx];
+        $input.val(formatNumber(cart[idx].price));
+        if (!keepError) {
+            clearPriceInputError($input);
+        }
+        updateCartRowSubtotal(idx);
+    }
+
+    function commitCartPriceInput($input) {
+        var idx = parseInt($input.data('idx'), 10);
+        if (!isFinite(idx) || !cart[idx]) return;
+
+        var raw = Object.prototype.hasOwnProperty.call(priceDraftsByIdx, idx)
+            ? priceDraftsByIdx[idx]
+            : $input.val();
+        var parsed = parseCommittedPrice(raw);
+
+        if (!parsed.valid) {
+            setPriceInputError($input, wbiPos.i18n.priceInvalid || 'Precio inválido.');
+            resetCartPriceInput($input, true);
+            return;
+        }
+
+        clearPriceInputError($input);
+        delete priceDraftsByIdx[idx];
+        cart[idx].price = parsed.value;
+        $input.val(formatNumber(parsed.value));
+        updateCartRowSubtotal(idx);
+        updateTotals();
+        saveDraft();
+    }
+
+    function parseCommittedPrice(rawValue) {
+        var raw = String(rawValue || '').trim();
+        if (!raw) {
+            return { valid: false };
+        }
+
+        raw = raw.replace(/\s+/g, '').replace(/[^0-9.,]/g, '');
+        if (!raw) {
+            return { valid: false };
+        }
+
+        var lastComma = raw.lastIndexOf(',');
+        var lastDot = raw.lastIndexOf('.');
+        var sepIndex = Math.max(lastComma, lastDot);
+        var normalized;
+
+        if (sepIndex >= 0) {
+            var intPart = raw.substring(0, sepIndex).replace(/[.,]/g, '');
+            var decPart = raw.substring(sepIndex + 1).replace(/[.,]/g, '');
+            normalized = intPart + (decPart.length ? '.' + decPart : '');
+        } else {
+            normalized = raw.replace(/[.,]/g, '');
+        }
+
+        if (!normalized || normalized === '.') {
+            return { valid: false };
+        }
+
+        var value = parseFloat(normalized);
+        if (!isFinite(value) || value < 0) {
+            return { valid: false };
+        }
+
+        var factor = Math.pow(10, PRICE_DECIMALS);
+        value = Math.round(value * factor) / factor;
+
+        return { valid: true, value: value };
+    }
+
+    function updateCartRowSubtotal(idx) {
+        var item = cart[idx];
+        if (!item) return;
+        $('#pos-cart-body tr[data-idx="' + idx + '"] .pos-cart-subtotal')
+            .text(wbiPos.currency + formatNumber(item.qty * item.price));
+    }
+
+    function setPriceInputError($input, message) {
+        var $cell = $input.closest('td');
+        $input.addClass('pos-input-error').attr('aria-invalid', 'true');
+        $cell.find('.pos-cart-inline-error').text(message || '').show();
+    }
+
+    function clearPriceInputError($input) {
+        var $cell = $input.closest('td');
+        $input.removeClass('pos-input-error').removeAttr('aria-invalid');
+        $cell.find('.pos-cart-inline-error').text('').hide();
+    }
+
     function formatNumber(n) {
-        return parseFloat(n || 0).toFixed(2);
+        return parseFloat(n || 0).toFixed(PRICE_DECIMALS);
     }
 
     function escHtml(str) {
