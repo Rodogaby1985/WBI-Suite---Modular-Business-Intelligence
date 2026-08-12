@@ -582,8 +582,17 @@
             $tbody.append($row);
         });
 
-        // Qty change
-        $tbody.find('.pos-cart-qty-input').off('change input').on('change input', function () {
+        // Qty change — update in-place to preserve focus while the input is active
+        $tbody.find('.pos-cart-qty-input').off('.qtyEdit').on('change.qtyEdit input.qtyEdit', function () {
+            var idx = parseInt($(this).data('idx'), 10);
+            var val = Math.max(1, parseInt($(this).val(), 10) || 1);
+            cart[idx].qty = val;
+            updateCartRowSubtotal(idx);
+            updateTotals();
+            saveDraft();
+        }).on('blur.qtyEdit', function () {
+            // Clamp and sync the displayed value after the user leaves the field,
+            // then do a full re-render so row indices stay consistent.
             var idx = parseInt($(this).data('idx'), 10);
             var val = Math.max(1, parseInt($(this).val(), 10) || 1);
             cart[idx].qty = val;
