@@ -17,6 +17,7 @@
     var paymentIdx = 0;           // counter for unique payment row IDs
     var scannerMode = false;
     var priceDraftsByIdx = {};
+    var skipPriceBlurCommitByIdx = {};
     var productSearchTimer = null;
     var customerSearchTimer = null;
     var productDropdownState = {
@@ -568,12 +569,13 @@
         $.each(cart, function (idx, item) {
             var subtotal = item.qty * item.price;
             var $row = $('<tr>').attr('data-idx', idx);
+            var priceErrorId = 'pos-cart-price-error-' + idx;
 
             $row.html(
                 '<td>' + escHtml(item.name) + (item.sku ? '<br><small style="color:#888">SKU: ' + escHtml(item.sku) + '</small>' : '') + '</td>' +
                 '<td><input type="number" class="pos-cart-qty-input" min="1" step="1" value="' + parseInt(item.qty, 10) + '" data-idx="' + idx + '"></td>' +
-                '<td><input type="text" class="pos-cart-price-input" inputmode="decimal" value="' + escAttr(getCartPriceDisplayValue(idx, item.price)) + '" data-idx="' + idx + '">' +
-                '<div class="pos-cart-inline-error" aria-live="polite"></div></td>' +
+                '<td><input type="text" class="pos-cart-price-input" inputmode="decimal" aria-describedby="' + escAttr(priceErrorId) + '" value="' + escAttr(getCartPriceDisplayValue(idx, item.price)) + '" data-idx="' + idx + '">' +
+                '<div id="' + escAttr(priceErrorId) + '" class="pos-cart-inline-error" aria-live="polite"></div></td>' +
                 '<td class="pos-cart-subtotal">' + wbiPos.currency + formatNumber(subtotal) + '</td>' +
                 '<td><button class="pos-btn-remove" data-idx="' + idx + '" title="Quitar">✕</button></td>'
             );
@@ -608,25 +610,23 @@
                 clearPriceInputError($(this));
             })
             .on('keydown.priceEdit', function (e) {
+                var idx = parseInt($(this).data('idx'), 10);
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    $(this).data('skipBlurCommit', true);
+                    skipPriceBlurCommitByIdx[idx] = true;
                     commitCartPriceInput($(this));
                     $(this).blur();
                 } else if (e.key === 'Escape') {
                     e.preventDefault();
-                    $(this).data('skipBlurCommit', true);
+                    skipPriceBlurCommitByIdx[idx] = true;
                     resetCartPriceInput($(this));
                     $(this).blur();
                 }
             })
-            .on('change.priceEdit', function () {
-                $(this).data('skipBlurCommit', true);
-                commitCartPriceInput($(this));
-            })
             .on('blur.priceEdit', function () {
-                if ($(this).data('skipBlurCommit')) {
-                    $(this).removeData('skipBlurCommit');
+                var idx = parseInt($(this).data('idx'), 10);
+                if (skipPriceBlurCommitByIdx[idx]) {
+                    delete skipPriceBlurCommitByIdx[idx];
                     return;
                 }
                 commitCartPriceInput($(this));
@@ -1730,7 +1730,7 @@
         } else if (hasThousandSep) {
             var parts = raw.split(thousandSeparator);
             var tail = parts.length > 1 ? String(parts[parts.length - 1] || '') : '';
-            var canUseAsAltDecimal = parts.length === 2 && tail.length > 0 && tail.length <= PRICE_DECIMALS;
+            var canUseAsAltDecimal = parts.length === 2 && PRICE_DECIMALS > 0 && tail.length > 0 && tail.length <= PRICE_DECIMALS && tail.length !== 3;
             if (canUseAsAltDecimal) {
                 normalized = parts[0].replace(new RegExp('[^0-9]', 'g'), '') + '.' + tail.replace(new RegExp('[^0-9]', 'g'), '');
             } else {
