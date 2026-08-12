@@ -17,7 +17,6 @@
     var paymentIdx = 0;           // counter for unique payment row IDs
     var scannerMode = false;
     var priceDraftsByIdx = {};
-    var skipPriceBlurCommitByIdx = {};
     var productSearchTimer = null;
     var customerSearchTimer = null;
     var productDropdownState = {
@@ -610,25 +609,16 @@
                 clearPriceInputError($(this));
             })
             .on('keydown.priceEdit', function (e) {
-                var idx = parseInt($(this).data('idx'), 10);
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    skipPriceBlurCommitByIdx[idx] = true;
                     commitCartPriceInput($(this));
-                    $(this).blur();
                 } else if (e.key === 'Escape') {
                     e.preventDefault();
-                    skipPriceBlurCommitByIdx[idx] = true;
                     resetCartPriceInput($(this));
                     $(this).blur();
                 }
             })
             .on('blur.priceEdit', function () {
-                var idx = parseInt($(this).data('idx'), 10);
-                if (skipPriceBlurCommitByIdx[idx]) {
-                    delete skipPriceBlurCommitByIdx[idx];
-                    return;
-                }
                 commitCartPriceInput($(this));
             });
 
@@ -1730,7 +1720,8 @@
         } else if (hasThousandSep) {
             var parts = raw.split(thousandSeparator);
             var tail = parts.length > 1 ? String(parts[parts.length - 1] || '') : '';
-            var canUseAsAltDecimal = parts.length === 2 && PRICE_DECIMALS > 0 && tail.length > 0 && tail.length <= PRICE_DECIMALS && tail.length !== 3;
+            var looksLikeGroupedThousands = parts.length === 2 && parts[0].length > 0 && tail.length === 3;
+            var canUseAsAltDecimal = parts.length === 2 && PRICE_DECIMALS > 0 && tail.length > 0 && tail.length <= PRICE_DECIMALS && !looksLikeGroupedThousands;
             if (canUseAsAltDecimal) {
                 normalized = parts[0].replace(new RegExp('[^0-9]', 'g'), '') + '.' + tail.replace(new RegExp('[^0-9]', 'g'), '');
             } else {
