@@ -1139,25 +1139,7 @@ class WBI_Picking_Module {
                         btn.disabled = false;
                         if ( res.success ) {
                             hideModal('wbi-edit-qty-modal');
-                            // Update required qty display
-                            var row = document.getElementById('wbi-item-row-' + idx);
-                            if (row) {
-                                var cells = row.querySelectorAll('td');
-                                // required qty cell is 3rd td (index 2 after image and name and barcode = index 3)
-                                var qtyCell = row.querySelector('[data-req-cell]');
-                                if (!qtyCell) {
-                                    // Find it by content — just reload to ensure consistency
-                                }
-                                row.style.background = '#fef9c3';
-                                setTimeout(function(){ row.style.background = ''; }, 1200);
-                            }
-                            TOTAL_REQ = res.data.total_required;
-                            totalScanned = res.data.total_scanned;
-                            var pct = TOTAL_REQ > 0 ? Math.round(totalScanned / TOTAL_REQ * 100) : 0;
-                            progressBar.style.width  = pct + '%';
-                            progressText.textContent = totalScanned + ' de ' + TOTAL_REQ + ' items escaneados';
-                            pctEl.textContent        = pct + '%';
-                            // Reload page to refresh qty cells accurately
+                            // Reload to reflect updated quantities and totals accurately
                             window.location.reload();
                         } else {
                             var errMsg = typeof res.data === 'object' ? res.data.message : res.data;
@@ -1465,8 +1447,11 @@ class WBI_Picking_Module {
         $order->update_meta_data( '_wbi_picking_completed_at', $now );
         $order->save();
 
-        // Automatically transition WooCommerce order to completed
-        $order->update_status( 'completed', __( 'Armado finalizado por picking.', 'wbi-suite' ) );
+        // Automatically transition WooCommerce order to completed (only from eligible statuses)
+        $current_wc_status = $order->get_status();
+        if ( in_array( $current_wc_status, array( 'processing', 'on-hold', 'pending' ), true ) ) {
+            $order->update_status( 'completed', __( 'Armado finalizado por picking.', 'wbi-suite' ) );
+        }
 
         $user = wp_get_current_user();
         $order->add_order_note( '✅ Armado completado por ' . $user->display_name . ' — Tiempo: ' . $minutes . ' min' );
@@ -1895,7 +1880,7 @@ class WBI_Picking_Module {
                 $p = wc_get_product( (int) $found_id );
                 if ( $p ) {
                     $product = $p;
-                    if ( 'product_variation' === $p->get_type() || $p instanceof WC_Product_Variation ) {
+                    if ( 'variation' === $p->get_type() || $p instanceof WC_Product_Variation ) {
                         $variation_id = (int) $found_id;
                         $product_id   = (int) $p->get_parent_id();
                     } else {
@@ -1911,7 +1896,7 @@ class WBI_Picking_Module {
             if ( $product_id_by_sku ) {
                 $product = wc_get_product( $product_id_by_sku );
                 if ( $product ) {
-                    if ( 'product_variation' === $product->get_type() ) {
+                    if ( 'variation' === $product->get_type() || $product instanceof WC_Product_Variation ) {
                         $variation_id = $product_id_by_sku;
                         $product_id   = (int) $product->get_parent_id();
                     } else {
@@ -1922,7 +1907,7 @@ class WBI_Picking_Module {
         }
 
         if ( ! $product ) {
-            wp_send_json_error( array( 'message' => 'Producto no encontrado para el código: ' . $code ) );
+            wp_send_json_error( array( 'message' => 'Producto no encontrado para el código: ' . esc_html( $code ) ) );
         }
 
         // Add to WooCommerce order
