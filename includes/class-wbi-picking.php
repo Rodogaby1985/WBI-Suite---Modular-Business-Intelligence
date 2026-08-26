@@ -31,6 +31,9 @@ class WBI_Picking_Module {
         add_action( 'wp_ajax_wbi_picking_reset',      array( $this, 'ajax_reset_picking' ) );
         add_action( 'wp_ajax_wbi_picking_mark_item',  array( $this, 'ajax_mark_item' ) );
         add_action( 'wp_ajax_wbi_picking_order_notes', array( $this, 'ajax_save_order_notes' ) );
+        add_action( 'wp_ajax_wbi_picking_edit_qty',    array( $this, 'ajax_edit_qty' ) );
+        add_action( 'wp_ajax_wbi_picking_remove_item', array( $this, 'ajax_remove_item' ) );
+        add_action( 'wp_ajax_wbi_picking_add_item',    array( $this, 'ajax_add_item' ) );
 
         // Enqueue scripts on relevant pages
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
@@ -544,7 +547,7 @@ class WBI_Picking_Module {
                 <h3 style="margin-top:0;">🔍 Escáner</h3>
                 <div style="display:flex;gap:10px;">
                     <input type="text" id="wbi-scan-input"
-                           placeholder="Escanea el código de barra..."
+                           placeholder="Escanea código de barra o QR..."
                            style="font-size:20px;font-family:monospace;padding:10px;flex:1;border:2px solid #2271b1;"
                            autofocus autocomplete="off" />
                     <button id="wbi-scan-btn" class="button button-primary" style="font-size:16px;padding:8px 16px;">
@@ -561,6 +564,7 @@ class WBI_Picking_Module {
                 <table class="widefat striped" id="wbi-items-table">
                     <thead>
                         <tr>
+                            <th style="width:72px;">Imagen</th>
                             <th>Producto</th>
                             <th>Código de Barra</th>
                             <th>Cant. Requerida</th>
@@ -597,7 +601,26 @@ class WBI_Picking_Module {
                         <tr id="wbi-item-row-<?php echo intval( $idx ); ?>"
                             data-barcode="<?php echo esc_attr( $item['barcode'] ); ?>"
                             data-item-id="<?php echo $item_id; ?>"
+                            data-product-id="<?php echo intval( $item['product_id'] ); ?>"
+                            data-variation-id="<?php echo intval( $item['variation_id'] ); ?>"
+                            data-idx="<?php echo intval( $idx ); ?>"
                             style="transition:background 0.3s;">
+                            <?php
+                            // Product image: prefer variation image, fall back to parent
+                            $img_lookup = $item['variation_id'] ?: $item['product_id'];
+                            $img_prod   = wc_get_product( $img_lookup );
+                            if ( $img_prod ) {
+                                $thumb = $img_prod->get_image( 'thumbnail', array( 'style' => 'width:60px;height:60px;object-fit:contain;border-radius:3px;' ) );
+                                if ( ! $thumb || false === strpos( $thumb, 'src=' ) ) {
+                                    // Variation had no image, try parent
+                                    $parent_prod = wc_get_product( $item['product_id'] );
+                                    $thumb = $parent_prod ? $parent_prod->get_image( 'thumbnail', array( 'style' => 'width:60px;height:60px;object-fit:contain;border-radius:3px;' ) ) : '';
+                                }
+                            } else {
+                                $thumb = '';
+                            }
+                            ?>
+                            <td style="text-align:center;vertical-align:middle;"><?php echo $thumb ? wp_kses_post( $thumb ) : '<span style="color:#aaa;font-size:20px;">🖼️</span>'; ?></td>
                             <td><?php echo esc_html( $item['name'] ); ?></td>
                             <td>
                                 <?php if ( $item['barcode'] ) : ?>
@@ -624,6 +647,22 @@ class WBI_Picking_Module {
                                                 data-item-id="<?php echo $item_id; ?>"
                                                 <?php echo $is_resolved ? 'disabled' : ''; ?>>
                                             ❌ Faltante
+                                        </button>
+                                        <button class="button button-small wbi-edit-qty-btn"
+                                                data-idx="<?php echo intval( $idx ); ?>"
+                                                data-item-id="<?php echo $item_id; ?>"
+                                                data-current-qty="<?php echo intval( $required ); ?>"
+                                                data-name="<?php echo esc_attr( $item['name'] ); ?>"
+                                                title="Editar cantidad">
+                                            ✏️ Editar
+                                        </button>
+                                        <button class="button button-small wbi-remove-item-btn"
+                                                data-idx="<?php echo intval( $idx ); ?>"
+                                                data-item-id="<?php echo $item_id; ?>"
+                                                data-name="<?php echo esc_attr( $item['name'] ); ?>"
+                                                title="Eliminar ítem"
+                                                style="color:#d63638;border-color:#d63638;">
+                                            🗑️ Eliminar
                                         </button>
                                     </div>
                                     <!-- Missing/Replace form (hidden by default) -->
@@ -661,6 +700,72 @@ class WBI_Picking_Module {
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+                </div>
+            </div>
+
+            <!-- Add item button -->
+            <div style="margin-bottom:16px;">
+                <button id="wbi-add-item-btn" class="button" style="font-size:14px;">➕ Agregar Producto</button>
+            </div>
+
+            <!-- Edit qty modal -->
+            <div id="wbi-edit-qty-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
+                <div style="background:#fff;padding:24px;border-radius:6px;max-width:420px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,0.3);">
+                    <h3 style="margin-top:0;" id="wbi-edit-qty-title">Editar cantidad</h3>
+                    <input type="hidden" id="wbi-edit-qty-idx">
+                    <input type="hidden" id="wbi-edit-qty-item-id">
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block;margin-bottom:4px;font-weight:bold;">Nueva cantidad:</label>
+                        <input type="number" id="wbi-edit-qty-value" min="1" style="width:100%;font-size:16px;padding:6px;">
+                    </div>
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block;margin-bottom:4px;font-weight:bold;">Motivo del cambio <span style="color:#d63638;">*</span></label>
+                        <textarea id="wbi-edit-qty-reason" rows="3" style="width:100%;padding:6px;" placeholder="Explicá por qué se modifica la cantidad..."></textarea>
+                    </div>
+                    <div style="display:flex;gap:8px;justify-content:flex-end;">
+                        <button id="wbi-edit-qty-cancel" class="button">Cancelar</button>
+                        <button id="wbi-edit-qty-confirm" class="button button-primary">Confirmar cambio</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Remove item modal -->
+            <div id="wbi-remove-item-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
+                <div style="background:#fff;padding:24px;border-radius:6px;max-width:420px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,0.3);">
+                    <h3 style="margin-top:0;" id="wbi-remove-item-title">Eliminar ítem</h3>
+                    <input type="hidden" id="wbi-remove-item-idx">
+                    <input type="hidden" id="wbi-remove-item-id">
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block;margin-bottom:4px;font-weight:bold;">Motivo de la eliminación <span style="color:#d63638;">*</span></label>
+                        <textarea id="wbi-remove-item-reason" rows="3" style="width:100%;padding:6px;" placeholder="Explicá por qué se elimina el producto..."></textarea>
+                    </div>
+                    <div style="display:flex;gap:8px;justify-content:flex-end;">
+                        <button id="wbi-remove-item-cancel" class="button">Cancelar</button>
+                        <button id="wbi-remove-item-confirm" class="button button-primary" style="background:#d63638;border-color:#d63638;">Eliminar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add item modal -->
+            <div id="wbi-add-item-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
+                <div style="background:#fff;padding:24px;border-radius:6px;max-width:480px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,0.3);">
+                    <h3 style="margin-top:0;">Agregar Producto al Pedido</h3>
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block;margin-bottom:4px;font-weight:bold;">Código de barra / QR / SKU:</label>
+                        <input type="text" id="wbi-add-item-code" style="width:100%;font-size:16px;padding:6px;" placeholder="Escanea o escribe el código..." autofocus autocomplete="off">
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block;margin-bottom:4px;font-weight:bold;">Cantidad:</label>
+                        <input type="number" id="wbi-add-item-qty" min="1" value="1" style="width:100%;font-size:16px;padding:6px;">
+                    </div>
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block;margin-bottom:4px;font-weight:bold;">Motivo <span style="color:#d63638;">*</span></label>
+                        <textarea id="wbi-add-item-reason" rows="3" style="width:100%;padding:6px;" placeholder="Explicá por qué se agrega este producto..."></textarea>
+                    </div>
+                    <div style="display:flex;gap:8px;justify-content:flex-end;">
+                        <button id="wbi-add-item-cancel" class="button">Cancelar</button>
+                        <button id="wbi-add-item-confirm" class="button button-primary">Agregar</button>
+                    </div>
                 </div>
             </div>
 
@@ -982,6 +1087,166 @@ class WBI_Picking_Module {
                         }
                     });
             });
+
+            // ---- Helper: show/hide modal ----
+            function showModal(id) {
+                var m = document.getElementById(id);
+                if (m) { m.style.display = 'flex'; }
+            }
+            function hideModal(id) {
+                var m = document.getElementById(id);
+                if (m) { m.style.display = 'none'; }
+            }
+
+            // ---- Edit qty ----
+            document.querySelectorAll('.wbi-edit-qty-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    document.getElementById('wbi-edit-qty-idx').value     = this.dataset.idx;
+                    document.getElementById('wbi-edit-qty-item-id').value = this.dataset.itemId;
+                    document.getElementById('wbi-edit-qty-value').value   = this.dataset.currentQty;
+                    document.getElementById('wbi-edit-qty-reason').value  = '';
+                    document.getElementById('wbi-edit-qty-title').textContent = 'Editar cantidad: ' + this.dataset.name;
+                    showModal('wbi-edit-qty-modal');
+                    setTimeout(function(){ document.getElementById('wbi-edit-qty-value').focus(); }, 50);
+                });
+            });
+            document.getElementById('wbi-edit-qty-cancel').addEventListener('click', function() {
+                hideModal('wbi-edit-qty-modal');
+            });
+            document.getElementById('wbi-edit-qty-confirm').addEventListener('click', function() {
+                var idx    = document.getElementById('wbi-edit-qty-idx').value;
+                var itemId = document.getElementById('wbi-edit-qty-item-id').value;
+                var qty    = parseInt(document.getElementById('wbi-edit-qty-value').value, 10);
+                var reason = document.getElementById('wbi-edit-qty-reason').value.trim();
+
+                if ( ! qty || qty < 1 ) { alert('La cantidad debe ser mayor a 0.'); return; }
+                if ( ! reason ) { alert('El motivo es obligatorio.'); document.getElementById('wbi-edit-qty-reason').focus(); return; }
+
+                var btn = this;
+                btn.disabled = true;
+
+                var data = new FormData();
+                data.append('action', 'wbi_picking_edit_qty');
+                data.append('nonce', nonce);
+                data.append('order_id', ORDER_ID);
+                data.append('item_id', itemId);
+                data.append('new_qty', qty);
+                data.append('reason', reason);
+
+                fetch(ajaxurl, { method:'POST', body:data })
+                    .then(function(r){ return r.json(); })
+                    .then(function(res) {
+                        btn.disabled = false;
+                        if ( res.success ) {
+                            hideModal('wbi-edit-qty-modal');
+                            // Reload to reflect updated quantities and totals accurately
+                            window.location.reload();
+                        } else {
+                            var errMsg = typeof res.data === 'object' ? res.data.message : res.data;
+                            alert('Error: ' + errMsg);
+                        }
+                    });
+            });
+
+            // ---- Remove item ----
+            document.querySelectorAll('.wbi-remove-item-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    document.getElementById('wbi-remove-item-idx').value = this.dataset.idx;
+                    document.getElementById('wbi-remove-item-id').value  = this.dataset.itemId;
+                    document.getElementById('wbi-remove-item-reason').value = '';
+                    document.getElementById('wbi-remove-item-title').textContent = 'Eliminar: ' + this.dataset.name;
+                    showModal('wbi-remove-item-modal');
+                    setTimeout(function(){ document.getElementById('wbi-remove-item-reason').focus(); }, 50);
+                });
+            });
+            document.getElementById('wbi-remove-item-cancel').addEventListener('click', function() {
+                hideModal('wbi-remove-item-modal');
+            });
+            document.getElementById('wbi-remove-item-confirm').addEventListener('click', function() {
+                var itemId = document.getElementById('wbi-remove-item-id').value;
+                var reason = document.getElementById('wbi-remove-item-reason').value.trim();
+
+                if ( ! reason ) { alert('El motivo es obligatorio.'); document.getElementById('wbi-remove-item-reason').focus(); return; }
+
+                var btn = this;
+                btn.disabled = true;
+
+                var data = new FormData();
+                data.append('action', 'wbi_picking_remove_item');
+                data.append('nonce', nonce);
+                data.append('order_id', ORDER_ID);
+                data.append('item_id', itemId);
+                data.append('reason', reason);
+
+                fetch(ajaxurl, { method:'POST', body:data })
+                    .then(function(r){ return r.json(); })
+                    .then(function(res) {
+                        btn.disabled = false;
+                        if ( res.success ) {
+                            hideModal('wbi-remove-item-modal');
+                            window.location.reload();
+                        } else {
+                            var errMsg = typeof res.data === 'object' ? res.data.message : res.data;
+                            alert('Error: ' + errMsg);
+                        }
+                    });
+            });
+
+            // ---- Add item ----
+            document.getElementById('wbi-add-item-btn').addEventListener('click', function() {
+                document.getElementById('wbi-add-item-code').value   = '';
+                document.getElementById('wbi-add-item-qty').value    = '1';
+                document.getElementById('wbi-add-item-reason').value = '';
+                showModal('wbi-add-item-modal');
+                setTimeout(function(){ document.getElementById('wbi-add-item-code').focus(); }, 50);
+            });
+            document.getElementById('wbi-add-item-cancel').addEventListener('click', function() {
+                hideModal('wbi-add-item-modal');
+            });
+            document.getElementById('wbi-add-item-confirm').addEventListener('click', function() {
+                var code   = document.getElementById('wbi-add-item-code').value.trim();
+                var qty    = parseInt(document.getElementById('wbi-add-item-qty').value, 10);
+                var reason = document.getElementById('wbi-add-item-reason').value.trim();
+
+                if ( ! code ) { alert('Ingresá un código.'); document.getElementById('wbi-add-item-code').focus(); return; }
+                if ( ! qty || qty < 1 ) { alert('La cantidad debe ser mayor a 0.'); return; }
+                if ( ! reason ) { alert('El motivo es obligatorio.'); document.getElementById('wbi-add-item-reason').focus(); return; }
+
+                var btn = this;
+                btn.disabled = true;
+
+                var data = new FormData();
+                data.append('action', 'wbi_picking_add_item');
+                data.append('nonce', nonce);
+                data.append('order_id', ORDER_ID);
+                data.append('code', code);
+                data.append('qty', qty);
+                data.append('reason', reason);
+
+                fetch(ajaxurl, { method:'POST', body:data })
+                    .then(function(r){ return r.json(); })
+                    .then(function(res) {
+                        btn.disabled = false;
+                        if ( res.success ) {
+                            hideModal('wbi-add-item-modal');
+                            window.location.reload();
+                        } else {
+                            var errMsg = typeof res.data === 'object' ? res.data.message : res.data;
+                            alert('Error: ' + errMsg);
+                        }
+                    });
+            });
+
+            // Close modals on backdrop click
+            ['wbi-edit-qty-modal','wbi-remove-item-modal','wbi-add-item-modal'].forEach(function(id) {
+                var m = document.getElementById(id);
+                if (m) {
+                    m.addEventListener('click', function(e) {
+                        if (e.target === m) { m.style.display = 'none'; }
+                    });
+                }
+            });
+
         })();
         </script>
         <?php
@@ -1033,6 +1298,8 @@ class WBI_Picking_Module {
         $order->update_meta_data( '_wbi_picking_data',       wp_json_encode( $items ) );
         $order->update_meta_data( '_wbi_picking_started_at', current_time( 'mysql' ) );
         $order->update_meta_data( '_wbi_picking_user',       get_current_user_id() );
+        // Reset audit log on each new picking session
+        $order->update_meta_data( '_wbi_picking_log', wp_json_encode( array() ) );
         $order->save();
 
         $order->add_order_note( '📦 Armado iniciado por ' . wp_get_current_user()->display_name );
@@ -1059,23 +1326,58 @@ class WBI_Picking_Module {
         $already_complete = false;
         $matched_index    = -1;
 
-        foreach ( $picking_data as $idx => &$item ) {
-            if ( isset( $item['barcode'] ) && $item['barcode'] === $barcode ) {
-                $found         = true;
-                $matched_index = $idx;
-                if ( $item['qty_scanned'] >= $item['qty_required'] ) {
-                    $already_complete = true;
-                } else {
-                    $item['qty_scanned']++;
-                    $item['scanned_at'][] = current_time( 'mysql' );
-                }
-                break;
+        // --- First pass: try QR token decode ---
+        $qr_product_id   = 0;
+        $qr_variation_id = 0;
+        if ( class_exists( 'WBI_Product_QR_Module' ) ) {
+            $qr_result = WBI_Product_QR_Module::parse_token( $barcode );
+            if ( ! is_wp_error( $qr_result ) ) {
+                $qr_product_id   = $qr_result['product_id'];
+                $qr_variation_id = $qr_result['variation_id'];
             }
         }
-        unset( $item );
+
+        if ( $qr_product_id ) {
+            foreach ( $picking_data as $idx => &$item ) {
+                $pid_match = ( (int) $item['product_id'] === $qr_product_id );
+                $vid_match = $qr_variation_id
+                    ? ( (int) $item['variation_id'] === $qr_variation_id )
+                    : ( 0 === (int) $item['variation_id'] );
+                if ( $pid_match && $vid_match ) {
+                    $found         = true;
+                    $matched_index = $idx;
+                    if ( $item['qty_scanned'] >= $item['qty_required'] ) {
+                        $already_complete = true;
+                    } else {
+                        $item['qty_scanned']++;
+                        $item['scanned_at'][] = current_time( 'mysql' );
+                    }
+                    break;
+                }
+            }
+            unset( $item );
+        }
+
+        // --- Second pass: barcode string match ---
+        if ( ! $found ) {
+            foreach ( $picking_data as $idx => &$item ) {
+                if ( isset( $item['barcode'] ) && $item['barcode'] === $barcode ) {
+                    $found         = true;
+                    $matched_index = $idx;
+                    if ( $item['qty_scanned'] >= $item['qty_required'] ) {
+                        $already_complete = true;
+                    } else {
+                        $item['qty_scanned']++;
+                        $item['scanned_at'][] = current_time( 'mysql' );
+                    }
+                    break;
+                }
+            }
+            unset( $item );
+        }
 
         if ( ! $found ) {
-            // Second pass: search by product SKU as fallback
+            // Third pass: search by product SKU as fallback
             foreach ( $picking_data as $idx => &$item ) {
                 $lookup_id = $item['variation_id'] ?: $item['product_id'];
                 $sku       = get_post_meta( $lookup_id, '_sku', true );
@@ -1144,6 +1446,12 @@ class WBI_Picking_Module {
         $order->update_meta_data( '_wbi_picking_status',       'picked' );
         $order->update_meta_data( '_wbi_picking_completed_at', $now );
         $order->save();
+
+        // Automatically transition WooCommerce order to completed (only from eligible statuses)
+        $current_wc_status = $order->get_status();
+        if ( in_array( $current_wc_status, array( 'processing', 'on-hold', 'pending' ), true ) ) {
+            $order->update_status( 'completed', __( 'Armado finalizado por picking.', 'wbi-suite' ) );
+        }
 
         $user = wp_get_current_user();
         $order->add_order_note( '✅ Armado completado por ' . $user->display_name . ' — Tiempo: ' . $minutes . ' min' );
@@ -1272,6 +1580,34 @@ class WBI_Picking_Module {
             echo 'picking' === $status ? 'Continuar Armado' : 'Iniciar Armado';
             echo '</a></p>';
         }
+
+        // Picking audit log
+        $picking_log = json_decode( $order->get_meta( '_wbi_picking_log' ), true );
+        if ( is_array( $picking_log ) && ! empty( $picking_log ) ) {
+            $action_labels = array(
+                'edit_qty'    => '✏️ Edición de cantidad',
+                'remove_item' => '🗑️ Eliminación de ítem',
+                'add_item'    => '➕ Agregado de ítem',
+            );
+            echo '<hr style="margin:12px 0;">';
+            echo '<p style="font-weight:bold;margin-bottom:6px;">📋 Historial de cambios</p>';
+            echo '<div style="max-height:200px;overflow-y:auto;font-size:12px;">';
+            foreach ( array_reverse( $picking_log ) as $entry ) {
+                $action_label = isset( $action_labels[ $entry['action'] ] ) ? $action_labels[ $entry['action'] ] : esc_html( $entry['action'] );
+                echo '<div style="border-bottom:1px solid #eee;padding:6px 0;">';
+                echo '<div><strong>' . esc_html( $action_label ) . '</strong></div>';
+                echo '<div>' . esc_html( $entry['item_name'] ) . '</div>';
+                if ( isset( $entry['qty_before'], $entry['qty_after'] ) && 'remove_item' !== $entry['action'] && 'add_item' !== $entry['action'] ) {
+                    echo '<div>' . intval( $entry['qty_before'] ) . ' → ' . intval( $entry['qty_after'] ) . '</div>';
+                } elseif ( 'add_item' === $entry['action'] ) {
+                    echo '<div>Cantidad: ' . intval( $entry['qty_after'] ) . '</div>';
+                }
+                echo '<div style="color:#646970;">Motivo: ' . esc_html( $entry['reason'] ) . '</div>';
+                echo '<div style="color:#646970;">' . esc_html( $entry['user_name'] ) . ' — ' . esc_html( $entry['timestamp'] ) . '</div>';
+                echo '</div>';
+            }
+            echo '</div>';
+        }
     }
 
     // =========================================================================
@@ -1337,8 +1673,324 @@ class WBI_Picking_Module {
     }
 
     // =========================================================================
-    // Armador Panel — simplified view for wbi_armador role
+    // AJAX: Edit item quantity with audit log
     // =========================================================================
+
+    public function ajax_edit_qty() {
+        check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
+        if ( ! $this->current_user_can_pick() ) wp_send_json_error( 'Sin permisos' );
+
+        $order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
+        $item_id  = isset( $_POST['item_id'] )  ? intval( $_POST['item_id'] )  : 0;
+        $new_qty  = isset( $_POST['new_qty'] )  ? intval( $_POST['new_qty'] )  : 0;
+        $reason   = isset( $_POST['reason'] )   ? sanitize_textarea_field( wp_unslash( $_POST['reason'] ) ) : '';
+
+        if ( ! $order_id || ! $item_id ) wp_send_json_error( 'Datos incompletos' );
+        if ( $new_qty < 1 ) wp_send_json_error( 'La cantidad debe ser mayor a 0' );
+        if ( empty( $reason ) ) wp_send_json_error( 'El motivo es obligatorio' );
+
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) wp_send_json_error( 'Pedido no encontrado' );
+
+        // Update the WooCommerce order item quantity
+        $qty_before = 0;
+        $item_name  = '';
+        foreach ( $order->get_items() as $wc_item ) {
+            if ( (int) $wc_item->get_id() === $item_id ) {
+                $qty_before = (int) $wc_item->get_quantity();
+                $item_name  = $wc_item->get_name();
+                $wc_item->set_quantity( $new_qty );
+                $wc_item->save();
+                break;
+            }
+        }
+
+        $order->calculate_totals();
+        $order->save();
+
+        // Update picking data
+        $picking_data = json_decode( $order->get_meta( '_wbi_picking_data' ), true );
+        if ( is_array( $picking_data ) ) {
+            foreach ( $picking_data as &$pitem ) {
+                if ( (int) $pitem['item_id'] === $item_id ) {
+                    $pitem['qty_required'] = $new_qty;
+                    // Clamp qty_scanned to new required
+                    if ( $pitem['qty_scanned'] > $new_qty ) {
+                        $pitem['qty_scanned'] = $new_qty;
+                    }
+                    break;
+                }
+            }
+            unset( $pitem );
+            $order->update_meta_data( '_wbi_picking_data', wp_json_encode( $picking_data ) );
+            $order->save();
+        }
+
+        // Audit log
+        $current_user = wp_get_current_user();
+        $log_entry = array(
+            'timestamp' => current_time( 'mysql' ),
+            'user_id'   => get_current_user_id(),
+            'user_name' => $current_user->display_name,
+            'action'    => 'edit_qty',
+            'item_id'   => $item_id,
+            'item_name' => $item_name,
+            'qty_before' => $qty_before,
+            'qty_after'  => $new_qty,
+            'reason'    => $reason,
+        );
+        $this->append_picking_log( $order, $log_entry );
+
+        $order->add_order_note(
+            sprintf(
+                '✏️ Picking: cantidad de "%s" modificada de %d a %d por %s. Motivo: %s',
+                $item_name,
+                $qty_before,
+                $new_qty,
+                $current_user->display_name,
+                $reason
+            )
+        );
+
+        $picking_data_final = json_decode( $order->get_meta( '_wbi_picking_data' ), true );
+        $total_required     = is_array( $picking_data_final ) ? array_sum( array_column( $picking_data_final, 'qty_required' ) ) : 0;
+        $total_scanned      = is_array( $picking_data_final ) ? array_sum( array_column( $picking_data_final, 'qty_scanned' ) )  : 0;
+
+        wp_send_json_success( array(
+            'message'        => 'Cantidad actualizada',
+            'total_required' => $total_required,
+            'total_scanned'  => $total_scanned,
+        ) );
+    }
+
+    // =========================================================================
+    // AJAX: Remove item with audit log
+    // =========================================================================
+
+    public function ajax_remove_item() {
+        check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
+        if ( ! $this->current_user_can_pick() ) wp_send_json_error( 'Sin permisos' );
+
+        $order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
+        $item_id  = isset( $_POST['item_id'] )  ? intval( $_POST['item_id'] )  : 0;
+        $reason   = isset( $_POST['reason'] )   ? sanitize_textarea_field( wp_unslash( $_POST['reason'] ) ) : '';
+
+        if ( ! $order_id || ! $item_id ) wp_send_json_error( 'Datos incompletos' );
+        if ( empty( $reason ) ) wp_send_json_error( 'El motivo es obligatorio' );
+
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) wp_send_json_error( 'Pedido no encontrado' );
+
+        $item_name = '';
+        $item_qty  = 0;
+        foreach ( $order->get_items() as $wc_item ) {
+            if ( (int) $wc_item->get_id() === $item_id ) {
+                $item_name = $wc_item->get_name();
+                $item_qty  = (int) $wc_item->get_quantity();
+                break;
+            }
+        }
+
+        if ( ! $item_name ) wp_send_json_error( 'Ítem no encontrado en el pedido' );
+
+        $order->remove_item( $item_id );
+        $order->calculate_totals();
+        $order->save();
+
+        // Update picking data
+        $picking_data = json_decode( $order->get_meta( '_wbi_picking_data' ), true );
+        if ( is_array( $picking_data ) ) {
+            $picking_data = array_values( array_filter( $picking_data, function( $pitem ) use ( $item_id ) {
+                return (int) $pitem['item_id'] !== $item_id;
+            } ) );
+            $order->update_meta_data( '_wbi_picking_data', wp_json_encode( $picking_data ) );
+            $order->save();
+        }
+
+        // Audit log
+        $current_user = wp_get_current_user();
+        $log_entry = array(
+            'timestamp' => current_time( 'mysql' ),
+            'user_id'   => get_current_user_id(),
+            'user_name' => $current_user->display_name,
+            'action'    => 'remove_item',
+            'item_id'   => $item_id,
+            'item_name' => $item_name,
+            'qty_before' => $item_qty,
+            'qty_after'  => 0,
+            'reason'    => $reason,
+        );
+        $this->append_picking_log( $order, $log_entry );
+
+        $order->add_order_note(
+            sprintf(
+                '🗑️ Picking: producto "%s" eliminado del pedido por %s. Motivo: %s',
+                $item_name,
+                $current_user->display_name,
+                $reason
+            )
+        );
+
+        wp_send_json_success( array( 'message' => 'Producto eliminado' ) );
+    }
+
+    // =========================================================================
+    // AJAX: Add item with audit log
+    // =========================================================================
+
+    public function ajax_add_item() {
+        check_ajax_referer( 'wbi_picking_nonce', 'nonce' );
+        if ( ! $this->current_user_can_pick() ) wp_send_json_error( 'Sin permisos' );
+
+        $order_id = isset( $_POST['order_id'] ) ? intval( $_POST['order_id'] ) : 0;
+        $code     = isset( $_POST['code'] )     ? sanitize_text_field( wp_unslash( $_POST['code'] ) ) : '';
+        $qty      = isset( $_POST['qty'] )      ? intval( $_POST['qty'] )      : 1;
+        $reason   = isset( $_POST['reason'] )   ? sanitize_textarea_field( wp_unslash( $_POST['reason'] ) ) : '';
+
+        if ( ! $order_id || empty( $code ) ) wp_send_json_error( 'Datos incompletos' );
+        if ( $qty < 1 ) wp_send_json_error( 'La cantidad debe ser mayor a 0' );
+        if ( empty( $reason ) ) wp_send_json_error( 'El motivo es obligatorio' );
+
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) wp_send_json_error( 'Pedido no encontrado' );
+
+        // Resolve product from QR token, barcode, or SKU
+        $product_id   = 0;
+        $variation_id = 0;
+        $product      = null;
+
+        // Try QR token first
+        if ( class_exists( 'WBI_Product_QR_Module' ) ) {
+            $qr_result = WBI_Product_QR_Module::parse_token( $code );
+            if ( ! is_wp_error( $qr_result ) ) {
+                $product_id   = $qr_result['product_id'];
+                $variation_id = $qr_result['variation_id'];
+                $product      = wc_get_product( $variation_id ?: $product_id );
+            }
+        }
+
+        // Try barcode meta
+        if ( ! $product ) {
+            global $wpdb;
+            $found_id = $wpdb->get_var( $wpdb->prepare(
+                "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wbi_barcode' AND meta_value = %s LIMIT 1",
+                $code
+            ) );
+            if ( $found_id ) {
+                $p = wc_get_product( (int) $found_id );
+                if ( $p ) {
+                    $product = $p;
+                    if ( 'variation' === $p->get_type() || $p instanceof WC_Product_Variation ) {
+                        $variation_id = (int) $found_id;
+                        $product_id   = (int) $p->get_parent_id();
+                    } else {
+                        $product_id = (int) $found_id;
+                    }
+                }
+            }
+        }
+
+        // Try SKU
+        if ( ! $product ) {
+            $product_id_by_sku = wc_get_product_id_by_sku( $code );
+            if ( $product_id_by_sku ) {
+                $product = wc_get_product( $product_id_by_sku );
+                if ( $product ) {
+                    if ( 'variation' === $product->get_type() || $product instanceof WC_Product_Variation ) {
+                        $variation_id = $product_id_by_sku;
+                        $product_id   = (int) $product->get_parent_id();
+                    } else {
+                        $product_id = $product_id_by_sku;
+                    }
+                }
+            }
+        }
+
+        if ( ! $product ) {
+            wp_send_json_error( array( 'message' => 'Producto no encontrado para el código: ' . esc_html( $code ) ) );
+        }
+
+        // Add to WooCommerce order
+        $parent_product = wc_get_product( $product_id );
+        if ( $variation_id ) {
+            $variation_obj = wc_get_product( $variation_id );
+            $variation_data = array();
+            if ( $variation_obj ) {
+                foreach ( $variation_obj->get_variation_attributes() as $attr_key => $attr_val ) {
+                    $variation_data[ $attr_key ] = $attr_val;
+                }
+            }
+            $new_item_id = $order->add_product( $variation_obj ?: $parent_product, $qty, array( 'variation' => $variation_data ) );
+        } else {
+            $new_item_id = $order->add_product( $parent_product, $qty );
+        }
+
+        if ( ! $new_item_id ) {
+            wp_send_json_error( 'No se pudo agregar el producto al pedido' );
+        }
+
+        $order->calculate_totals();
+        $order->save();
+
+        // Append to picking data
+        $barcode      = get_post_meta( $variation_id ?: $product_id, '_wbi_barcode', true );
+        $picking_data = json_decode( $order->get_meta( '_wbi_picking_data' ), true );
+        if ( is_array( $picking_data ) ) {
+            $picking_data[] = array(
+                'product_id'   => $product_id,
+                'variation_id' => $variation_id,
+                'item_id'      => $new_item_id,
+                'barcode'      => $barcode,
+                'name'         => $product->get_name(),
+                'qty_required' => $qty,
+                'qty_scanned'  => 0,
+                'scanned_at'   => array(),
+            );
+            $order->update_meta_data( '_wbi_picking_data', wp_json_encode( $picking_data ) );
+            $order->save();
+        }
+
+        // Audit log
+        $current_user = wp_get_current_user();
+        $log_entry = array(
+            'timestamp' => current_time( 'mysql' ),
+            'user_id'   => get_current_user_id(),
+            'user_name' => $current_user->display_name,
+            'action'    => 'add_item',
+            'item_id'   => $new_item_id,
+            'item_name' => $product->get_name(),
+            'qty_before' => 0,
+            'qty_after'  => $qty,
+            'reason'    => $reason,
+        );
+        $this->append_picking_log( $order, $log_entry );
+
+        $order->add_order_note(
+            sprintf(
+                '➕ Picking: producto "%s" (x%d) agregado al pedido por %s. Motivo: %s',
+                $product->get_name(),
+                $qty,
+                $current_user->display_name,
+                $reason
+            )
+        );
+
+        wp_send_json_success( array( 'message' => 'Producto agregado', 'item_name' => $product->get_name() ) );
+    }
+
+    // =========================================================================
+    // Helper: append an entry to the picking audit log
+    // =========================================================================
+
+    private function append_picking_log( $order, array $entry ) {
+        $log = json_decode( $order->get_meta( '_wbi_picking_log' ), true );
+        if ( ! is_array( $log ) ) {
+            $log = array();
+        }
+        $log[] = $entry;
+        $order->update_meta_data( '_wbi_picking_log', wp_json_encode( $log ) );
+        $order->save();
+    }
 
     public function render_armador_panel() {
         global $wpdb;
