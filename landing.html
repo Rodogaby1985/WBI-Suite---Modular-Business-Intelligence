@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>wooErp — Suite de Gestión para WooCommerce | WBI Suite</title>
-  <meta name="description" content="wooErp convierte tu WooCommerce en un ERP completo. 31 módulos activables, facturación AFIP, CRM, picking, Caja POS, MobApp Envíos, Pagos Offline Avanzados, BI dashboard y más. Sin salir de WordPress." />
+  <title>wooErp — ERP B2B modular para WooCommerce | WBI Suite</title>
+  <meta name="description" content="wooErp potencia operaciones B2B en WooCommerce con una suite ERP modular: estadísticas en tiempo real, gestión de stock, reportes y automatizaciones comerciales en una sola plataforma." />
   <meta name="keywords" content="WooCommerce ERP, plugin ERP WordPress, facturación AFIP, CRM WooCommerce, BI Suite, wooErp, WBI Suite" />
-  <meta property="og:title" content="wooErp — Suite de Gestión para WooCommerce" />
-  <meta property="og:description" content="Tu tienda de WooCommerce ya tiene todo. Solo le faltaba un cerebro." />
+  <meta property="og:title" content="wooErp — ERP B2B modular para WooCommerce" />
+  <meta property="og:description" content="Suite ERP B2B modular para WooCommerce con estadísticas en tiempo real, control de stock y operaciones comerciales integradas." />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="wooErp — Suite de Gestión para WooCommerce" />
-  <meta name="twitter:description" content="31 módulos. 7 categorías. 1 solo plugin. ERP nativo para WooCommerce." />
+  <meta name="twitter:title" content="wooErp — ERP B2B modular para WooCommerce" />
+  <meta name="twitter:description" content="Suite modular B2B con estadísticas, stock y operaciones integradas en WooCommerce." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -274,15 +274,6 @@
       margin-bottom: 40px;
       min-height: 2em;
       animation: fadeInUp 1s 0.2s ease both;
-    }
-    .typing-cursor {
-      display: inline-block;
-      width: 2px;
-      height: 1.2em;
-      background: var(--color-accent);
-      margin-left: 2px;
-      vertical-align: text-bottom;
-      animation: blink 1s step-end infinite;
     }
     @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
@@ -699,12 +690,12 @@
     .check-no  { color: var(--color-danger); }
     .check-warn { color: #f59e0b; }
 
-    /* ===================== VENTAJAS ===================== */
-    #ventajas {
+    /* ===================== BENEFICIOS ===================== */
+    #beneficios {
       background: var(--color-bg-3);
       position: relative;
     }
-    #ventajas::before {
+    #beneficios::before {
       content: '';
       position: absolute;
       top: 0; left: 0; right: 0; height: 1px;
@@ -939,12 +930,12 @@
   <nav id="navbar" aria-label="Navegación principal">
     <a href="#hero" class="nav-logo">wooErp</a>
     <ul class="nav-links" id="nav-links" role="list">
-      <li><a href="#problema">Problema</a></li>
+      <li><a href="#novedades">Novedades</a></li>
       <li><a href="#modulos">Módulos</a></li>
-      <li><a href="#comparativa">vs Odoo</a></li>
-      <li><a href="#ventajas">Ventajas</a></li>
+      <li><a href="#comparativa">Comparativa</a></li>
+      <li><a href="#beneficios">Beneficios</a></li>
       <li><a href="#para-quien">¿Para quién?</a></li>
-      <li><a href="#cta-final" class="nav-cta">Quiero wooErp</a></li>
+      <li><a href="mailto:contacto@wbisuite.com?subject=Solicitud%20de%20demo%20wooErp" class="nav-cta">Solicitar demo</a></li>
     </ul>
     <button class="nav-toggle" id="nav-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="nav-links">
       <span></span><span></span><span></span>
@@ -963,19 +954,17 @@
     <div class="particles" id="particles" aria-hidden="true"></div>
 
     <div class="hero-content">
-      <div class="hero-badge">🧠 WBI Suite v9.0.13 — ERP Nativo para WooCommerce</div>
+      <div class="hero-badge">🧠 WBI Suite — Plataforma ERP B2B para WooCommerce</div>
 
       <h1 class="hero-title">
-        <span class="gradient-text">wooErp</span> —<br/>Suite de Gestión<br/>para WooCommerce
+        <span class="gradient-text">wooErp</span> —<br/>Eficiencia B2B<br/>en WooCommerce
       </h1>
 
-      <p class="hero-subtitle" id="typing-target" aria-live="polite">
-        <span id="typed-text"></span><span class="typing-cursor" aria-hidden="true"></span>
-      </p>
+      <p class="hero-subtitle">Suite modular con estadísticas en tiempo real, gestión de stock y operaciones comerciales integradas para crecer sin fricción.</p>
 
       <div class="hero-cta-group">
-        <a href="#modulos" class="btn-primary" aria-label="Ver los 31 módulos de wooErp">Ver los 31 Módulos 🚀</a>
-        <a href="#comparativa" class="btn-secondary" aria-label="Comparar wooErp con Odoo">Comparar con Odoo →</a>
+        <a href="mailto:contacto@wbisuite.com?subject=Solicitud%20de%20demo%20wooErp" class="btn-primary" aria-label="Solicitar una demo de wooErp">Solicitar demo</a>
+        <a href="#modulos" class="btn-secondary" aria-label="Ver módulos de wooErp">Ver módulos</a>
       </div>
 
       <div class="hero-counters" aria-label="Estadísticas del producto">
@@ -991,6 +980,70 @@
           <span class="counter-number" data-target="1" aria-label="1 solo plugin">0</span>
           <span class="counter-label">Solo Plugin</span>
         </div>
+      </div>
+    </div>
+  </section>
+
+
+
+  <!-- =================== QUÉ SE INCORPORÓ RECIENTEMENTE =================== -->
+  <section id="novedades" aria-labelledby="novedades-title">
+    <div class="container">
+      <div class="modules-header reveal">
+        <span class="section-badge">🆕 Últimas incorporaciones</span>
+        <h2 class="section-title" id="novedades-title">Qué se incorporó recientemente</h2>
+        <p class="section-subtitle">Nuevas funcionalidades disponibles para mejorar resultados comerciales, logística y control operativo en equipos B2B.</p>
+      </div>
+
+      <div class="modules-grid">
+        <article class="module-card reveal-scale" data-delay="1">
+          <div class="module-icon">🛍️</div>
+          <h3 class="module-name">Pedido rápido mayorista</h3>
+          <p class="module-desc">Acelera compras B2B desde catálogo con variantes, mínimos y múltiplos, reduciendo fricción en pedidos grandes.</p>
+          <span class="module-badge">Comercial</span>
+        </article>
+        <article class="module-card reveal-scale" data-delay="2">
+          <div class="module-icon">🏦</div>
+          <h3 class="module-name">Pagos Offline Avanzados</h3>
+          <p class="module-desc">Mejora la cobranza con cuentas bancarias variables, vencimiento automático y envío de comprobante por WhatsApp.</p>
+          <span class="module-badge">Finanzas</span>
+        </article>
+        <article class="module-card reveal-scale" data-delay="3">
+          <div class="module-icon">💳</div>
+          <h3 class="module-name">Precio Promo</h3>
+          <p class="module-desc">Muestra precio financiado y precio por transferencia con ajuste automático en checkout para optimizar conversión.</p>
+          <span class="module-badge">Comercial</span>
+        </article>
+        <article class="module-card reveal-scale" data-delay="4">
+          <div class="module-icon">🚚</div>
+          <h3 class="module-name">MobApp Envíos</h3>
+          <p class="module-desc">Calcula tarifas de transportistas argentinos en WooCommerce para cotizar mejor y cerrar más ventas.</p>
+          <span class="module-badge">Operaciones</span>
+        </article>
+        <article class="module-card reveal-scale" data-delay="5">
+          <div class="module-icon">🚌</div>
+          <h3 class="module-name">Transporte Multiopciones</h3>
+          <p class="module-desc">Permite elegir transportista o micro/encomienda en checkout, aumentando flexibilidad logística para clientes.</p>
+          <span class="module-badge">Operaciones</span>
+        </article>
+        <article class="module-card reveal-scale" data-delay="6">
+          <div class="module-icon">🛒</div>
+          <h3 class="module-name">Carritos abandonados</h3>
+          <p class="module-desc">Recupera ventas perdidas con seguimiento automatizado por email y WhatsApp según estado del carrito.</p>
+          <span class="module-badge">Comercial</span>
+        </article>
+        <article class="module-card reveal-scale" data-delay="7">
+          <div class="module-icon">🔳</div>
+          <h3 class="module-name">QR de producto POS/Web</h3>
+          <p class="module-desc">Agrega al carrito por escaneo con etiquetas imprimibles, acelerando caja, picking y toma de pedidos.</p>
+          <span class="module-badge">Operaciones</span>
+        </article>
+        <article class="module-card reveal-scale" data-delay="8">
+          <div class="module-icon">🏧</div>
+          <h3 class="module-name">Caja POS por cajero</h3>
+          <p class="module-desc">Controla sesiones de caja con arqueo, movimientos y exportación para mayor trazabilidad financiera diaria.</p>
+          <span class="module-badge">Operaciones</span>
+        </article>
       </div>
     </div>
   </section>
@@ -1102,280 +1155,43 @@
   <section id="modulos" aria-labelledby="modulos-title">
     <div class="container">
       <div class="modules-header reveal">
-        <span class="section-badge">🧩 31 módulos activables</span>
-        <h2 class="section-title" id="modulos-title">Todo lo que tu negocio necesita,<br/><span class="gradient-text">en un solo plugin</span></h2>
-        <p class="section-subtitle">Organizados en 7 categorías funcionales. Activá solo lo que necesitás, cuando lo necesitás.</p>
+        <span class="section-badge">🧩 Suite modular orientada a resultados</span>
+        <h2 class="section-title" id="modulos-title">Módulos clave para gestión B2B</h2>
+        <p class="section-subtitle">Combiná estos bloques para operar con más control, velocidad y rentabilidad dentro de WooCommerce.</p>
       </div>
 
-      <div class="tabs-container reveal" data-delay="2">
-        <div class="tabs" role="tablist" aria-label="Categorías de módulos">
-          <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="tab-comercial" data-tab="comercial">🏢 Comercial</button>
-          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-bi" data-tab="bi">📊 BI</button>
-          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-operaciones" data-tab="operaciones">📦 Operaciones</button>
-          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-finanzas" data-tab="finanzas">💰 Finanzas</button>
-          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-integraciones" data-tab="integraciones">🔗 Integraciones</button>
-          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-datos" data-tab="datos">📁 Datos</button>
-          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-rrhh" data-tab="rrhh">👥 RRHH</button>
-        </div>
+      <div class="modules-grid">
+        <article class="module-card reveal-scale" data-delay="1">
+          <div class="module-icon">📊</div>
+          <h3 class="module-name">Estadísticas</h3>
+          <p class="module-desc">KPIs en tiempo real de ventas, conversión y ticket promedio para detectar oportunidades y desvíos al instante.</p>
+          <span class="module-badge">Inteligencia de negocio</span>
+        </article>
 
-        <!-- Comercial -->
-        <div class="tab-panel active" id="tab-comercial" role="tabpanel">
-          <div class="modules-grid">
-            <div class="module-card">
-              <div class="module-icon">🏭</div>
-              <h3 class="module-name">Modo Mayorista B2B</h3>
-              <p class="module-desc">Roles mayoristas, precios ocultos al público y aprobación manual de clientes con acceso restringido por rol.</p>
-              <span class="module-badge">Comercial</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">🏷️</div>
-              <h3 class="module-name">Listas de Precios</h3>
-              <p class="module-desc">Precios diferenciados por cliente, rol o grupo — ideal para distribuidores, revendedores y clientes VIP.</p>
-              <span class="module-badge">Comercial</span>
-            </div>
-            <div class="module-card reveal-scale">
-              <div class="module-icon">🏷️</div>
-              <h3 class="module-name">Precio Promo</h3>
-              <p class="module-desc">Precio financiado, precio con descuento por transferencia bancaria y ajuste automático en el checkout según el método de pago seleccionado.</p>
-              <span class="module-badge">Nuevo</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">📈</div>
-              <h3 class="module-name">Costos y Márgenes</h3>
-              <p class="module-desc">Costo de adquisición por producto con cálculo automático de margen bruto y análisis de rentabilidad.</p>
-              <span class="module-badge">Comercial</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">🛒</div>
-              <h3 class="module-name">Carritos Abandonados</h3>
-              <p class="module-desc">Recuperación de ventas perdidas con seguimiento automático por email y WhatsApp.</p>
-              <span class="module-badge">Comercial</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">✅</div>
-              <h3 class="module-name">Validación de Checkout</h3>
-              <p class="module-desc">Valida que el código postal coincida con la provincia seleccionada — reduce errores de envío.</p>
-              <span class="module-badge">Comercial</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">🎯</div>
-              <h3 class="module-name">CRM / Pipeline de Ventas</h3>
-              <p class="module-desc">Pipeline Kanban con leads, actividades, forecast, scoring y conversión directa a clientes WooCommerce.</p>
-              <span class="module-badge">Comercial</span>
-            </div>
-          </div>
-        </div>
+        <article class="module-card reveal-scale" data-delay="2">
+          <div class="module-icon">📦</div>
+          <h3 class="module-name">Stock</h3>
+          <p class="module-desc">Control de inventario con alertas, reabastecimiento y soporte de picking para evitar quiebres y sobrestock.</p>
+          <span class="module-badge">Operaciones</span>
+        </article>
 
-        <!-- BI -->
-        <div class="tab-panel" id="tab-bi" role="tabpanel">
-          <div class="modules-grid">
-            <div class="module-card">
-              <div class="module-icon">📊</div>
-              <h3 class="module-name">Dashboard BI Suite</h3>
-              <p class="module-desc">Dashboard ejecutivo con KPIs en tiempo real: ventas, ticket promedio, conversión, productos top y alertas de stock.</p>
-              <span class="module-badge">Inteligencia</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">📉</div>
-              <h3 class="module-name">Reportes de Ventas</h3>
-              <p class="module-desc">Análisis de ventas por período, producto, categoría y canal con gráficos interactivos.</p>
-              <span class="module-badge">Inteligencia</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">📦</div>
-              <h3 class="module-name">Reportes de Productos</h3>
-              <p class="module-desc">Performance por producto: unidades, revenue, tendencia y comparativa.</p>
-              <span class="module-badge">Inteligencia</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">👥</div>
-              <h3 class="module-name">Reportes de Clientes</h3>
-              <p class="module-desc">Análisis de base de clientes: recurrencia, LTV, frecuencia de compra y valor de cliente.</p>
-              <span class="module-badge">Inteligencia</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">⭐</div>
-              <h3 class="module-name">Scoring de Clientes (RFM)</h3>
-              <p class="module-desc">Scoring automático diario por Recencia, Frecuencia y Monto — segmentá tu base sin esfuerzo.</p>
-              <span class="module-badge">Inteligencia</span>
-            </div>
-          </div>
-        </div>
+        <article class="module-card reveal-scale" data-delay="3">
+          <div class="module-icon">🏢</div>
+          <h3 class="module-name">Operaciones B2B</h3>
+          <p class="module-desc">Roles mayoristas, listas de precios y pedido rápido para escalar ventas corporativas con reglas claras.</p>
+          <span class="module-badge">Comercial</span>
+        </article>
 
-        <!-- Operaciones -->
-        <div class="tab-panel" id="tab-operaciones" role="tabpanel">
-          <div class="modules-grid">
-            <div class="module-card">
-              <div class="module-icon">🔖</div>
-              <h3 class="module-name">Códigos de Barra</h3>
-              <p class="module-desc">Gestión de EAN/UPC por producto con generación e impresión de etiquetas.</p>
-              <span class="module-badge">Operaciones</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">📋</div>
-              <h3 class="module-name">Picking &amp; Armado</h3>
-              <p class="module-desc">Armado de pedidos con escaneo de códigos de barra — flujo completo de preparación.</p>
-              <span class="module-badge">Operaciones</span>
-            </div>
-            <div class="module-card reveal-scale">
-              <div class="module-icon">🚚</div>
-              <h3 class="module-name">MobApp Envíos</h3>
-              <p class="module-desc">Tarifas de envío para Andreani, Correo Argentino, OCA, Urbano y Flash. Integra el motor de tarifas de MobApp Envíos directamente en WooCommerce.</p>
-              <span class="module-badge">Nuevo</span>
-            </div>
-            <div class="module-card reveal-scale">
-              <div class="module-icon">🚌</div>
-              <h3 class="module-name">Transporte Multiopciones</h3>
-              <p class="module-desc">Método de envío con selección de transportista o servicio de micro/encomienda personalizado. El cliente elige entre múltiples opciones en el checkout.</p>
-              <span class="module-badge">Nuevo</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">🧾</div>
-              <h3 class="module-name">Remitos</h3>
-              <p class="module-desc">Generación de remitos PDF vinculados a pedidos con numeración correlativa automática.</p>
-              <span class="module-badge">Operaciones</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">🏪</div>
-              <h3 class="module-name">Proveedores</h3>
-              <p class="module-desc">Gestión de proveedores con vinculación directa a productos del catálogo.</p>
-              <span class="module-badge">Operaciones</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">📄</div>
-              <h3 class="module-name">Órdenes de Compra</h3>
-              <p class="module-desc">Gestión completa de OC: creación, aprobación, recepción de mercadería y actualización automática de stock.</p>
-              <span class="module-badge">Operaciones</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">🔄</div>
-              <h3 class="module-name">Reglas de Reabastecimiento</h3>
-              <p class="module-desc">Punto de reorden automático con generación de órdenes de compra cuando el stock baja del mínimo configurado.</p>
-              <span class="module-badge">Operaciones</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">⚠️</div>
-              <h3 class="module-name">Alertas de Stock</h3>
-              <p class="module-desc">Notificaciones automáticas cuando productos llegan a nivel de stock crítico.</p>
-              <span class="module-badge">Operaciones</span>
-            </div>
-            <div class="module-card reveal-scale" data-delay="8">
-              <div class="module-icon">👥</div>
-              <h3 class="module-name">Empleados / RRHH</h3>
-              <p class="module-desc">Gestión completa de empleados, departamentos, contratos, habilidades, horarios de trabajo y reclutamiento. Inspirado en Odoo HR.</p>
-              <span class="module-badge">Nuevo</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Finanzas -->
-        <div class="tab-panel" id="tab-finanzas" role="tabpanel">
-          <div class="modules-grid">
-            <div class="module-card">
-              <div class="module-icon">🧾</div>
-              <h3 class="module-name">Facturación AFIP</h3>
-              <p class="module-desc">Facturación tipo A/B/C con formato fiscal argentino AFIP — nativa sin módulos adicionales.</p>
-              <span class="module-badge">Finanzas</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">📝</div>
-              <h3 class="module-name">Notas de Crédito/Débito</h3>
-              <p class="module-desc">Emisión de NC/ND vinculadas a facturas AFIP tipo A/B/C con trazabilidad completa.</p>
-              <span class="module-badge">Finanzas</span>
-            </div>
-            <div class="module-card reveal-scale">
-              <div class="module-icon">🏦</div>
-              <h3 class="module-name">Pagos Offline Avanzados</h3>
-              <p class="module-desc">Gateway de pago manual con múltiples cuentas bancarias variables, vencimiento automático de órdenes impagadas y notificación por WhatsApp al confirmar la transferencia.</p>
-              <span class="module-badge">Nuevo</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">🏦</div>
-              <h3 class="module-name">Gestión de Impuestos</h3>
-              <p class="module-desc">Cálculo de IVA, percepciones e IIBB por provincia — diseñado para la operatoria fiscal argentina.</p>
-              <span class="module-badge">Finanzas</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">💵</div>
-              <h3 class="module-name">Flujo de Caja</h3>
-              <p class="module-desc">Proyección de cashflow y análisis financiero con ingresos y egresos proyectados.</p>
-              <span class="module-badge">Finanzas</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">📊</div>
-              <h3 class="module-name">Reportes Contables</h3>
-              <p class="module-desc">Libro IVA, Estado de Resultados, Posición IVA, Resumen de Ventas y análisis de Rentabilidad por período.</p>
-              <span class="module-badge">Finanzas</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">🏧</div>
-              <h3 class="module-name">Caja POS</h3>
-              <p class="module-desc">Apertura y cierre de caja por cajero/turno con efectivo inicial, arqueo final y diferencia registrada. Movimientos de ingresos, egresos, retiros y depósitos. Medios de pago (efectivo/tarjeta/transferencia/otros), historial de sesiones y exportación CSV. Permisos por rol: admin ve todo, cajero solo su caja.</p>
-              <span class="module-badge">Nuevo</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Integraciones -->
-        <div class="tab-panel" id="tab-integraciones" role="tabpanel">
-          <div class="modules-grid">
-            <div class="module-card">
-              <div class="module-icon">💬</div>
-              <h3 class="module-name">WhatsApp</h3>
-              <p class="module-desc">Notificaciones automáticas al cliente por WhatsApp ante cambios de estado, envío y entrega.</p>
-              <span class="module-badge">Integraciones</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">🔔</div>
-              <h3 class="module-name">Notificaciones</h3>
-              <p class="module-desc">Centro de alertas unificado con badge en el admin de WordPress y clasificación por prioridad.</p>
-              <span class="module-badge">Integraciones</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">🔌</div>
-              <h3 class="module-name">API REST</h3>
-              <p class="module-desc">Endpoints REST para integrar con apps externas, ERPs de terceros o aplicaciones móviles propias.</p>
-              <span class="module-badge">Integraciones</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">📧</div>
-              <h3 class="module-name">Email Marketing</h3>
-              <p class="module-desc">Campañas masivas de email: templates, suscriptores, métricas de apertura y clic.</p>
-              <span class="module-badge">Integraciones</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Datos -->
-        <div class="tab-panel" id="tab-datos" role="tabpanel">
-          <div class="modules-grid">
-            <div class="module-card">
-              <div class="module-icon">🗂️</div>
-              <h3 class="module-name">Modelo de Datos Extra</h3>
-              <p class="module-desc">Campos adicionales como origen de venta, taxonomías personalizadas y atributos de negocio.</p>
-              <span class="module-badge">Datos</span>
-            </div>
-            <div class="module-card">
-              <div class="module-icon">📤</div>
-              <h3 class="module-name">Exportación</h3>
-              <p class="module-desc">Export de datos a CSV/Excel para análisis externo, contabilidad o auditoría.</p>
-              <span class="module-badge">Datos</span>
-            </div>
-          </div>
-        </div>
-        <div class="tab-panel" id="tab-rrhh" role="tabpanel">
-          <div class="modules-grid">
-            <div class="module-card reveal-scale">
-              <div class="module-icon">👥</div>
-              <h3 class="module-name">Empleados / RRHH</h3>
-              <p class="module-desc">Gestión integral de empleados, departamentos, contratos, habilidades, currículum y reclutamiento. Inspirado en Odoo HR con adaptación para WooCommerce.</p>
-              <span class="module-badge">Nuevo v9.0.13</span>
-            </div>
-          </div>
-        </div>
+        <article class="module-card reveal-scale" data-delay="4">
+          <div class="module-icon">🧾</div>
+          <h3 class="module-name">Reportes</h3>
+          <p class="module-desc">Reportes de ventas y contables para consolidar análisis por período y respaldar decisiones de crecimiento.</p>
+          <span class="module-badge">Finanzas</span>
+        </article>
       </div>
     </div>
   </section>
+
   <section id="comparativa" aria-labelledby="comparativa-title">
     <div class="container">
       <div class="text-center reveal">
@@ -1480,56 +1296,42 @@
     </div>
   </section>
 
-  <!-- =================== VENTAJAS =================== -->
-  <section id="ventajas" aria-labelledby="ventajas-title">
+  <!-- =================== BENEFICIOS =================== -->
+  <section id="beneficios" aria-labelledby="beneficios-title">
     <div class="container">
       <div class="text-center reveal">
-        <span class="section-badge">🏆 Por qué elegir wooErp</span>
-        <h2 class="section-title" id="ventajas-title">Ventajas de un ERP<br/><span class="gradient-text">dentro de WooCommerce</span></h2>
-        <p class="section-subtitle">No es solo una cuestión de precio. Es una cuestión de lógica.</p>
+        <span class="section-badge">🏆 Beneficios para equipos B2B</span>
+        <h2 class="section-title" id="beneficios-title">Impacto directo en la operación</h2>
+        <p class="section-subtitle">Más control del día a día, menos tareas manuales y mejor capacidad de escalar con información confiable.</p>
       </div>
 
       <div class="ventajas-grid">
         <div class="ventaja-card reveal-scale" data-delay="1">
           <span class="ventaja-number">01</span>
-          <div class="ventaja-icon">🔗</div>
-          <h3>Cero sincronización = Cero problemas</h3>
-          <p>Con Odoo o cualquier ERP externo, necesitás un conector que sincronice stock, pedidos y clientes. Si falla: stock descuadrado, pedidos duplicados, clientes perdidos. Con wooErp todo vive en la misma base de datos.</p>
+          <div class="ventaja-icon">⚙️</div>
+          <h3>Eficiencia operativa</h3>
+          <p>Automatizá procesos comerciales, cobros y logística para reducir tiempos de gestión y carga administrativa.</p>
         </div>
 
         <div class="ventaja-card reveal-scale" data-delay="2">
           <span class="ventaja-number">02</span>
-          <div class="ventaja-icon">💰</div>
-          <h3>Costo predecible y accesible</h3>
-          <p>Odoo cobra por usuario y por mes. Con 5 empleados ya son +$1,500/año solo en licencia, sin contar implementación. wooErp tiene licencia única, sin importar cuántos usuarios tengan acceso.</p>
+          <div class="ventaja-icon">🧭</div>
+          <h3>Trazabilidad</h3>
+          <p>Seguí pedidos, stock y movimientos de caja en un flujo único, con registro claro de cada operación.</p>
         </div>
 
         <div class="ventaja-card reveal-scale" data-delay="3">
           <span class="ventaja-number">03</span>
-          <div class="ventaja-icon">🛠️</div>
-          <h3>No necesitás un equipo de IT</h3>
-          <p>Odoo requiere implementadores certificados, servidores dedicados y mantenimiento constante. wooErp se instala como cualquier plugin de WordPress y se configura en minutos.</p>
+          <div class="ventaja-icon">📈</div>
+          <h3>Decisiones con datos</h3>
+          <p>Apoyá decisiones comerciales y financieras en KPIs, reportes y métricas reales del negocio en WooCommerce.</p>
         </div>
 
         <div class="ventaja-card reveal-scale" data-delay="4">
           <span class="ventaja-number">04</span>
-          <div class="ventaja-icon">🧩</div>
-          <h3>Activá solo lo que necesitás</h3>
-          <p>Arrancás con Dashboard y Costos, y en el futuro activás CRM, Picking y Facturación. Modular de verdad: cada módulo se enciende o apaga con un simple toggle.</p>
-        </div>
-
-        <div class="ventaja-card reveal-scale" data-delay="5">
-          <span class="ventaja-number">05</span>
-          <div class="ventaja-icon">👨‍💻</div>
-          <h3>Tu equipo ya sabe usarlo</h3>
-          <p>Si tu equipo ya trabaja con WordPress y WooCommerce, no hay capacitación. El ERP vive donde ya están los pedidos, los productos y los clientes.</p>
-        </div>
-
-        <div class="ventaja-card reveal-scale" data-delay="6">
-          <span class="ventaja-number">06</span>
-          <div class="ventaja-icon">🇦🇷</div>
-          <h3>Preparado para Argentina</h3>
-          <p>Facturación AFIP, Notas de Crédito tipo A/B/C, IVA, percepciones, IIBB por provincia, remitos — todo pensado para la operatoria fiscal argentina.</p>
+          <div class="ventaja-icon">🚀</div>
+          <h3>Escalabilidad</h3>
+          <p>Activá módulos según la madurez de tu empresa y acompañá el crecimiento sin migraciones complejas.</p>
         </div>
       </div>
     </div>
@@ -1584,32 +1386,19 @@
     <div class="container">
       <div class="cta-inner">
         <div class="reveal">
-          <span class="section-badge">🚀 Empezá hoy</span>
+          <span class="section-badge">🚀 Próximo paso</span>
           <h2 class="cta-tagline" id="cta-title">
-            El <span class="highlight">80% de Odoo</span>,<br/>
-            al <span class="highlight">20% del costo</span>,<br/>
-            con <span class="highlight">0% de complejidad</span>
+            Transformá WooCommerce en una operación B2B<br/>
+            <span class="highlight">más predecible, rentable y escalable</span>
           </h2>
           <p class="cta-sub">
-            wooErp no es un ERP que se conecta a tu tienda.<br/>
-            <strong>Es un ERP que ya es tu tienda.</strong>
+            Coordinemos una demo para mostrarte cómo implementar módulos de estadísticas, stock, operaciones y reportes en tu negocio.
           </p>
         </div>
 
-        <div class="cta-pills reveal" data-delay="1">
-          <span class="pill">✅ Sin costo por usuario</span>
-          <span class="pill">✅ Instalación en minutos</span>
-          <span class="pill accent">🇦🇷 AFIP nativo</span>
-          <span class="pill accent">🧩 25 módulos</span>
-          <span class="pill accent">👥 Empleados / RRHH</span>
-        </div>
-
-        <div class="hero-cta-group reveal" data-delay="2">
-          <a href="#modulos" class="btn-primary" aria-label="Explorar todos los módulos de wooErp">
-            Explorar todos los módulos 🚀
-          </a>
-          <a href="mailto:contacto@wbisuite.com" class="btn-secondary" aria-label="Contactar para más información">
-            Contactar →
+        <div class="hero-cta-group reveal" data-delay="1">
+          <a href="mailto:contacto@wbisuite.com?subject=Solicitud%20de%20demo%20wooErp" class="btn-primary" aria-label="Solicitar demo comercial de wooErp">
+            Solicitar demo
           </a>
         </div>
       </div>
@@ -1622,19 +1411,18 @@
       <div>
         <div class="footer-brand">wooErp — WBI Suite</div>
         <div class="footer-info" style="margin-top: 8px;">
-          <p>Suite de Gestión para WooCommerce</p>
+          <p>ERP B2B modular para WooCommerce</p>
           <p class="author">Desarrollado por Rodrigo Castañera</p>
-          <p>Versión 9.0.13</p>
         </div>
       </div>
 
       <nav class="footer-links" aria-label="Links del footer">
         <a href="#hero">Inicio</a>
         <a href="#modulos">Módulos</a>
-        <a href="#comparativa">vs Odoo</a>
-        <a href="#ventajas">Ventajas</a>
+        <a href="#comparativa">Comparativa</a>
+        <a href="#beneficios">Beneficios</a>
         <a href="#para-quien">Para quién</a>
-        <a href="#cta-final">Contacto</a>
+        <a href="mailto:contacto@wbisuite.com?subject=Solicitud%20de%20demo%20wooErp">Contacto</a>
       </nav>
     </div>
   </footer>
@@ -1705,40 +1493,6 @@
         container.appendChild(p);
       }
     })();
-
-    /* ========== TYPING EFFECT ========== */
-    const typingTarget = document.getElementById('typed-text');
-    const phrases = [
-      'Tu tienda de WooCommerce ya tiene todo. Solo le faltaba un cerebro.',
-      '25 módulos. Una licencia. Cero complejidad.',
-      'ERP nativo para WooCommerce. Sin sincronizaciones. Sin sorpresas.',
-      'Facturación AFIP, CRM, Picking y mucho más — dentro de WordPress.',
-      '25 módulos. 7 categorías. 1 solo plugin.',
-      'Gestión de empleados y RRHH integrada al ERP.'
-    ];
-    let phraseIdx = 0, charIdx = 0, deleting = false;
-    function typeLoop() {
-      const current = phrases[phraseIdx];
-      if (!deleting) {
-        typingTarget.textContent = current.slice(0, ++charIdx);
-        if (charIdx === current.length) {
-          deleting = true;
-          setTimeout(typeLoop, 2800);
-          return;
-        }
-        setTimeout(typeLoop, 38);
-      } else {
-        typingTarget.textContent = current.slice(0, --charIdx);
-        if (charIdx === 0) {
-          deleting = false;
-          phraseIdx = (phraseIdx + 1) % phrases.length;
-          setTimeout(typeLoop, 400);
-          return;
-        }
-        setTimeout(typeLoop, 18);
-      }
-    }
-    setTimeout(typeLoop, 800);
 
     /* ========== INTERSECTION OBSERVER — SCROLL ANIMATIONS ========== */
     const revealEls = document.querySelectorAll('.reveal, .reveal-scale, .reveal-left, .reveal-right');
