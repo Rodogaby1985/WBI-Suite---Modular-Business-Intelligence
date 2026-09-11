@@ -4,6 +4,12 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class WBI_Dashboard_View {
 
     private $engine;
+    private $allowed_statuses = array(
+        'wc-completed',
+        'wc-processing',
+        'wc-on-hold',
+        'wc-pending',
+    );
 
     public function __construct() {
         $this->engine = WBI_Metrics_Engine::instance();
@@ -57,14 +63,42 @@ class WBI_Dashboard_View {
     }
 
     public function render() {
+        $filters_nonce = wp_create_nonce( 'wbi_dashboard_filters' );
+        $filter_keys = array(
+            'wbi_range',
+            'wbi_start',
+            'wbi_end',
+            'wbi_compare',
+            'wbi_prev_start',
+            'wbi_prev_end',
+            'statuses',
+            'wbi_top_page',
+            'wbi_least_page',
+            'wbi_top_per_page',
+            'wbi_least_per_page',
+        );
+        $has_filter_request = false;
+        foreach ( $filter_keys as $filter_key ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            if ( isset( $_GET[ $filter_key ] ) ) {
+                $has_filter_request = true;
+                break;
+            }
+        }
+        $has_valid_filter_nonce = isset( $_GET['wbi_dashboard_nonce'] ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            && wp_verify_nonce( sanitize_text_field( wp_unslash( (string) $_GET['wbi_dashboard_nonce'] ) ), 'wbi_dashboard_filters' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
         // --- 1. LÓGICA DE FECHAS (Restaurada) ---
-        $range = isset($_GET['wbi_range']) ? sanitize_text_field($_GET['wbi_range']) : '30d';
+        $range = ( $has_filter_request && ! $has_valid_filter_nonce ) ? '30d' : ( isset($_GET['wbi_range']) ? $this->sanitize_dashboard_query_arg( 'wbi_range', $_GET['wbi_range'] ) : '30d' );
         $end_date = date('Y-m-d'); 
         $start_date = date('Y-m-d', strtotime('-30 days'));
 
-        if( $range === 'custom' && !empty($_GET['wbi_start']) && !empty($_GET['wbi_end']) ) {
-            $start_date = sanitize_text_field($_GET['wbi_start']);
-            $end_date = sanitize_text_field($_GET['wbi_end']);
+        if ( $has_filter_request && ! $has_valid_filter_nonce ) {
+            $range = '30d';
+        }
+
+        if( $range === 'custom' && !empty($_GET['wbi_start']) && !empty($_GET['wbi_end']) && ( ! $has_filter_request || $has_valid_filter_nonce ) ) {
+            $start_date = $this->sanitize_dashboard_query_arg( 'wbi_start', $_GET['wbi_start'] );
+            $end_date = $this->sanitize_dashboard_query_arg( 'wbi_end', $_GET['wbi_end'] );
         } else {
             switch($range) {
                 case 'today': $start_date = date('Y-m-d'); break;
@@ -77,7 +111,7 @@ class WBI_Dashboard_View {
         }
 
         // --- 2. COMPARACIÓN DE PERIODO ---
-        $compare = isset($_GET['wbi_compare']) ? sanitize_text_field($_GET['wbi_compare']) : 'none';
+        $compare = ( $has_filter_request && ! $has_valid_filter_nonce ) ? 'none' : ( isset($_GET['wbi_compare']) ? $this->sanitize_dashboard_query_arg( 'wbi_compare', $_GET['wbi_compare'] ) : 'none' );
         $prev_start = '';
         $prev_end   = '';
 
@@ -89,15 +123,23 @@ class WBI_Dashboard_View {
             } elseif ( $compare === 'prev_year' ) {
                 $prev_start = date('Y-m-d', strtotime($start_date . ' -1 year'));
                 $prev_end   = date('Y-m-d', strtotime($end_date . ' -1 year'));
-            } elseif ( $compare === 'custom_compare' && !empty($_GET['wbi_prev_start']) && !empty($_GET['wbi_prev_end']) ) {
-                $prev_start = sanitize_text_field($_GET['wbi_prev_start']);
-                $prev_end   = sanitize_text_field($_GET['wbi_prev_end']);
+            } elseif ( $compare === 'custom_compare' && !empty($_GET['wbi_prev_start']) && !empty($_GET['wbi_prev_end']) && ( ! $has_filter_request || $has_valid_filter_nonce ) ) {
+                $prev_start = $this->sanitize_dashboard_query_arg( 'wbi_prev_start', $_GET['wbi_prev_start'] );
+                $prev_end   = $this->sanitize_dashboard_query_arg( 'wbi_prev_end', $_GET['wbi_prev_end'] );
             }
         }
 
         // --- 3. OBTENER DATOS ---
-        $default_statuses = array('wc-completed', 'wc-processing');
-        $statuses = isset($_GET['statuses']) ? array_map('sanitize_text_field', (array)$_GET['statuses']) : $default_statuses;
+        $default_statuses = array( 'wc-completed', 'wc-processing' );
+        $statuses = ( $has_filter_request && ! $has_valid_filter_nonce )
+            ? $default_statuses
+            : ( isset($_GET['statuses']) ? array_map( function ( $status ) {
+                return $this->sanitize_dashboard_query_arg( 'statuses', $status );
+            }, (array) $_GET['statuses'] ) : $default_statuses );
+        $statuses = array_values( array_intersect( $statuses, $this->allowed_statuses ) );
+        if ( empty( $statuses ) ) {
+            $statuses = $default_statuses;
+        }
 
         $revenue = $this->engine->get_revenue($start_date, $end_date, $statuses) ?: 0;
         $units   = $this->engine->get_units_sold($start_date, $end_date, $statuses) ?: 0;
@@ -111,6 +153,64 @@ class WBI_Dashboard_View {
 
         $least_sold = $this->engine->get_least_sold($start_date, $end_date, $statuses);
         $best_sold  = $this->engine->get_best_sellers($start_date, $end_date, $statuses);
+
+        $top_per_page_allowed = array( 5, 10, 25 );
+        $best_per_page = ( $has_filter_request && ! $has_valid_filter_nonce )
+            ? 5
+            : ( isset( $_GET['wbi_top_per_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_top_per_page', $_GET['wbi_top_per_page'] ) : 5 );
+        if ( ! in_array( $best_per_page, $top_per_page_allowed, true ) ) {
+            $best_per_page = 5;
+        }
+        $top_page = ( $has_filter_request && ! $has_valid_filter_nonce )
+            ? 1
+            : ( isset( $_GET['wbi_top_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_top_page', $_GET['wbi_top_page'] ) : 1 );
+        $top_page = max( 1, $top_page );
+
+        $best_sold = is_array( $best_sold ) ? $best_sold : array();
+        $least_sold = is_array( $least_sold ) ? $least_sold : array();
+        $best_total = count( $best_sold );
+        $least_total = count( $least_sold );
+        $best_has_rows = $best_total > 0;
+        $best_total_pages = max( 1, (int) ceil( $best_total / $best_per_page ) );
+        if ( $top_page > $best_total_pages ) {
+            $top_page = $best_total_pages;
+        }
+        $top_offset = ( $top_page - 1 ) * $best_per_page;
+        $best_sold_page = array_slice( $best_sold, $top_offset, $best_per_page );
+
+        $least_per_page = ( $has_filter_request && ! $has_valid_filter_nonce )
+            ? 5
+            : ( isset( $_GET['wbi_least_per_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_least_per_page', $_GET['wbi_least_per_page'] ) : 5 );
+        if ( ! in_array( $least_per_page, $top_per_page_allowed, true ) ) {
+            $least_per_page = 5;
+        }
+        $least_page = ( $has_filter_request && ! $has_valid_filter_nonce )
+            ? 1
+            : ( isset( $_GET['wbi_least_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_least_page', $_GET['wbi_least_page'] ) : 1 );
+        $least_page = max( 1, $least_page );
+        $least_has_rows = $least_total > 0;
+        $least_total_pages = max( 1, (int) ceil( $least_total / $least_per_page ) );
+        if ( $least_page > $least_total_pages ) {
+            $least_page = $least_total_pages;
+        }
+        $least_offset = ( $least_page - 1 ) * $least_per_page;
+        $least_sold_page = array_slice( $least_sold, $least_offset, $least_per_page );
+
+        $allowed_query_fields = array(
+            'page',
+            'wbi_range',
+            'wbi_start',
+            'wbi_end',
+            'wbi_compare',
+            'wbi_prev_start',
+            'wbi_prev_end',
+            'statuses',
+            'wbi_dashboard_nonce',
+            'wbi_top_per_page',
+            'wbi_least_per_page',
+            'wbi_top_page',
+            'wbi_least_page',
+        );
 
         // Period data for chart
         $period_data = $this->engine->get_sales_by_period('day', $start_date, $end_date, $statuses);
@@ -181,17 +281,25 @@ class WBI_Dashboard_View {
 
         ?>
         <div class="wrap wbi-wrap">
-            
-            <div class="wbi-header">
-                <h1 style="margin:0;">BI Dashboard Ejecutivo</h1>
-            </div>
-            
-            <!-- BARRA DE FILTROS VISUAL -->
-            <form method="get" class="wbi-filter-bar">
-                <input type="hidden" name="page" value="wbi-dashboard-view" />
+            <div class="wbi-page">
+                <header class="wbi-page-header wbi-header">
+                    <div>
+                        <h1 class="wbi-page-title">BI Dashboard Ejecutivo</h1>
+                        <p class="wbi-page-description">Resumen operativo y comercial con filtros por período, estado y comparación.</p>
+                    </div>
+                    <div class="wbi-page-actions">
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-dashboard-view' ) ); ?>" class="wbi-btn wbi-btn-link">Restablecer filtros</a>
+                    </div>
+                </header>
                 
-                <label style="font-weight:600;">📅 Periodo Análisis:</label>
-                <select name="wbi_range" id="wbi_range" onchange="toggleCustomDates(this.value)">
+                <!-- BARRA DE FILTROS VISUAL -->
+                <form method="get" class="wbi-filter-panel">
+                    <input type="hidden" name="page" value="wbi-dashboard-view" />
+                    <input type="hidden" name="wbi_dashboard_nonce" value="<?php echo esc_attr( $filters_nonce ); ?>" />
+                    <div class="wbi-filter-grid">
+                        <div class="wbi-filter-field wbi-col-2">
+                            <label for="wbi_range">Período de análisis</label>
+                            <select name="wbi_range" id="wbi_range" onchange="toggleCustomDates(this.value)">
                     <option value="today" <?php selected($range, 'today'); ?>>Hoy</option>
                     <option value="yesterday" <?php selected($range, 'yesterday'); ?>>Ayer</option>
                     <option value="7d" <?php selected($range, '7d'); ?>>7 Días</option>
@@ -200,45 +308,71 @@ class WBI_Dashboard_View {
                     <option value="last_month" <?php selected($range, 'last_month'); ?>>Mes Pasado</option>
                     <option value="this_year" <?php selected($range, 'this_year'); ?>>Este Año</option>
                     <option value="custom" <?php selected($range, 'custom'); ?>>Personalizado...</option>
-                </select>
-
-                <div id="wbi_custom_dates" class="wbi-date-inputs" style="display: <?php echo ($range === 'custom') ? 'inline-flex' : 'none'; ?>;">
-                    <input type="date" name="wbi_start" value="<?php echo esc_attr($start_date); ?>">
-                    <span class="dashicons dashicons-arrow-right-alt"></span>
-                    <input type="date" name="wbi_end" value="<?php echo esc_attr($end_date); ?>">
-                </div>
-
-                <label style="font-weight:600; margin-left:10px;">🔄 Comparar con:</label>
-                <select name="wbi_compare" id="wbi_compare" onchange="toggleCompareDates(this.value)">
+                            </select>
+                        </div>
+                        <div class="wbi-filter-field wbi-col-4<?php echo ( $range === 'custom' ) ? '' : ' wbi-is-hidden'; ?>" id="wbi_custom_dates">
+                            <label>Rango personalizado</label>
+                            <div class="wbi-date-inputs">
+                                <label for="wbi_start" class="wbi-visually-hidden">Fecha de inicio</label>
+                                <input id="wbi_start" type="date" name="wbi_start" value="<?php echo esc_attr($start_date); ?>" <?php disabled( $range !== 'custom' ); ?>>
+                                <span class="dashicons dashicons-arrow-right-alt" aria-hidden="true"></span>
+                                <label for="wbi_end" class="wbi-visually-hidden">Fecha de fin</label>
+                                <input id="wbi_end" type="date" name="wbi_end" value="<?php echo esc_attr($end_date); ?>" <?php disabled( $range !== 'custom' ); ?>>
+                            </div>
+                        </div>
+                        <div class="wbi-filter-field wbi-col-3">
+                            <label for="wbi_compare">Comparar con</label>
+                            <select name="wbi_compare" id="wbi_compare" onchange="toggleCompareDates(this.value)">
                     <option value="none" <?php selected($compare, 'none'); ?>>Sin comparación</option>
                     <option value="prev_period" <?php selected($compare, 'prev_period'); ?>>Período Anterior</option>
                     <option value="prev_year" <?php selected($compare, 'prev_year'); ?>>Mismo Período Año Anterior</option>
                     <option value="custom_compare" <?php selected($compare, 'custom_compare'); ?>>Fechas Personalizadas...</option>
-                </select>
-
-                <div id="wbi_compare_dates" class="wbi-date-inputs" style="display: <?php echo ($compare === 'custom_compare') ? 'inline-flex' : 'none'; ?>;">
-                    <input type="date" name="wbi_prev_start" value="<?php echo esc_attr($prev_start); ?>">
-                    <span class="dashicons dashicons-arrow-right-alt"></span>
-                    <input type="date" name="wbi_prev_end" value="<?php echo esc_attr($prev_end); ?>">
-                </div>
-
-                <label style="font-weight:600; margin-left:10px;">📦 Estados:</label>
-                <select name="statuses[]" multiple size="4" style="height:72px; min-width:140px;" title="Mantené Ctrl/Cmd para seleccionar múltiples">
+                            </select>
+                        </div>
+                        <div class="wbi-filter-field wbi-col-3<?php echo ( $compare === 'custom_compare' ) ? '' : ' wbi-is-hidden'; ?>" id="wbi_compare_dates">
+                            <label>Fechas de comparación</label>
+                            <div class="wbi-date-inputs">
+                                <label for="wbi_prev_start" class="wbi-visually-hidden">Fecha de inicio comparación</label>
+                                <input id="wbi_prev_start" type="date" name="wbi_prev_start" value="<?php echo esc_attr($prev_start); ?>" <?php disabled( $compare !== 'custom_compare' ); ?>>
+                                <span class="dashicons dashicons-arrow-right-alt" aria-hidden="true"></span>
+                                <label for="wbi_prev_end" class="wbi-visually-hidden">Fecha de fin comparación</label>
+                                <input id="wbi_prev_end" type="date" name="wbi_prev_end" value="<?php echo esc_attr($prev_end); ?>" <?php disabled( $compare !== 'custom_compare' ); ?>>
+                            </div>
+                        </div>
+                        <div class="wbi-filter-field wbi-col-3">
+                            <label for="wbi_statuses">Estados del pedido</label>
+                            <select id="wbi_statuses" name="statuses[]" multiple size="4" title="Mantené Ctrl/Cmd para seleccionar múltiples">
                     <option value="wc-completed"  <?php echo in_array('wc-completed',  $statuses, true) ? 'selected' : ''; ?>>✅ Completado</option>
                     <option value="wc-processing" <?php echo in_array('wc-processing', $statuses, true) ? 'selected' : ''; ?>>🔄 En proceso</option>
                     <option value="wc-on-hold"    <?php echo in_array('wc-on-hold',    $statuses, true) ? 'selected' : ''; ?>>⏸ En espera</option>
                     <option value="wc-pending"    <?php echo in_array('wc-pending',    $statuses, true) ? 'selected' : ''; ?>>⏳ Pendiente</option>
-                </select>
-
-                <button type="submit" class="button button-primary">Aplicar Filtros</button>
-            </form>
+                            </select>
+                        </div>
+                        <div class="wbi-filter-field wbi-col-3">
+                            <div class="wbi-filter-actions">
+                                <button type="submit" class="wbi-btn wbi-btn-primary">Aplicar filtros</button>
+                                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wbi-dashboard-view' ) ); ?>" class="wbi-btn">Limpiar</a>
+                            </div>
+                        </div>
+                    </div>
+                </form>
 
             <script>
                 function toggleCustomDates(val) {
-                    document.getElementById('wbi_custom_dates').style.display = (val === 'custom') ? 'inline-flex' : 'none';
+                    var customDates = document.getElementById('wbi_custom_dates');
+                    var isCustom = (val === 'custom');
+                    customDates.classList.toggle('wbi-is-hidden', !isCustom);
+                    customDates.querySelectorAll('input').forEach(function(input) {
+                        input.disabled = !isCustom;
+                    });
                 }
                 function toggleCompareDates(val) {
-                    document.getElementById('wbi_compare_dates').style.display = (val === 'custom_compare') ? 'inline-flex' : 'none';
+                    var compareDates = document.getElementById('wbi_compare_dates');
+                    var isCompareCustom = (val === 'custom_compare');
+                    compareDates.classList.toggle('wbi-is-hidden', !isCompareCustom);
+                    compareDates.querySelectorAll('input').forEach(function(input) {
+                        input.disabled = !isCompareCustom;
+                    });
                 }
             </script>
 
@@ -296,35 +430,35 @@ class WBI_Dashboard_View {
             <h2 class="wbi-section-title">📊 Gráficos Interactivos</h2>
             <div class="wbi-grid-2">
                 <div class="wbi-card">
-                    <h3 style="margin-top:0;">📈 Tendencia Mensual (<?php echo esc_html( date('Y') ); ?>)</h3>
+                    <h3 class="wbi-card-title">Tendencia Mensual (<?php echo esc_html( date('Y') ); ?>)</h3>
                     <div class="wbi-chart-container">
                         <canvas id="wbiMonthlyChart"></canvas>
                     </div>
                 </div>
                 <div class="wbi-card">
-                    <h3 style="margin-top:0;">🥧 Distribución de Pedidos por Estado</h3>
-                    <div class="wbi-chart-container" style="max-height:260px; display:flex; justify-content:center;">
+                    <h3 class="wbi-card-title">Distribución de Pedidos por Estado</h3>
+                    <div class="wbi-chart-container wbi-chart-container-centered">
                         <canvas id="wbiStatusChart"></canvas>
                     </div>
                 </div>
             </div>
             <div class="wbi-grid-2">
                 <div class="wbi-card">
-                    <h3 style="margin-top:0;">🔥 Top 5 Productos (<?php echo esc_html( date('d/m', strtotime($start_date)) . ' - ' . date('d/m', strtotime($end_date)) ); ?>)</h3>
+                    <h3 class="wbi-card-title">Top Productos (<?php echo esc_html( date('d/m', strtotime($start_date)) . ' - ' . date('d/m', strtotime($end_date)) ); ?>)</h3>
                     <div class="wbi-chart-container">
                         <canvas id="wbiTopProductsChart"></canvas>
                     </div>
                 </div>
                 <?php if ( $has_source_module ) : ?>
                 <div class="wbi-card">
-                    <h3 style="margin-top:0;">🌐 Ventas por Origen</h3>
-                    <div class="wbi-chart-container" style="max-height:260px; display:flex; justify-content:center;">
+                    <h3 class="wbi-card-title">Ventas por Origen</h3>
+                    <div class="wbi-chart-container wbi-chart-container-centered">
                         <canvas id="wbiSourceChart"></canvas>
                     </div>
                 </div>
                 <?php endif; ?>
                 <div class="wbi-card">
-                    <h3 style="margin-top:0;">📊 Facturación por Día</h3>
+                    <h3 class="wbi-card-title">Facturación por Día</h3>
                     <div class="wbi-chart-container">
                         <canvas id="wbiRevenueChart"></canvas>
                     </div>
@@ -334,34 +468,122 @@ class WBI_Dashboard_View {
             <!-- SECCIÓN 4: PRODUCTOS TOP/BOTTOM -->
             <div class="wbi-grid-2">
                 <div class="wbi-card">
-                    <h3 style="margin-top:0;">🔥 Productos Más Vendidos</h3>
+                    <div class="wbi-card-header">
+                        <h3 class="wbi-card-title">Productos Más Vendidos</h3>
+                    </div>
+                    <div class="wbi-table-responsive">
                     <table class="wbi-table wbi-sortable">
-                        <thead><tr><th>Producto</th><th style="text-align:right;">Cant.</th></tr></thead>
+                        <thead><tr><th>Producto</th><th data-align="right">Cant.</th></tr></thead>
                         <tbody>
-                            <?php if(!empty($best_sold) && is_array($best_sold)): foreach(array_slice($best_sold, 0, 5) as $p): ?>
+                            <?php if ( ! empty( $best_sold_page ) ) : foreach ( $best_sold_page as $p ) : ?>
                                 <tr>
                                     <td><?php echo esc_html($p->name); ?></td>
-                                    <td style="text-align:right;"><strong><?php echo $p->qty; ?></strong></td>
+                                    <td data-align="right"><strong><?php echo (int) $p->qty; ?></strong></td>
                                 </tr>
-                            <?php endforeach; else: echo "<tr><td colspan='2'>Sin ventas en este periodo</td></tr>"; endif; ?>
+                            <?php endforeach; else : ?>
+                                <tr><td colspan="2">Sin ventas en este periodo</td></tr>
+                            <?php endif; ?>
                         </tbody>
                     </table>
+                    </div>
+                    <?php
+                    $best_pagination_base = add_query_arg(
+                        $this->get_allowed_query_args( $allowed_query_fields, array( 'wbi_top_page' ) ),
+                        admin_url( 'admin.php' )
+                    );
+                    $best_pagination_links = paginate_links(
+                        array(
+                            'base'      => esc_url_raw( add_query_arg( 'wbi_top_page', '%#%', $best_pagination_base ) ),
+                            'format'    => '',
+                            'current'   => $top_page,
+                            'total'     => $best_total_pages,
+                            'prev_text' => 'Anterior',
+                            'next_text' => 'Siguiente',
+                            'type'      => 'plain',
+                        )
+                    );
+                    ?>
+                    <div class="wbi-pagination">
+                        <form method="get" class="wbi-filter-actions">
+                            <?php $this->render_hidden_query_fields( $allowed_query_fields, array( 'wbi_top_per_page', 'wbi_top_page', 'wbi_least_page' ) ); ?>
+                            <input type="hidden" name="wbi_dashboard_nonce" value="<?php echo esc_attr( $filters_nonce ); ?>" />
+                            <label for="wbi_top_per_page_best">Filas por página</label>
+                            <select id="wbi_top_per_page_best" name="wbi_top_per_page" onchange="this.form.submit()">
+                                <?php foreach ( $top_per_page_allowed as $size ) : ?>
+                                    <option value="<?php echo esc_attr( $size ); ?>" <?php selected( $best_per_page, $size ); ?>><?php echo esc_html( $size ); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </form>
+                        <?php if ( $best_has_rows ) : ?>
+                            <div class="tablenav-pages">
+                                <span class="displaying-num"><?php echo esc_html( sprintf( 'Página %1$d de %2$d', (int) $top_page, (int) $best_total_pages ) ); ?></span>
+                                <?php if ( ! empty( $best_pagination_links ) ) : ?>
+                                    <?php echo wp_kses_post( $best_pagination_links ); ?>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
 
                 <div class="wbi-card red">
-                    <h3 style="margin-top:0;">⚠️ Productos con Menos Movimiento</h3>
-                    <p style="font-size:12px; color:#666; margin-bottom:10px;">Bottom 5 (de los que tuvieron ventas)</p>
+                    <div class="wbi-card-header">
+                        <div>
+                            <h3 class="wbi-card-title">Productos con Menos Movimiento</h3>
+                            <p class="wbi-card-subtitle">Items con ventas bajas en el período seleccionado</p>
+                        </div>
+                    </div>
+                    <div class="wbi-table-responsive">
                     <table class="wbi-table wbi-sortable">
-                        <thead><tr><th>Producto</th><th style="text-align:right;">Cant.</th></tr></thead>
+                        <thead><tr><th>Producto</th><th data-align="right">Cant.</th></tr></thead>
                         <tbody>
-                            <?php if(!empty($least_sold) && is_array($least_sold)): foreach(array_slice($least_sold, 0, 5) as $p): ?>
+                            <?php if ( ! empty( $least_sold_page ) ) : foreach ( $least_sold_page as $p ) : ?>
                                 <tr>
                                     <td><?php echo esc_html($p->name); ?></td>
-                                    <td style="text-align:right;"><strong><?php echo $p->qty; ?></strong></td>
+                                    <td data-align="right"><strong><?php echo (int) $p->qty; ?></strong></td>
                                 </tr>
-                            <?php endforeach; else: echo "<tr><td colspan='2'>Sin datos</td></tr>"; endif; ?>
+                            <?php endforeach; else : ?>
+                                <tr><td colspan="2">Sin datos</td></tr>
+                            <?php endif; ?>
                         </tbody>
                     </table>
+                    </div>
+                    <?php
+                    $least_pagination_base = add_query_arg(
+                        $this->get_allowed_query_args( $allowed_query_fields, array( 'wbi_least_page' ) ),
+                        admin_url( 'admin.php' )
+                    );
+                    $least_pagination_links = paginate_links(
+                        array(
+                            'base'      => esc_url_raw( add_query_arg( 'wbi_least_page', '%#%', $least_pagination_base ) ),
+                            'format'    => '',
+                            'current'   => $least_page,
+                            'total'     => $least_total_pages,
+                            'prev_text' => 'Anterior',
+                            'next_text' => 'Siguiente',
+                            'type'      => 'plain',
+                        )
+                    );
+                    ?>
+                    <div class="wbi-pagination">
+                        <form method="get" class="wbi-filter-actions">
+                            <?php $this->render_hidden_query_fields( $allowed_query_fields, array( 'wbi_least_per_page', 'wbi_least_page', 'wbi_top_page' ) ); ?>
+                            <input type="hidden" name="wbi_dashboard_nonce" value="<?php echo esc_attr( $filters_nonce ); ?>" />
+                            <label for="wbi_least_per_page">Filas por página</label>
+                            <select id="wbi_least_per_page" name="wbi_least_per_page" onchange="this.form.submit()">
+                                <?php foreach ( $top_per_page_allowed as $size ) : ?>
+                                    <option value="<?php echo esc_attr( $size ); ?>" <?php selected( $least_per_page, $size ); ?>><?php echo esc_html( $size ); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </form>
+                        <?php if ( $least_has_rows ) : ?>
+                            <div class="tablenav-pages">
+                                <span class="displaying-num"><?php echo esc_html( sprintf( 'Página %1$d de %2$d', (int) $least_page, (int) $least_total_pages ) ); ?></span>
+                                <?php if ( ! empty( $least_pagination_links ) ) : ?>
+                                    <?php echo wp_kses_post( $least_pagination_links ); ?>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
 
@@ -492,6 +714,7 @@ class WBI_Dashboard_View {
             </script>
 
         </div>
+        </div>
         <?php
     }
 
@@ -508,5 +731,113 @@ class WBI_Dashboard_View {
             return '<span class="wbi-delta negative">▼ ' . abs($delta) . '%</span>';
         }
         return '<span class="wbi-delta">→ 0%</span>';
+    }
+
+    private function render_hidden_query_fields( $allowed_keys = array(), $exclude_keys = array() ) {
+        $query_args = $this->get_allowed_query_args( $allowed_keys, $exclude_keys );
+        foreach ( $query_args as $key => $value ) {
+            if ( 'wbi_dashboard_nonce' === $key ) {
+                continue;
+            }
+            if ( is_array( $value ) ) {
+                foreach ( $value as $item ) {
+                    echo '<input type="hidden" name="' . esc_attr( $key ) . '[]" value="' . esc_attr( $item ) . '" />';
+                }
+            } else {
+                echo '<input type="hidden" name="' . esc_attr( $key ) . '" value="' . esc_attr( $value ) . '" />';
+            }
+        }
+    }
+
+    private function get_allowed_query_args( $allowed_keys = array(), $exclude_keys = array() ) {
+        $filter_keys = array(
+            'wbi_range',
+            'wbi_start',
+            'wbi_end',
+            'wbi_compare',
+            'wbi_prev_start',
+            'wbi_prev_end',
+            'statuses',
+            'wbi_top_page',
+            'wbi_least_page',
+            'wbi_top_per_page',
+            'wbi_least_per_page',
+        );
+        $has_filter_request = false;
+        foreach ( $filter_keys as $filter_key ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            if ( isset( $_GET[ $filter_key ] ) ) {
+                $has_filter_request = true;
+                break;
+            }
+        }
+        $has_valid_filter_nonce = isset( $_GET['wbi_dashboard_nonce'] ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            && wp_verify_nonce( sanitize_text_field( wp_unslash( (string) $_GET['wbi_dashboard_nonce'] ) ), 'wbi_dashboard_filters' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        if ( $has_filter_request && ! $has_valid_filter_nonce ) {
+            return array(
+                'page'                => 'wbi-dashboard-view',
+                'wbi_dashboard_nonce' => wp_create_nonce( 'wbi_dashboard_filters' ),
+            );
+        }
+
+        $args = array();
+        foreach ( $_GET as $key => $value ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            if ( 'wbi_dashboard_nonce' === $key ) {
+                continue;
+            }
+            if ( ! in_array( $key, $allowed_keys, true ) || in_array( $key, $exclude_keys, true ) ) {
+                continue;
+            }
+            if ( is_array( $value ) ) {
+                $args[ $key ] = array_map(
+                    function ( $item ) use ( $key ) {
+                        return $this->sanitize_dashboard_query_arg( $key, $item );
+                    },
+                    $value
+                );
+                $args[ $key ] = array_values( array_filter( $args[ $key ], static function ( $item ) {
+                    return '' !== $item;
+                } ) );
+                if ( empty( $args[ $key ] ) ) {
+                    unset( $args[ $key ] );
+                }
+            } else {
+                $args[ $key ] = $this->sanitize_dashboard_query_arg( $key, $value );
+                if ( '' === $args[ $key ] ) {
+                    unset( $args[ $key ] );
+                }
+            }
+        }
+        if ( empty( $args['page'] ) ) {
+            $args['page'] = 'wbi-dashboard-view';
+        }
+        $args['wbi_dashboard_nonce'] = wp_create_nonce( 'wbi_dashboard_filters' );
+        return $args;
+    }
+
+    private function sanitize_dashboard_query_arg( $key, $value ) {
+        $raw = wp_unslash( (string) $value );
+        switch ( $key ) {
+            case 'wbi_top_page':
+            case 'wbi_least_page':
+            case 'wbi_top_per_page':
+            case 'wbi_least_per_page':
+                return max( 1, absint( $raw ) );
+            case 'wbi_start':
+            case 'wbi_end':
+            case 'wbi_prev_start':
+            case 'wbi_prev_end':
+                return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) ? $raw : '';
+            case 'statuses':
+                $status = sanitize_key( $raw );
+                return in_array( $status, $this->allowed_statuses, true ) ? $status : '';
+            case 'page':
+            case 'wbi_range':
+            case 'wbi_compare':
+                return sanitize_key( $raw );
+            case 'wbi_dashboard_nonce':
+                return sanitize_text_field( $raw );
+            default:
+                return sanitize_key( $raw );
+        }
     }
 }
