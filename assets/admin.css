@@ -9,19 +9,39 @@
 :root {
     --wbi-primary:       #4f46e5;
     --wbi-primary-hover: #4338ca;
+    --wbi-primary-soft:  #eef2ff;
     --wbi-success:       #059669;
     --wbi-warning:       #d97706;
     --wbi-danger:        #dc2626;
     --wbi-info:          #0284c7;
+    --wbi-success-soft:  #ecfdf5;
+    --wbi-warning-soft:  #fffbeb;
+    --wbi-danger-soft:   #fef2f2;
+    --wbi-info-soft:     #eff6ff;
     --wbi-surface:       #ffffff;
     --wbi-bg:            #f8fafc;
+    --wbi-bg-alt:        #f1f5f9;
     --wbi-border:        #e2e8f0;
+    --wbi-border-strong: #cbd5e1;
     --wbi-text:          #1e293b;
     --wbi-muted:         #64748b;
+    --wbi-text-inverse:  #ffffff;
+    --wbi-focus:         #2563eb;
     --wbi-radius:        12px;
     --wbi-radius-sm:     8px;
+    --wbi-radius-xs:     6px;
+    --wbi-space-1:       4px;
+    --wbi-space-2:       8px;
+    --wbi-space-3:       12px;
+    --wbi-space-4:       16px;
+    --wbi-space-5:       20px;
+    --wbi-space-6:       24px;
+    --wbi-space-8:       32px;
     --wbi-shadow:        0 1px 3px rgba(0,0,0,.08);
     --wbi-shadow-md:     0 4px 6px rgba(0,0,0,.07);
+    --wbi-shadow-lg:     0 10px 20px rgba(15,23,42,.08);
+    --wbi-size-control:  40px;
+    --wbi-size-control-sm: 34px;
     --wbi-font:          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -67,6 +87,41 @@
     color: var(--wbi-text);
 }
 
+.wbi-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--wbi-space-5);
+}
+
+.wbi-page-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--wbi-space-4);
+    margin-bottom: var(--wbi-space-3);
+}
+
+.wbi-page-title {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.2;
+    color: var(--wbi-text);
+}
+
+.wbi-page-description {
+    margin: var(--wbi-space-1) 0 0;
+    color: var(--wbi-muted);
+    font-size: 14px;
+}
+
+.wbi-page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--wbi-space-2);
+}
+
 .wbi-section-title {
     font-size: 15px;
     font-weight: 600;
@@ -85,6 +140,27 @@
     border-radius: var(--wbi-radius);
     padding: 20px;
     box-shadow: var(--wbi-shadow);
+}
+
+.wbi-card-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--wbi-space-2);
+    margin-bottom: var(--wbi-space-3);
+}
+
+.wbi-card-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.wbi-card-subtitle {
+    margin: 0;
+    color: var(--wbi-muted);
+    font-size: 13px;
 }
 
 .wbi-card.blue  { border-top: 3px solid var(--wbi-info); }
@@ -214,6 +290,8 @@
 }
 
 .wbi-table tr:last-child td { border-bottom: none; }
+.wbi-table td[data-align="right"],
+.wbi-table th[data-align="right"] { text-align: right; }
 
 /* Sortable headers */
 .wbi-sortable thead th {
@@ -311,6 +389,30 @@
     color: #fff;
 }
 
+.wbi-btn-link {
+    background: transparent;
+    border-color: transparent;
+    color: var(--wbi-primary);
+    box-shadow: none;
+}
+
+.wbi-btn-link:hover {
+    background: var(--wbi-primary-soft);
+    border-color: transparent;
+}
+
+.wbi-btn[aria-busy="true"],
+.wbi-btn.is-loading {
+    pointer-events: none;
+    opacity: .8;
+}
+
+.wbi-btn[disabled],
+.wbi-btn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
 .wbi-btn-sm {
     min-height: 32px;
     padding: 0 12px;
@@ -380,6 +482,49 @@
     border-left: 4px solid var(--wbi-primary);
     border-radius: var(--wbi-radius-sm);
     margin-bottom: 20px;
+}
+
+.wbi-filter-panel {
+    background: var(--wbi-surface);
+    border: 1px solid var(--wbi-border);
+    border-left: 4px solid var(--wbi-primary);
+    border-radius: var(--wbi-radius);
+    padding: var(--wbi-space-4);
+    margin-bottom: var(--wbi-space-5);
+    box-shadow: var(--wbi-shadow);
+}
+
+.wbi-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: var(--wbi-space-3);
+    align-items: end;
+}
+
+.wbi-filter-field {
+    grid-column: span 12;
+}
+
+.wbi-filter-field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--wbi-muted);
+    margin-bottom: var(--wbi-space-1);
+}
+
+.wbi-filter-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--wbi-space-2);
+    flex-wrap: wrap;
+}
+
+@media (min-width: 783px) {
+    .wbi-filter-field.wbi-col-2 { grid-column: span 2; }
+    .wbi-filter-field.wbi-col-3 { grid-column: span 3; }
+    .wbi-filter-field.wbi-col-4 { grid-column: span 4; }
+    .wbi-filter-field.wbi-col-6 { grid-column: span 6; }
 }
 
 .wbi-filter-bar label {
@@ -454,6 +599,24 @@
     outline: none;
 }
 
+.wbi-filter-field input[type="text"],
+.wbi-filter-field input[type="date"],
+.wbi-filter-field input[type="search"],
+.wbi-filter-field select,
+.wbi-filter-field textarea {
+    width: 100%;
+    min-height: var(--wbi-size-control);
+    padding: 8px 12px;
+    border: 1px solid var(--wbi-border);
+    border-radius: var(--wbi-radius-xs);
+    font-size: 13px;
+    font-family: var(--wbi-font);
+}
+
+.wbi-filter-field select[multiple] {
+    min-height: 92px;
+}
+
 /* =========================================================
    13. PROGRESS BARS
    ========================================================= */
@@ -514,6 +677,34 @@
     color: #075985;
 }
 
+.wbi-state {
+    border-radius: var(--wbi-radius-sm);
+    border: 1px dashed var(--wbi-border-strong);
+    padding: var(--wbi-space-4);
+    color: var(--wbi-muted);
+}
+
+.wbi-state-empty { background: var(--wbi-bg); }
+.wbi-state-loading { background: var(--wbi-info-soft); border-style: solid; }
+.wbi-state-error { background: var(--wbi-danger-soft); border-color: #fca5a5; color: #991b1b; }
+.wbi-state-disabled { opacity: .65; }
+
+.wbi-spinner {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid rgba(2,132,199,.2);
+    border-top-color: var(--wbi-info);
+    animation: wbi-spin .8s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: var(--wbi-space-2);
+}
+
+@keyframes wbi-spin {
+    to { transform: rotate(360deg); }
+}
+
 /* =========================================================
    15. EMPTY STATE
    ========================================================= */
@@ -536,6 +727,59 @@
     font-size: 15px;
 }
 
+.wbi-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--wbi-space-2);
+    margin-top: var(--wbi-space-3);
+}
+
+.wbi-pagination .tablenav-pages {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--wbi-space-2);
+    flex-wrap: wrap;
+}
+
+.wbi-pagination .displaying-num {
+    color: var(--wbi-muted);
+}
+
+.wbi-pagination .page-numbers {
+    min-width: 32px;
+    min-height: 32px;
+    border: 1px solid var(--wbi-border);
+    border-radius: var(--wbi-radius-xs);
+    background: var(--wbi-surface);
+    color: var(--wbi-text);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    padding: 0 8px;
+}
+
+.wbi-pagination .page-numbers.current {
+    background: var(--wbi-primary);
+    border-color: var(--wbi-primary);
+    color: #fff;
+}
+
+.wbi-wrap a:focus-visible,
+.wbi-wrap button:focus-visible,
+.wbi-wrap input:focus-visible,
+.wbi-wrap select:focus-visible,
+.wbi-wrap textarea:focus-visible,
+.wbi-wrap .button:focus-visible {
+    outline: 2px solid var(--wbi-focus);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
 /* =========================================================
    16. CHARTS
    ========================================================= */
@@ -543,6 +787,12 @@
     position: relative;
     max-height: 320px;
     width: 100%;
+}
+
+.wbi-chart-container-centered {
+    max-height: 260px;
+    display: flex;
+    justify-content: center;
 }
 
 /* =========================================================
