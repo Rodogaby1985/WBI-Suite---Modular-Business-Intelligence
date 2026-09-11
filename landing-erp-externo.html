@@ -488,6 +488,78 @@
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+    .module-badge.is-new {
+      background: rgba(16,185,129,0.12);
+      border-color: rgba(16,185,129,0.3);
+      color: #6ee7b7;
+    }
+    .module-badge.is-update {
+      background: rgba(6,182,212,0.12);
+      border-color: rgba(6,182,212,0.28);
+      color: #67e8f9;
+    }
+    .module-badge.module-badge-muted {
+      background: rgba(148,163,184,0.08);
+      border-color: rgba(148,163,184,0.14);
+      color: var(--color-text-dim);
+    }
+
+    .modules-header { text-align: center; margin-bottom: 48px; }
+    .audit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 24px;
+      margin-top: 40px;
+    }
+    .audit-grid-wide {
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    }
+    .audit-meta {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .audit-list {
+      margin-top: 18px;
+      display: grid;
+      gap: 10px;
+    }
+    .audit-list-compact {
+      gap: 12px;
+    }
+    .audit-list li {
+      list-style: disc;
+      margin-left: 18px;
+      color: var(--color-text-muted);
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }
+    .audit-list strong {
+      color: var(--color-text);
+      font-weight: 600;
+    }
+    .audit-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 24px;
+    }
+    .audit-summary .pill {
+      font-size: 0.82rem;
+    }
+    .section-note {
+      margin-top: 18px;
+      font-size: 0.85rem;
+      color: var(--color-text-dim);
+    }
+    .section-note code {
+      color: #c4b5fd;
+      background: rgba(124,58,237,0.12);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
 
     /* VENTAJAS */
     #beneficios { background: var(--color-bg-3); }
@@ -653,6 +725,7 @@
     <a href="#hero" class="nav-logo">wooErp</a>
     <ul class="nav-links" id="nav-links" role="list">
       <li><a href="#novedades">Novedades</a></li>
+      <li><a href="#funciones-erp">Funciones</a></li>
       <li><a href="#modulos">Módulos</a></li>
       <li><a href="#comparativa">Comparativa</a></li>
       <li><a href="#beneficios">Beneficios</a></li>
@@ -667,20 +740,20 @@
     <div class="hero-grid"></div>
 
     <div class="hero-content">
-      <div class="hero-badge">🧠 WBI Suite v9.0.63 • ERP B2B modular para WooCommerce</div>
+      <div class="hero-badge">🧠 WBI Suite — ERP modular B2B para equipos que hoy dependen de ERP externos</div>
 
       <h1 class="hero-title">
-        <span class="gradient-text">wooErp vs ERP externo</span><br/>
-        <span class="muted">comparativa B2B para operar ventas, stock y reportes en WooCommerce</span>
+        <span class="gradient-text">wooErp frente a ERP externos</span><br/>
+        <span class="muted">ventas, stock, compras y BI en un solo backoffice WooCommerce</span>
       </h1>
 
       <p class="hero-subtitle">
-        Suite modular con estadísticas en tiempo real, gestión de stock y operaciones B2B integradas para ejecutar con más control y menos fricción.
+        Unificá operación B2B sin sincronizaciones frágiles: datos en tiempo real, módulos activables y control comercial desde la misma tienda.
       </p>
 
       <div class="hero-cta-group">
         <a href="mailto:contacto@wbisuite.com?subject=Solicitud%20de%20demo%20wooErp" class="btn-primary">Solicitar demo</a>
-        <a href="#modulos" class="btn-secondary">Ver módulos</a>
+        <a href="#funciones-erp" class="btn-secondary">Ver funciones</a>
         <button class="btn-secondary no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
       </div>
 
@@ -695,60 +768,61 @@
 
   <section id="novedades" aria-labelledby="novedades-title">
     <div class="container">
-      <div class="text-center">
-        <span class="section-badge">Novedades recientes</span>
-        <h2 class="section-title" id="novedades-title">Qué se incorporó recientemente</h2>
-        <p class="section-subtitle">Nuevas funcionalidades para mejorar resultados comerciales, logística y control operativo en equipos B2B.</p>
+      <div class="modules-header">
+        <span class="section-badge">🆕 Novedades recientes</span>
+        <h2 class="section-title" id="novedades-title">Cambios recientes que ya aportan valor al ERP</h2>
+        <p class="section-subtitle">Selección priorizada para empresas que operan WooCommerce y buscan reemplazar fricción de integraciones externas por operación nativa.</p>
+        <p class="section-note">Cada novedad indica si incorpora una capacidad nueva o si mejora un flujo existente.</p>
       </div>
 
       <div class="modules-grid">
         <article class="module-card">
-          <div class="module-icon">🛍️</div>
-          <h3 class="module-name">Pedido rápido mayorista</h3>
-          <p class="module-desc">Acelera compras B2B desde catálogo con variantes, mínimos y múltiplos, reduciendo fricción en pedidos grandes.</p>
-          <span class="module-badge">Comercial</span>
-        </article>
-        <article class="module-card">
-          <div class="module-icon">🏦</div>
-          <h3 class="module-name">Pagos Offline Avanzados</h3>
-          <p class="module-desc">Mejora la cobranza con cuentas variables, vencimiento automático y envío de comprobante por WhatsApp.</p>
-          <span class="module-badge">Finanzas</span>
-        </article>
-        <article class="module-card">
-          <div class="module-icon">💳</div>
-          <h3 class="module-name">Precio Promo</h3>
-          <p class="module-desc">Muestra precio financiado y precio por transferencia con ajuste automático en checkout para optimizar conversión.</p>
-          <span class="module-badge">Comercial</span>
-        </article>
-        <article class="module-card">
-          <div class="module-icon">🚚</div>
-          <h3 class="module-name">MobApp Envíos</h3>
-          <p class="module-desc">Calcula tarifas de transportistas argentinos en WooCommerce para cotizar mejor y cerrar más ventas.</p>
-          <span class="module-badge">Operaciones</span>
-        </article>
-        <article class="module-card">
-          <div class="module-icon">🚌</div>
-          <h3 class="module-name">Transporte Multiopciones</h3>
-          <p class="module-desc">Permite elegir transportista o micro/encomienda en checkout, aumentando flexibilidad logística para clientes.</p>
-          <span class="module-badge">Operaciones</span>
-        </article>
-        <article class="module-card">
-          <div class="module-icon">🛒</div>
-          <h3 class="module-name">Carritos abandonados</h3>
-          <p class="module-desc">Recupera ventas perdidas con seguimiento automatizado por email y WhatsApp según estado del carrito.</p>
-          <span class="module-badge">Comercial</span>
+          <div class="module-icon">🧾</div>
+          <h3 class="module-name">Pedido rápido mayorista desde catálogo</h3>
+          <p class="module-desc">Nuevo flujo para acelerar compras B2B con menos clics, especialmente en reposiciones y pedidos voluminosos.</p>
+          <span class="module-badge is-new">Nuevo · 717551b · ago 2026</span>
         </article>
         <article class="module-card">
           <div class="module-icon">🔳</div>
-          <h3 class="module-name">QR de producto POS/Web</h3>
-          <p class="module-desc">Agrega al carrito por escaneo con etiquetas imprimibles para acelerar caja, picking y toma de pedidos.</p>
-          <span class="module-badge">Operaciones</span>
+          <h3 class="module-name">QR de productos para POS y depósito</h3>
+          <p class="module-desc">Nueva capa de escaneo con tokens firmados, panel admin, backfill y etiquetas imprimibles para tomar pedidos y preparar mercadería más rápido.</p>
+          <span class="module-badge is-new">Nuevo · 08d868c · ago 2026</span>
         </article>
         <article class="module-card">
-          <div class="module-icon">🏧</div>
-          <h3 class="module-name">Caja POS por cajero</h3>
-          <p class="module-desc">Controla sesiones de caja con arqueo, movimientos y exportación para mayor trazabilidad financiera diaria.</p>
-          <span class="module-badge">Operaciones</span>
+          <div class="module-icon">📦</div>
+          <h3 class="module-name">Picking reforzado con auditoría</h3>
+          <p class="module-desc">Mejora el trabajo de depósito con QR scan, imágenes de producto, auto-complete y edición de ítems sin perder trazabilidad.</p>
+          <span class="module-badge is-update">Mejora · 9fc9716 · ago 2026</span>
+        </article>
+        <article class="module-card">
+          <div class="module-icon">👤</div>
+          <h3 class="module-name">Alta rápida de clientes en POS</h3>
+          <p class="module-desc">Nueva capacidad para crear clientes en mostrador y resolver descuentos, recargos, envío e impuestos sin abandonar la venta.</p>
+          <span class="module-badge is-new">Nuevo · d6fec9b · ago 2026</span>
+        </article>
+        <article class="module-card">
+          <div class="module-icon">🛍️</div>
+          <h3 class="module-name">Catálogo POS más ágil</h3>
+          <p class="module-desc">Mejora la carga de productos con catálogo paginado, scroll infinito y búsqueda unificada para equipos de caja y venta asistida.</p>
+          <span class="module-badge is-update">Mejora · d3e9995 · ago 2026</span>
+        </article>
+        <article class="module-card">
+          <div class="module-icon">🏢</div>
+          <h3 class="module-name">Reglas B2B de monto mínimo jerárquico</h3>
+          <p class="module-desc">Mejora la política comercial al resolver mínimos por usuario, rol, lista de precios y fallback global con una sola lógica.</p>
+          <span class="module-badge is-update">Mejora · 9b659da · ago 2026</span>
+        </article>
+        <article class="module-card">
+          <div class="module-icon">📝</div>
+          <h3 class="module-name">Registro segmentado mayorista/minorista</h3>
+          <p class="module-desc">Nuevo onboarding para diferenciar perfiles de clientes y ordenar accesos, campos y condiciones comerciales desde el alta.</p>
+          <span class="module-badge is-new">Nuevo · 89a4896 · ago 2026</span>
+        </article>
+        <article class="module-card">
+          <div class="module-icon">🔁</div>
+          <h3 class="module-name">Recuperación de carritos más confiable</h3>
+          <p class="module-desc">Mejora el circuito automático de recuperación al estabilizar los links usados en recordatorios y campañas de reactivación.</p>
+          <span class="module-badge is-update">Mejora · d05aeae · ago 2026</span>
         </article>
       </div>
     </div>
@@ -946,12 +1020,152 @@
     </div>
   </section>
 
+  <section id="funciones-erp" aria-labelledby="funciones-erp-title">
+    <div class="container">
+      <div class="modules-header">
+        <span class="section-badge">🗺️ Funciones auditadas sobre código real</span>
+        <h2 class="section-title" id="funciones-erp-title">Funciones del ERP</h2>
+        <p class="section-subtitle">El ERP concentra 55 funciones reales sobre 33 módulos activables. Están agrupadas por frentes operativos clave para empresas que hoy operan con ERP externos e integración a Woo.</p>
+        <div class="audit-summary">
+          <span class="pill accent">33 módulos activables</span>
+          <span class="pill accent">55 funciones verificadas</span>
+          <span class="pill accent">6 bloques comerciales</span>
+        </div>
+        <p class="section-note">Inventario completo de respaldo en <code>docs/funciones-erp.md</code>.</p>
+      </div>
+
+      <div class="audit-grid audit-grid-wide">
+        <article class="module-card">
+          <div class="module-icon">🛒</div>
+          <h3 class="module-name">Ventas / B2B</h3>
+          <p class="module-desc">Gestiona venta mayorista, precios, CRM, checkout comercial y mostrador desde el mismo WooCommerce.</p>
+          <div class="audit-meta">
+            <span class="module-badge">13 funciones reales</span>
+            <span class="module-badge module-badge-muted">Comercial</span>
+          </div>
+          <ul class="audit-list audit-list-compact">
+              <li><strong>Aprobación manual o automática de mayoristas.</strong> Controla quién accede a condiciones mayoristas reales.</li>
+              <li><strong>Ocultamiento de precios y compra para no autorizados.</strong> Protege listas mayoristas y evita ventas fuera de política.</li>
+              <li><strong>Monto mínimo mayorista jerárquico.</strong> Formaliza políticas comerciales por segmento sin duplicar lógica.</li>
+              <li><strong>Listas de precios por cliente, rol o grupo.</strong> Permite segmentar precios sin replicar catálogos.</li>
+              <li><strong>Pedido rápido mayorista desde catálogo.</strong> Reduce fricción en pedidos grandes y acelera reposiciones.</li>
+              <li><strong>Precio financiado y descuento por transferencia.</strong> Mejora conversión y comunica incentivos de cobro.</li>
+              <li><strong>Costo por producto y cálculo de márgenes.</strong> Da visibilidad de rentabilidad por producto.</li>
+              <li><strong>Captura de contacto para carritos abandonados.</strong> Genera base accionable para recuperar ventas.</li>
+              <li><strong>Recordatorios y recuperación de carritos.</strong> Automatiza recuperación de ingresos sin seguimiento manual caso por caso.</li>
+              <li><strong>Pipeline de leads y etapas CRM.</strong> Da seguimiento comercial estructurado a oportunidades.</li>
+              <li><strong>Actividades CRM y conversión a cliente.</strong> Acorta el pasaje de prospecto a operación real en WooCommerce.</li>
+              <li><strong>POS con búsqueda y carga de productos.</strong> Acelera ventas presenciales o asistidas.</li>
+              <li><strong>Alta rápida de clientes y ajustes en POS.</strong> Evita abandonar la operación para resolver excepciones comerciales.</li>
+          </ul>
+        </article>
+        <article class="module-card">
+          <div class="module-icon">📦</div>
+          <h3 class="module-name">Stock e inventario</h3>
+          <p class="module-desc">Da trazabilidad a catálogo, depósito y preparación de pedidos con herramientas listas para operar.</p>
+          <div class="audit-meta">
+            <span class="module-badge">5 funciones reales</span>
+            <span class="module-badge module-badge-muted">Operación</span>
+          </div>
+          <ul class="audit-list audit-list-compact">
+              <li><strong>Alertas de stock.</strong> Disminuye quiebres de stock.</li>
+              <li><strong>Asignación e importación de códigos de barra.</strong> Prepara al catálogo para procesos de depósito y escaneo.</li>
+              <li><strong>QR únicos por producto y etiquetas imprimibles.</strong> Acelera toma de pedido y operaciones de escaneo.</li>
+              <li><strong>Picking con inicio, escaneo y cierre por pedido.</strong> Reduce errores de preparación en depósito.</li>
+              <li><strong>Edición manual y auditoría dentro del picking.</strong> Hace flexible la preparación sin salir del flujo operativo.</li>
+          </ul>
+        </article>
+        <article class="module-card">
+          <div class="module-icon">🏭</div>
+          <h3 class="module-name">Compras / proveedores</h3>
+          <p class="module-desc">Ordena abastecimiento, recepción y relación con proveedores sin salir del ERP.</p>
+          <div class="audit-meta">
+            <span class="module-badge">3 funciones reales</span>
+            <span class="module-badge module-badge-muted">Abastecimiento</span>
+          </div>
+          <ul class="audit-list audit-list-compact">
+              <li><strong>Maestro de proveedores.</strong> Ordena abastecimiento y relación catálogo-proveedor.</li>
+              <li><strong>Reglas automáticas de reabastecimiento.</strong> Reduce faltantes por monitoreo manual.</li>
+              <li><strong>Órdenes de compra y recepción de mercadería.</strong> Cierra el circuito de abastecimiento dentro del plugin.</li>
+          </ul>
+        </article>
+        <article class="module-card">
+          <div class="module-icon">📊</div>
+          <h3 class="module-name">Reportes y estadísticas</h3>
+          <p class="module-desc">Concentra KPIs, reportes comerciales y lectura financiera para decidir con datos reales.</p>
+          <div class="audit-meta">
+            <span class="module-badge">11 funciones reales</span>
+            <span class="module-badge module-badge-muted">BI</span>
+          </div>
+          <ul class="audit-list audit-list-compact">
+              <li><strong>Dashboard ejecutivo de KPIs.</strong> Centraliza visibilidad operativa y comercial.</li>
+              <li><strong>Reporte detallado de ventas.</strong> Facilita lectura por período y desempeño comercial.</li>
+              <li><strong>Análisis de clientes.</strong> Ayuda a priorizar cuentas y segmentos de alto valor.</li>
+              <li><strong>Análisis de productos y stock.</strong> Permite detectar rotación y productos críticos.</li>
+              <li><strong>Exportaciones CSV del stack BI.</strong> Permite reutilizar información fuera del admin.</li>
+              <li><strong>Reportes periódicos por email.</strong> Lleva KPIs a quienes no ingresan todos los días al backoffice.</li>
+              <li><strong>Scoring RFM diario de clientes.</strong> Facilita segmentación comercial basada en comportamiento.</li>
+              <li><strong>Reportes contables.</strong> Une operación WooCommerce con lectura financiera.</li>
+              <li><strong>Remitos PDF por pedido.</strong> Formaliza despacho y respaldo documental.</li>
+              <li><strong>Documentos comerciales unificados.</strong> Concentra documentación comercial del pedido.</li>
+              <li><strong>Proyección de flujo de caja.</strong> Ayuda a anticipar liquidez operativa.</li>
+          </ul>
+        </article>
+        <article class="module-card">
+          <div class="module-icon">🔐</div>
+          <h3 class="module-name">Usuarios / permisos / administración</h3>
+          <p class="module-desc">Controla accesos, perfiles operativos, alta de usuarios y circuitos administrativos internos.</p>
+          <div class="audit-meta">
+            <span class="module-badge">7 funciones reales</span>
+            <span class="module-badge module-badge-muted">Gobierno</span>
+          </div>
+          <ul class="audit-list audit-list-compact">
+              <li><strong>Activación y bloqueo por licencia.</strong> Protege el esquema comercial y evita uso parcial inconsistente de la suite.</li>
+              <li><strong>Superadmin WBI y permisos por usuario.</strong> Permite delegar funciones sin exponer todo el backoffice.</li>
+              <li><strong>Roles operativos dedicados.</strong> Alinea permisos con procesos de depósito, venta y mayorista.</li>
+              <li><strong>Registro WooCommerce segmentado.</strong> Ordena el onboarding comercial sin procesos manuales fuera del sitio.</li>
+              <li><strong>Validación CP vs provincia en checkout.</strong> Reduce errores de despacho y retrabajo logístico.</li>
+              <li><strong>Gestión integral de empleados y RRHH.</strong> Amplía la suite a procesos internos no comerciales.</li>
+              <li><strong>Caja POS: apertura, cierre, sesiones y movimientos.</strong> Aporta trazabilidad de caja y control de arqueo.</li>
+          </ul>
+        </article>
+        <article class="module-card">
+          <div class="module-icon">⚙️</div>
+          <h3 class="module-name">Configuración general e integraciones</h3>
+          <p class="module-desc">Centraliza parametrización del ERP e integra logística, cobros, API y automatizaciones omnicanal.</p>
+          <div class="audit-meta">
+            <span class="module-badge">16 funciones reales</span>
+            <span class="module-badge module-badge-muted">Setup & integraciones</span>
+          </div>
+          <ul class="audit-list audit-list-compact">
+              <li><strong>Configuración centralizada de módulos.</strong> Reduce carga técnica al instalar sólo lo necesario en cada operación.</li>
+              <li><strong>Recuperación defensiva de settings corruptos.</strong> Evita caídas operativas por corrupción de configuración.</li>
+              <li><strong>Tarifas de transportistas argentinos.</strong> Mejora cotización logística dentro del checkout.</li>
+              <li><strong>Selección de transportista o micro.</strong> Adapta el checkout a logística B2B no estandarizada.</li>
+              <li><strong>Facturación AFIP y configuración fiscal.</strong> Acerca el circuito fiscal al mismo backoffice operativo.</li>
+              <li><strong>Notas de crédito y débito.</strong> Completa correcciones fiscales sin salir del entorno WooCommerce.</li>
+              <li><strong>Gateway de pagos offline avanzados.</strong> Ordena cobros por transferencia en operaciones B2B.</li>
+              <li><strong>Configuración de impuestos.</strong> Centraliza parámetros fiscales específicos del negocio.</li>
+              <li><strong>Notificaciones automáticas por WhatsApp.</strong> Acerca estados del pedido al canal de mayor respuesta.</li>
+              <li><strong>Centro unificado de notificaciones.</strong> Evita dispersión de eventos entre módulos.</li>
+              <li><strong>API REST de dashboard, productos, clientes, ventas, facturas y notificaciones.</strong> Permite conectar apps externas y explotar datos sin tocar la base directamente.</li>
+              <li><strong>Base de suscriptores, plantillas e importación de email marketing.</strong> Ordena activos comerciales para campañas propias.</li>
+              <li><strong>Ejecución y control de campañas de email.</strong> Convierte datos del e-commerce en campañas accionables.</li>
+              <li><strong>Origen de venta y taxonomía de colección.</strong> Permite clasificar operaciones con metadatos del negocio.</li>
+              <li><strong>Campos personalizados en registro.</strong> Captura datos comerciales propios desde el primer contacto.</li>
+              <li><strong>Campos personalizados en checkout, admin y email.</strong> Evita planillas paralelas para datos específicos del negocio.</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
   <section id="beneficios" aria-labelledby="beneficios-title">
     <div class="container">
       <div class="text-center">
-        <span class="section-badge">Beneficios</span>
-        <h2 class="section-title" id="beneficios-title">Impacto en la operación B2B</h2>
-        <p class="section-subtitle">Más control diario, menos tareas manuales y mejor capacidad de escalar con información confiable.</p>
+        <span class="section-badge">🏆 Beneficios para equipos B2B</span>
+        <h2 class="section-title" id="beneficios-title">Impacto directo en la operación</h2>
+        <p class="section-subtitle">Más control comercial y operativo, menos retrabajo manual y mejor capacidad de escalar con datos, stock y compras coordinados.</p>
       </div>
 
       <div class="ventajas-grid">
@@ -973,14 +1187,14 @@
           <div class="ventaja-number">03</div>
           <div class="ventaja-icon">📈</div>
           <h3>Decisiones con datos</h3>
-          <p>Tomá decisiones comerciales y financieras con KPIs, reportes y métricas reales del negocio.</p>
+          <p>Apoyá decisiones comerciales y financieras en KPIs, reportes y métricas reales del negocio en WooCommerce.</p>
         </div>
 
         <div class="ventaja-card">
           <div class="ventaja-number">04</div>
           <div class="ventaja-icon">🚀</div>
           <h3>Escalabilidad</h3>
-          <p>Activá módulos según la madurez de la empresa y acompañá el crecimiento sin migraciones complejas.</p>
+          <p>Activá módulos según la madurez de tu empresa y acompañá el crecimiento sin migraciones complejas.</p>
         </div>
       </div>
     </div>
@@ -989,13 +1203,12 @@
   <section id="cta-final" aria-labelledby="cta-title">
     <div class="container">
       <div class="cta-inner">
-        <h2 class="cta-title" id="cta-title">Transformá WooCommerce en una operación B2B <span class="gradient-text">más rentable y escalable</span></h2>
-        <p class="cta-sub">Coordinemos una demo para mostrarte cómo implementar módulos de estadísticas, stock, operaciones y reportes en tu negocio.</p>
+        <h2 class="cta-title" id="cta-title">Transformá WooCommerce en una operación B2B <span class="gradient-text">más predecible, rentable y escalable</span></h2>
+        <p class="cta-sub">Coordinemos una demo para mostrarte cómo unificar ventas B2B, stock, compras, reportes e integraciones sin depender de sincronizaciones externas.</p>
 
         <div class="cta-row">
           <a class="btn-primary" href="mailto:contacto@wbisuite.com?subject=Solicitud%20de%20demo%20wooErp">Solicitar demo</a>
-          <a class="btn-secondary" href="#modulos">Ver módulos</a>
-          <button class="btn-secondary no-print" onclick="window.print()">🖨️ Guardar como PDF</button>
+          <a class="btn-secondary" href="#funciones-erp">Ver funciones</a>
         </div>
       </div>
     </div>
