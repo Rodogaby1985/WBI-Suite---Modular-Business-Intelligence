@@ -919,6 +919,40 @@
       .btn-primary, .btn-secondary { width: 100%; max-width: 320px; text-align: center; }
       .audience-grid { grid-template-columns: 1fr; }
     }
+
+    .audit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 24px;
+      margin-top: 40px;
+    }
+    .audit-list {
+      margin-top: 18px;
+      display: grid;
+      gap: 10px;
+    }
+    .audit-list li {
+      list-style: disc;
+      margin-left: 18px;
+      color: var(--color-text-muted);
+      font-size: 0.94rem;
+      line-height: 1.6;
+    }
+    .audit-evidence {
+      margin-top: 18px;
+      font-size: 0.8rem;
+      color: var(--color-text-dim);
+    }
+    .audit-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 24px;
+    }
+    .audit-summary .pill {
+      font-size: 0.82rem;
+    }
   </style>
 </head>
 <body>
@@ -931,7 +965,7 @@
     <a href="#hero" class="nav-logo">wooErp</a>
     <ul class="nav-links" id="nav-links" role="list">
       <li><a href="#novedades">Novedades</a></li>
-      <li><a href="#modulos">Módulos</a></li>
+      <li><a href="#funciones-sistema">Funciones</a></li>
       <li><a href="#comparativa">Comparativa</a></li>
       <li><a href="#beneficios">Beneficios</a></li>
       <li><a href="#para-quien">¿Para quién?</a></li>
@@ -964,13 +998,13 @@
 
       <div class="hero-cta-group">
         <a href="mailto:contacto@wbisuite.com?subject=Solicitud%20de%20demo%20wooErp" class="btn-primary" aria-label="Solicitar una demo de wooErp">Solicitar demo</a>
-        <a href="#modulos" class="btn-secondary" aria-label="Ver módulos de wooErp">Ver módulos</a>
+        <a href="#funciones-sistema" class="btn-secondary" aria-label="Ver funciones reales de wooErp">Ver funciones</a>
       </div>
 
       <div class="hero-counters" aria-label="Estadísticas del producto">
         <div class="counter-item">
-          <span class="counter-number" data-target="31" aria-label="31 módulos">0</span>
-          <span class="counter-label">Módulos</span>
+          <span class="counter-number" data-target="33" aria-label="33 módulos activables">0</span>
+          <span class="counter-label">Módulos activables</span>
         </div>
         <div class="counter-item">
           <span class="counter-number" data-target="7" aria-label="7 categorías">0</span>
@@ -986,63 +1020,51 @@
 
 
 
-  <!-- =================== QUÉ SE INCORPORÓ RECIENTEMENTE =================== -->
+  <!-- =================== NOVEDADES RECIENTES VERIFICADAS =================== -->
   <section id="novedades" aria-labelledby="novedades-title">
     <div class="container">
       <div class="modules-header reveal">
-        <span class="section-badge">🆕 Últimas incorporaciones</span>
-        <h2 class="section-title" id="novedades-title">Qué se incorporó recientemente</h2>
-        <p class="section-subtitle">Nuevas funcionalidades disponibles para mejorar resultados comerciales, logística y control operativo en equipos B2B.</p>
+        <span class="section-badge">🆕 Novedades verificadas por commits</span>
+        <h2 class="section-title" id="novedades-title">Novedades recientes incorporadas al producto</h2>
+        <p class="section-subtitle">Estas incorporaciones surgen del historial real del repositorio durante agosto y septiembre de 2026, no de copy aspiracional.</p>
       </div>
 
       <div class="modules-grid">
         <article class="module-card reveal-scale" data-delay="1">
-          <div class="module-icon">🛍️</div>
-          <h3 class="module-name">Pedido rápido mayorista</h3>
-          <p class="module-desc">Acelera compras B2B desde catálogo con variantes, mínimos y múltiplos, reduciendo fricción en pedidos grandes.</p>
-          <span class="module-badge">Comercial</span>
+          <div class="module-icon">📦</div>
+          <h3 class="module-name">Picking reforzado para depósito</h3>
+          <p class="module-desc">Se agregó soporte de QR scan, imágenes de producto, auto-complete y edición/remoción/agregado de ítems con auditoría operativa.</p>
+          <span class="module-badge">9fc9716 · ago 2026</span>
         </article>
         <article class="module-card reveal-scale" data-delay="2">
-          <div class="module-icon">🏦</div>
-          <h3 class="module-name">Pagos Offline Avanzados</h3>
-          <p class="module-desc">Mejora la cobranza con cuentas bancarias variables, vencimiento automático y envío de comprobante por WhatsApp.</p>
-          <span class="module-badge">Finanzas</span>
+          <div class="module-icon">🔳</div>
+          <h3 class="module-name">QR de productos para POS y web</h3>
+          <p class="module-desc">Ahora existen tokens QR firmados, panel admin, backfill y etiquetas imprimibles para sumar velocidad al escaneo comercial.</p>
+          <span class="module-badge">08d868c · ago 2026</span>
         </article>
         <article class="module-card reveal-scale" data-delay="3">
-          <div class="module-icon">💳</div>
-          <h3 class="module-name">Precio Promo</h3>
-          <p class="module-desc">Muestra precio financiado y precio por transferencia con ajuste automático en checkout para optimizar conversión.</p>
-          <span class="module-badge">Comercial</span>
+          <div class="module-icon">🏪</div>
+          <h3 class="module-name">POS con alta rápida de clientes</h3>
+          <p class="module-desc">El mostrador incorporó identificación ampliada de clientes, creación inline y ajustes de pedido para descuentos, recargos, envío o impuesto manual.</p>
+          <span class="module-badge">d6fec9b · ago 2026</span>
         </article>
         <article class="module-card reveal-scale" data-delay="4">
-          <div class="module-icon">🚚</div>
-          <h3 class="module-name">MobApp Envíos</h3>
-          <p class="module-desc">Calcula tarifas de transportistas argentinos en WooCommerce para cotizar mejor y cerrar más ventas.</p>
-          <span class="module-badge">Operaciones</span>
+          <div class="module-icon">🧾</div>
+          <h3 class="module-name">POS con catálogo paginado</h3>
+          <p class="module-desc">Se sumó dropdown con scroll infinito y endpoint unificado de búsqueda para cargar productos aun sin consulta inicial.</p>
+          <span class="module-badge">d3e9995 · ago 2026</span>
         </article>
         <article class="module-card reveal-scale" data-delay="5">
-          <div class="module-icon">🚌</div>
-          <h3 class="module-name">Transporte Multiopciones</h3>
-          <p class="module-desc">Permite elegir transportista o micro/encomienda en checkout, aumentando flexibilidad logística para clientes.</p>
-          <span class="module-badge">Operaciones</span>
+          <div class="module-icon">🏢</div>
+          <h3 class="module-name">Reglas B2B de monto mínimo por jerarquía</h3>
+          <p class="module-desc">El mínimo de pedido pasó a resolverse por usuario, rol, lista de precios y fallback global con una única lógica compartida.</p>
+          <span class="module-badge">9b659da · ago 2026</span>
         </article>
         <article class="module-card reveal-scale" data-delay="6">
-          <div class="module-icon">🛒</div>
-          <h3 class="module-name">Carritos abandonados</h3>
-          <p class="module-desc">Recupera ventas perdidas con seguimiento automatizado por email y WhatsApp según estado del carrito.</p>
-          <span class="module-badge">Comercial</span>
-        </article>
-        <article class="module-card reveal-scale" data-delay="7">
-          <div class="module-icon">🔳</div>
-          <h3 class="module-name">QR de producto POS/Web</h3>
-          <p class="module-desc">Agrega al carrito por escaneo con etiquetas imprimibles, acelerando caja, picking y toma de pedidos.</p>
-          <span class="module-badge">Operaciones</span>
-        </article>
-        <article class="module-card reveal-scale" data-delay="8">
-          <div class="module-icon">🏧</div>
-          <h3 class="module-name">Caja POS por cajero</h3>
-          <p class="module-desc">Controla sesiones de caja con arqueo, movimientos y exportación para mayor trazabilidad financiera diaria.</p>
-          <span class="module-badge">Operaciones</span>
+          <div class="module-icon">👤</div>
+          <h3 class="module-name">Registro segmentado en WooCommerce</h3>
+          <p class="module-desc">El alta de usuarios distingue perfiles mayoristas y minoristas con campos y mapeo de roles configurables.</p>
+          <span class="module-badge">89a4896 · ago 2026</span>
         </article>
       </div>
     </div>
@@ -1187,6 +1209,108 @@
           <h3 class="module-name">Reportes</h3>
           <p class="module-desc">Reportes de ventas y contables para consolidar análisis por período y respaldar decisiones de crecimiento.</p>
           <span class="module-badge">Finanzas</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================== FUNCIONES DEL SISTEMA =================== -->
+  <section id="funciones-sistema" aria-labelledby="funciones-sistema-title">
+    <div class="container">
+      <div class="modules-header reveal">
+        <span class="section-badge">🗺️ Mapa funcional auditado</span>
+        <h2 class="section-title" id="funciones-sistema-title">Funciones del sistema relevadas sobre código real</h2>
+        <p class="section-subtitle">El audit funcional detectó 33 módulos activables y 52 funciones consolidadas, agrupadas por el rol que cumplen en una operación B2B real.</p>
+        <div class="audit-summary">
+          <span class="pill accent">33 módulos activables</span>
+          <span class="pill accent">52 funciones relevadas</span>
+          <span class="pill accent">7 macro-módulos</span>
+        </div>
+      </div>
+
+      <div class="audit-grid">
+        <article class="module-card reveal-scale" data-delay="1">
+          <div class="module-icon">📦</div>
+          <h3 class="module-name">Gestión de Stock</h3>
+          <p class="module-desc">Opera depósito, trazabilidad y abastecimiento sobre productos y pedidos existentes en WooCommerce.</p>
+          <ul class="audit-list">
+            <li>Códigos de barra, QR de productos y etiquetas imprimibles.</li>
+            <li>Picking por pedido con escaneo, edición manual y auditoría.</li>
+            <li>Alertas de stock, reglas de reabastecimiento y órdenes de compra.</li>
+          </ul>
+          <p class="audit-evidence">Evidencia: `includes/class-wbi-barcode.php`, `includes/class-wbi-product-qr.php`, `includes/class-wbi-picking.php`, `includes/class-wbi-reorder.php`, `includes/class-wbi-purchase.php`.</p>
+        </article>
+
+        <article class="module-card reveal-scale" data-delay="2">
+          <div class="module-icon">📊</div>
+          <h3 class="module-name">Estadísticas / BI</h3>
+          <p class="module-desc">Consolida KPIs, scoring y lectura financiera para dirección, ventas y análisis.</p>
+          <ul class="audit-list">
+            <li>Dashboard ejecutivo, análisis de ventas, clientes y productos.</li>
+            <li>Scoring RFM diario y reportes contables.</li>
+            <li>Flujo de caja y reportes periódicos por email.</li>
+          </ul>
+          <p class="audit-evidence">Evidencia: `includes/class-wbi-dashboard.php`, `includes/class-wbi-metrics.php`, `includes/class-wbi-scoring.php`, `includes/class-wbi-accounting-reports.php`, `includes/class-wbi-cashflow.php`.</p>
+        </article>
+
+        <article class="module-card reveal-scale" data-delay="3">
+          <div class="module-icon">🏢</div>
+          <h3 class="module-name">Operación B2B / Ventas</h3>
+          <p class="module-desc">Cubre pricing, checkout comercial, CRM y venta asistida mayorista.</p>
+          <ul class="audit-list">
+            <li>B2B con aprobación, ocultamiento de precios y mínimos jerárquicos.</li>
+            <li>Listas de precios, precio promo, pedido rápido y recuperación de carritos.</li>
+            <li>CRM con pipeline, actividades y conversión a cliente; POS de mostrador.</li>
+          </ul>
+          <p class="audit-evidence">Evidencia: `includes/class-wbi-b2b.php`, `includes/class-wbi-minimum-order-resolver.php`, `includes/class-wbi-pricelists.php`, `includes/class-wbi-pos.php`, `includes/class-wbi-crm.php`, `includes/class-wbi-abandoned-carts.php`.</p>
+        </article>
+
+        <article class="module-card reveal-scale" data-delay="4">
+          <div class="module-icon">⚙️</div>
+          <h3 class="module-name">Administración / Configuración</h3>
+          <p class="module-desc">Gestiona parámetros, maestros internos y documentación fiscal dentro del mismo plugin.</p>
+          <ul class="audit-list">
+            <li>Activación centralizada de módulos y recuperación de settings.</li>
+            <li>Proveedores, RRHH, impuestos, datos extra y campos personalizados.</li>
+            <li>Facturación AFIP, notas de crédito/débito y caja POS por rol.</li>
+          </ul>
+          <p class="audit-evidence">Evidencia: `wbi-suite.php`, `includes/class-wbi-suppliers.php`, `includes/class-wbi-employees.php`, `includes/class-wbi-taxes.php`, `includes/class-wbi-invoice.php`, `includes/class-wbi-credit-notes.php`.</p>
+        </article>
+
+        <article class="module-card reveal-scale" data-delay="5">
+          <div class="module-icon">🧾</div>
+          <h3 class="module-name">Reportes / Exportaciones</h3>
+          <p class="module-desc">Genera salidas operativas y analíticas listas para administración, depósito y análisis comercial.</p>
+          <ul class="audit-list">
+            <li>Exportaciones CSV de BI.</li>
+            <li>Remitos y documentos comerciales unificados.</li>
+            <li>Reportes detallados por ventas, clientes y productos.</li>
+          </ul>
+          <p class="audit-evidence">Evidencia: `includes/class-wbi-export.php`, `includes/class-wbi-remitos.php`, `includes/class-wbi-documents.php`, `includes/class-wbi-report-sales.php`, `includes/class-wbi-report-clients.php`, `includes/class-wbi-report-products.php`.</p>
+        </article>
+
+        <article class="module-card reveal-scale" data-delay="6">
+          <div class="module-icon">🔐</div>
+          <h3 class="module-name">Seguridad / Usuarios / Permisos</h3>
+          <p class="module-desc">Asegura acceso controlado y flujos de alta coherentes con el modelo operativo del negocio.</p>
+          <ul class="audit-list">
+            <li>Licencia obligatoria antes de cargar módulos.</li>
+            <li>Superadmin WBI, permisos por usuario y roles operativos dedicados.</li>
+            <li>Registro segmentado y validación de checkout por CP/provincia.</li>
+          </ul>
+          <p class="audit-evidence">Evidencia: `includes/class-wbi-license.php`, `wbi-suite.php`, `includes/class-wbi-registration-fields.php`, `includes/class-wbi-checkout-validator.php`.</p>
+        </article>
+
+        <article class="module-card reveal-scale" data-delay="7">
+          <div class="module-icon">🔗</div>
+          <h3 class="module-name">Integraciones</h3>
+          <p class="module-desc">Extiende la suite hacia logística, mensajería, API y automatización comercial omnicanal.</p>
+          <ul class="audit-list">
+            <li>MobApp Envíos y Transporte Multiopciones en checkout.</li>
+            <li>WhatsApp, centro de notificaciones y API REST `wbi/v1`.</li>
+            <li>Email marketing con plantillas, suscriptores y campañas por lotes.</li>
+          </ul>
+          <p class="audit-evidence">Evidencia: `modules/mobapp-envios/main.php`, `modules/transporte-multiopciones/...php`, `includes/class-wbi-whatsapp.php`, `includes/class-wbi-notifications.php`, `includes/class-wbi-api.php`, `includes/class-wbi-email-marketing.php`.</p>
         </article>
       </div>
     </div>
@@ -1418,7 +1542,7 @@
 
       <nav class="footer-links" aria-label="Links del footer">
         <a href="#hero">Inicio</a>
-        <a href="#modulos">Módulos</a>
+        <a href="#funciones-sistema">Funciones</a>
         <a href="#comparativa">Comparativa</a>
         <a href="#beneficios">Beneficios</a>
         <a href="#para-quien">Para quién</a>
