@@ -93,5 +93,6 @@ Superficie piloto: **Dashboard Ejecutivo** (`includes/class-wbi-dashboard.php`):
 4. Normalizar tablas con `.wbi-table-responsive` + `.wbi-table`.
 5. Incorporar `.wbi-pagination` con `paginate_links()` preservando filtros actuales.
 6. Sustituir inline styles solo en la superficie tocada.
+7. Preservar filtros/query params con allowlist explícita (no copiar `$_GET` completo) para evitar propagar parámetros no deseados entre pantallas.
 
 Este patrón permite PRs pequeños por módulo sin refactor masivo ni cambios de lógica de negocio.
