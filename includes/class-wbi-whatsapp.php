@@ -541,8 +541,32 @@ function wbiWaSend(oid, ph){
         // Date filter
         $date_from = isset( $_GET['date_from'] ) ? sanitize_text_field( wp_unslash( $_GET['date_from'] ) ) : date( 'Y-m-d', strtotime( '-30 days' ) );
         $date_to   = isset( $_GET['date_to'] )   ? sanitize_text_field( wp_unslash( $_GET['date_to'] ) )   : date( 'Y-m-d' );
+        $current_page = max( 1, absint( $_GET['paged'] ?? 1 ) );
+        $allowed_per_page = array( 10, 25, 50, 100 );
+        $requested_per_page = absint( $_GET['per_page'] ?? 25 );
+        $per_page = in_array( $requested_per_page, $allowed_per_page, true ) ? $requested_per_page : 25;
+        $from_dt = $date_from . ' 00:00:00';
+        $to_dt   = $date_to . ' 23:59:59';
 
-        // Fetch recent orders with WhatsApp log
+        $total_orders = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(DISTINCT pm.post_id) FROM {$wpdb->postmeta} pm
+                 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                 WHERE pm.meta_key = '_wbi_whatsapp_log'
+                 AND p.post_type = 'shop_order'
+                 AND p.post_date BETWEEN %s AND %s",
+                $from_dt,
+                $to_dt
+            )
+        );
+
+        $total_pages = max( 1, (int) ceil( $total_orders / $per_page ) );
+        if ( $current_page > $total_pages ) {
+            $current_page = $total_pages;
+        }
+        $offset = ( $current_page - 1 ) * $per_page;
+
+        // Fetch orders with WhatsApp log
         $order_ids = $wpdb->get_col(
             $wpdb->prepare(
                 "SELECT DISTINCT post_id FROM {$wpdb->postmeta}
@@ -553,9 +577,11 @@ function wbiWaSend(oid, ph){
                      AND post_date BETWEEN %s AND %s
                  )
                  ORDER BY post_id DESC
-                 LIMIT 50",
-                $date_from . ' 00:00:00',
-                $date_to . ' 23:59:59'
+                 LIMIT %d OFFSET %d",
+                $from_dt,
+                $to_dt,
+                $per_page,
+                $offset
             )
         );
 
@@ -564,6 +590,11 @@ function wbiWaSend(oid, ph){
         echo '<input type="hidden" name="page" value="wbi-whatsapp">';
         echo '<label>Desde: <input type="date" name="date_from" value="' . esc_attr( $date_from ) . '"></label> ';
         echo '<label>Hasta: <input type="date" name="date_to" value="' . esc_attr( $date_to ) . '"></label> ';
+        echo '<label>Por página: <select name="per_page">';
+        foreach ( $allowed_per_page as $pp ) {
+            echo '<option value="' . esc_attr( $pp ) . '"' . selected( $per_page, $pp, false ) . '>' . esc_html( $pp ) . '</option>';
+        }
+        echo '</select></label> ';
         echo '<button type="submit" class="button">Filtrar</button>';
         echo '</form>';
 
@@ -593,7 +624,31 @@ function wbiWaSend(oid, ph){
             }
         }
 
-        echo '</tbody></table></div>';
+        echo '</tbody></table>';
+        $pagination = paginate_links( array(
+            'base'      => add_query_arg(
+                array_filter( array(
+                    'page'      => 'wbi-whatsapp',
+                    'date_from' => $date_from ?: '',
+                    'date_to'   => $date_to ?: '',
+                    'per_page'  => $per_page,
+                    'paged'     => '%#%',
+                ) ),
+                admin_url( 'admin.php' )
+            ),
+            'format'    => '',
+            'current'   => $current_page,
+            'total'     => $total_pages,
+            'prev_text' => '« Anterior',
+            'next_text' => 'Siguiente »',
+            'type'      => 'list',
+        ) );
+        echo '<div style="margin-top:12px;">';
+        echo '<p style="margin:0 0 8px;color:#50575e;">' . esc_html( sprintf( 'Página %1$d de %2$d', $current_page, $total_pages ) ) . ' · ' . esc_html( sprintf( 'Pedidos con log: %d', $total_orders ) ) . '</p>';
+        if ( $pagination ) {
+            echo '<div class="tablenav-pages">' . wp_kses_post( $pagination ) . '</div>';
+        }
+        echo '</div></div>';
     }
 
     // -------------------------------------------------------------------------

@@ -738,6 +738,10 @@ class WBI_Email_Marketing_Module {
 
     private function render_campaign_report() {
         $campaign_id = isset( $_GET['campaign_id'] ) ? absint( $_GET['campaign_id'] ) : 0;
+        $current_page = max( 1, absint( $_GET['paged'] ?? 1 ) );
+        $allowed_per_page = array( 10, 25, 50, 100 );
+        $requested_per_page = absint( $_GET['per_page'] ?? 25 );
+        $per_page = in_array( $requested_per_page, $allowed_per_page, true ) ? $requested_per_page : 25;
         if ( ! $campaign_id ) {
             wp_die( 'Campaña no encontrada.' );
         }
@@ -750,6 +754,15 @@ class WBI_Email_Marketing_Module {
 
         $open_rate  = $campaign->total_sent > 0 ? round( ( $campaign->total_opened / $campaign->total_sent ) * 100, 1 ) : 0;
         $click_rate = $campaign->total_sent > 0 ? round( ( $campaign->total_clicked / $campaign->total_sent ) * 100, 1 ) : 0;
+        $total_openers = (int) $this->db->get_var( $this->db->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            "SELECT COUNT(*) FROM {$this->tbl_sends} WHERE campaign_id = %d AND open_count > 0",
+            $campaign_id
+        ) );
+        $total_pages = max( 1, (int) ceil( $total_openers / $per_page ) );
+        if ( $current_page > $total_pages ) {
+            $current_page = $total_pages;
+        }
+        $offset = ( $current_page - 1 ) * $per_page;
 
         // Recipients who opened
         $openers = $this->db->get_results( $this->db->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -757,8 +770,10 @@ class WBI_Email_Marketing_Module {
              FROM {$this->tbl_sends} sd
              JOIN {$this->tbl_subscribers} s ON s.id = sd.subscriber_id
              WHERE sd.campaign_id = %d AND sd.open_count > 0
-             ORDER BY sd.opened_at DESC LIMIT 100",
-            $campaign_id
+             ORDER BY sd.opened_at DESC LIMIT %d OFFSET %d",
+            $campaign_id,
+            $per_page,
+            $offset
         ) );
         ?>
         <div class="wrap">
@@ -800,7 +815,21 @@ class WBI_Email_Marketing_Module {
             </div>
 
             <!-- Openers list -->
-            <h3>Suscriptores que abrieron (últimos 100)</h3>
+            <h3>Suscriptores que abrieron</h3>
+            <form method="get" action="" style="margin-bottom:10px;display:flex;gap:8px;align-items:center;">
+                <input type="hidden" name="page" value="wbi-email-marketing">
+                <input type="hidden" name="action" value="report">
+                <input type="hidden" name="campaign_id" value="<?php echo esc_attr( $campaign_id ); ?>">
+                <label for="wbi-openers-per-page">Por página</label>
+                <select id="wbi-openers-per-page" name="per_page">
+                    <?php foreach ( $allowed_per_page as $pp ) : ?>
+                        <option value="<?php echo esc_attr( $pp ); ?>" <?php selected( $per_page, $pp ); ?>>
+                            <?php echo esc_html( $pp ); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <button class="button" type="submit">Aplicar</button>
+            </form>
             <table class="wp-list-table widefat fixed striped">
                 <thead>
                     <tr>
@@ -827,6 +856,35 @@ class WBI_Email_Marketing_Module {
                 <?php endif; ?>
                 </tbody>
             </table>
+            <?php
+            $pagination = paginate_links( array(
+                'base'      => add_query_arg(
+                    array(
+                        'page'        => 'wbi-email-marketing',
+                        'action'      => 'report',
+                        'campaign_id' => $campaign_id,
+                        'per_page'    => $per_page,
+                        'paged'       => '%#%',
+                    ),
+                    admin_url( 'admin.php' )
+                ),
+                'format'    => '',
+                'current'   => $current_page,
+                'total'     => $total_pages,
+                'prev_text' => '« Anterior',
+                'next_text' => 'Siguiente »',
+                'type'      => 'list',
+            ) );
+            ?>
+            <div style="margin-top:12px;">
+                <p style="margin:0 0 8px;color:#50575e;">
+                    <?php echo esc_html( sprintf( 'Página %1$d de %2$d', $current_page, $total_pages ) ); ?> ·
+                    <?php echo esc_html( sprintf( 'Total: %d registros', $total_openers ) ); ?>
+                </p>
+                <?php if ( $pagination ) : ?>
+                    <div class="tablenav-pages"><?php echo wp_kses_post( $pagination ); ?></div>
+                <?php endif; ?>
+            </div>
         </div>
         <?php
     }
@@ -840,6 +898,10 @@ class WBI_Email_Marketing_Module {
         $subs_url   = $base_url . '&action=subscribers';
         $search     = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '';
         $status_f   = isset( $_GET['status'] ) ? sanitize_key( $_GET['status'] ) : '';
+        $current_page = max( 1, absint( $_GET['paged'] ?? 1 ) );
+        $allowed_per_page = array( 10, 25, 50, 100 );
+        $requested_per_page = absint( $_GET['per_page'] ?? 25 );
+        $per_page = in_array( $requested_per_page, $allowed_per_page, true ) ? $requested_per_page : 25;
 
         $where  = array( '1=1' );
         $params = array();
@@ -855,12 +917,23 @@ class WBI_Email_Marketing_Module {
             $params[] = $status_f;
         }
         $where_sql = implode( ' AND ', $where );
+        // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+        $count_query = "SELECT COUNT(*) FROM {$this->tbl_subscribers} WHERE {$where_sql}";
+        $total_filtered = $params
+            ? (int) $this->db->get_var( $this->db->prepare( $count_query, $params ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            : (int) $this->db->get_var( $count_query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        $total_pages = max( 1, (int) ceil( $total_filtered / $per_page ) );
+        if ( $current_page > $total_pages ) {
+            $current_page = $total_pages;
+        }
+        $offset = ( $current_page - 1 ) * $per_page;
 
         // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-        $query = "SELECT * FROM {$this->tbl_subscribers} WHERE {$where_sql} ORDER BY subscribed_at DESC LIMIT 200";
+        $query = "SELECT * FROM {$this->tbl_subscribers} WHERE {$where_sql} ORDER BY subscribed_at DESC LIMIT %d OFFSET %d";
+        $query_params = array_merge( $params, array( $per_page, $offset ) );
         $subs  = $params
-            ? $this->db->get_results( $this->db->prepare( $query, $params ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-            : $this->db->get_results( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            ? $this->db->get_results( $this->db->prepare( $query, $query_params ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            : $this->db->get_results( $this->db->prepare( $query, $per_page, $offset ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
         $total = (int) $this->db->get_var( "SELECT COUNT(*) FROM {$this->tbl_subscribers}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
@@ -911,6 +984,13 @@ class WBI_Email_Marketing_Module {
                     <option value="unsubscribed" <?php selected( $status_f, 'unsubscribed' ); ?>>Desuscriptos</option>
                     <option value="bounced" <?php selected( $status_f, 'bounced' ); ?>>Rebotados</option>
                 </select>
+                <select name="per_page">
+                    <?php foreach ( $allowed_per_page as $pp ) : ?>
+                        <option value="<?php echo esc_attr( $pp ); ?>" <?php selected( $per_page, $pp ); ?>>
+                            <?php echo esc_html( $pp ); ?> por página
+                        </option>
+                    <?php endforeach; ?>
+                </select>
                 <button class="button" type="submit">Filtrar</button>
             </form>
             <br>
@@ -959,6 +1039,36 @@ class WBI_Email_Marketing_Module {
                 <?php endif; ?>
                 </tbody>
             </table>
+            <?php
+            $pagination = paginate_links( array(
+                'base'      => add_query_arg(
+                    array_filter( array(
+                        'page'     => 'wbi-email-marketing',
+                        'action'   => 'subscribers',
+                        's'        => $search ?: '',
+                        'status'   => $status_f ?: '',
+                        'per_page' => $per_page,
+                        'paged'    => '%#%',
+                    ) ),
+                    admin_url( 'admin.php' )
+                ),
+                'format'    => '',
+                'current'   => $current_page,
+                'total'     => $total_pages,
+                'prev_text' => '« Anterior',
+                'next_text' => 'Siguiente »',
+                'type'      => 'list',
+            ) );
+            ?>
+            <div style="margin-top:12px;">
+                <p style="margin:0 0 8px;color:#50575e;">
+                    <?php echo esc_html( sprintf( 'Página %1$d de %2$d', $current_page, $total_pages ) ); ?> ·
+                    <?php echo esc_html( sprintf( 'Total filtrado: %d', $total_filtered ) ); ?>
+                </p>
+                <?php if ( $pagination ) : ?>
+                    <div class="tablenav-pages"><?php echo wp_kses_post( $pagination ); ?></div>
+                <?php endif; ?>
+            </div>
         </div>
 
         <script>

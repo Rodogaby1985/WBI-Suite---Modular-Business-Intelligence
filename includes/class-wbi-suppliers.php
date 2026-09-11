@@ -101,6 +101,25 @@ class WBI_Suppliers_Module {
 
     private function render_assigned_products( $supplier_id ) {
         global $wpdb;
+        $current_page = max( 1, absint( $_GET['wbi_supplier_products_page'] ?? 1 ) );
+        $allowed_per_page = array( 10, 25, 50, 100 );
+        $requested_per_page = absint( $_GET['wbi_supplier_products_per_page'] ?? 25 );
+        $per_page = in_array( $requested_per_page, $allowed_per_page, true ) ? $requested_per_page : 25;
+
+        $total_products = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(1)
+             FROM {$wpdb->posts} p
+             JOIN {$wpdb->postmeta} pm_sup ON p.ID = pm_sup.post_id AND pm_sup.meta_key = '_wbi_supplier_id'
+             WHERE p.post_type = 'product'
+               AND p.post_status = 'publish'
+               AND pm_sup.meta_value = %d",
+            $supplier_id
+        ) );
+        $total_pages = max( 1, (int) ceil( $total_products / $per_page ) );
+        if ( $current_page > $total_pages ) {
+            $current_page = $total_pages;
+        }
+        $offset = ( $current_page - 1 ) * $per_page;
 
         $products = $wpdb->get_results( $wpdb->prepare(
             "SELECT p.ID, p.post_title,
@@ -116,8 +135,10 @@ class WBI_Suppliers_Module {
                AND p.post_status = 'publish'
                AND pm_sup.meta_value = %d
              ORDER BY p.post_title ASC
-             LIMIT 50",
-            $supplier_id
+             LIMIT %d OFFSET %d",
+            $supplier_id,
+            $per_page,
+            $offset
         ) );
 
         if ( empty( $products ) ) {
@@ -138,6 +159,41 @@ class WBI_Suppliers_Module {
             echo '</tr>';
         }
         echo '</tbody></table>';
+
+        $pagination = paginate_links( array(
+            'base'      => add_query_arg(
+                array(
+                    'post'                           => absint( $_GET['post'] ?? 0 ),
+                    'action'                         => sanitize_text_field( wp_unslash( $_GET['action'] ?? 'edit' ) ),
+                    'wbi_supplier_products_per_page' => $per_page,
+                    'wbi_supplier_products_page'     => '%#%',
+                ),
+                admin_url( 'post.php' )
+            ),
+            'format'    => '',
+            'current'   => $current_page,
+            'total'     => $total_pages,
+            'prev_text' => '« Anterior',
+            'next_text' => 'Siguiente »',
+            'type'      => 'list',
+        ) );
+
+        echo '<form method="get" style="margin-top:10px;display:flex;gap:8px;align-items:center;">';
+        echo '<input type="hidden" name="post" value="' . esc_attr( absint( $_GET['post'] ?? 0 ) ) . '">';
+        echo '<input type="hidden" name="action" value="' . esc_attr( sanitize_text_field( wp_unslash( $_GET['action'] ?? 'edit' ) ) ) . '">';
+        echo '<input type="hidden" name="wbi_supplier_products_page" value="1">';
+        echo '<label for="wbi_supplier_products_per_page">Por página</label>';
+        echo '<select id="wbi_supplier_products_per_page" name="wbi_supplier_products_per_page">';
+        foreach ( $allowed_per_page as $pp ) {
+            echo '<option value="' . esc_attr( $pp ) . '"' . selected( $per_page, $pp, false ) . '>' . esc_html( $pp ) . '</option>';
+        }
+        echo '</select>';
+        echo '<button type="submit" class="button button-small">Aplicar</button>';
+        echo '</form>';
+        echo '<p style="margin:8px 0;color:#50575e;">' . esc_html( sprintf( 'Página %1$d de %2$d · Total: %3$d', $current_page, $total_pages, $total_products ) ) . '</p>';
+        if ( $pagination ) {
+            echo '<div class="tablenav-pages">' . wp_kses_post( $pagination ) . '</div>';
+        }
     }
 
     public function save_supplier_meta( $post_id ) {

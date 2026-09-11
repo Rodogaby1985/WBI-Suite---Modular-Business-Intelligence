@@ -101,6 +101,10 @@ class WBI_POS_Cash_Admin {
         $filter_status = isset( $_GET['filter_status'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_status'] ) ) : '';
         $filter_from   = isset( $_GET['filter_from'] )   ? sanitize_text_field( wp_unslash( $_GET['filter_from'] ) )  : '';
         $filter_to     = isset( $_GET['filter_to'] )     ? sanitize_text_field( wp_unslash( $_GET['filter_to'] ) )    : '';
+        $current_page  = max( 1, absint( $_GET['paged'] ?? 1 ) );
+        $allowed_per_page = array( 10, 25, 50, 100 );
+        $requested_per_page = absint( $_GET['per_page'] ?? 25 );
+        $per_page = in_array( $requested_per_page, $allowed_per_page, true ) ? $requested_per_page : 25;
 
         $where  = array( '1=1' );
         $params = array();
@@ -131,12 +135,35 @@ class WBI_POS_Cash_Admin {
         $where_sql = implode( ' AND ', $where );
 
         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $count_query = "SELECT COUNT(*) FROM {$table_sessions} WHERE {$where_sql}";
+        $total_rows  = $params
+            ? (int) $wpdb->get_var( $wpdb->prepare( $count_query, ...$params ) )
+            : (int) $wpdb->get_var( $count_query );
+
+        $total_pages = max( 1, (int) ceil( $total_rows / $per_page ) );
+        if ( $current_page > $total_pages ) {
+            $current_page = $total_pages;
+        }
+        $offset = ( $current_page - 1 ) * $per_page;
+
         if ( $params ) {
             // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-            $sessions = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table_sessions} WHERE {$where_sql} ORDER BY opened_at DESC LIMIT 200", ...$params ) );
+            $sessions = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM {$table_sessions} WHERE {$where_sql} ORDER BY opened_at DESC LIMIT %d OFFSET %d",
+                    ...array_merge( $params, array( $per_page, $offset ) )
+                )
+            );
         } else {
             // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-            $sessions = $wpdb->get_results( "SELECT * FROM {$table_sessions} ORDER BY opened_at DESC LIMIT 200" );
+            $sessions = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM {$table_sessions} ORDER BY opened_at DESC LIMIT %d OFFSET %d",
+                    $per_page,
+                    $offset
+                )
+            );
         }
         // phpcs:enable
 
@@ -197,6 +224,16 @@ class WBI_POS_Cash_Admin {
                 <div>
                     <button type="submit" class="button button-primary">🔍 <?php esc_html_e( 'Filtrar', 'wbi-suite' ); ?></button>
                     <a href="<?php echo esc_url( $base_url ); ?>" class="button"><?php esc_html_e( 'Limpiar', 'wbi-suite' ); ?></a>
+                </div>
+                <div>
+                    <label style="display:block;font-size:12px;margin-bottom:2px;"><?php esc_html_e( 'Por página', 'wbi-suite' ); ?></label>
+                    <select name="per_page">
+                        <?php foreach ( $allowed_per_page as $pp ) : ?>
+                            <option value="<?php echo esc_attr( $pp ); ?>" <?php selected( $per_page, $pp ); ?>>
+                                <?php echo esc_html( $pp ); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
 
                 <!-- CSV Export -->
@@ -280,6 +317,38 @@ class WBI_POS_Cash_Admin {
                 <?php endforeach; ?>
                 </tbody>
             </table>
+            <?php
+            $pagination_base = add_query_arg(
+                array_filter( array(
+                    'page'          => 'wbi-pos-cash',
+                    'filter_user'   => $filter_user ?: '',
+                    'filter_status' => $filter_status ?: '',
+                    'filter_from'   => $filter_from ?: '',
+                    'filter_to'     => $filter_to ?: '',
+                    'per_page'      => $per_page,
+                    'paged'         => '%#%',
+                ) ),
+                admin_url( 'admin.php' )
+            );
+            $pagination = paginate_links( array(
+                'base'      => $pagination_base,
+                'format'    => '',
+                'current'   => $current_page,
+                'total'     => $total_pages,
+                'prev_text' => '« Anterior',
+                'next_text' => 'Siguiente »',
+                'type'      => 'list',
+            ) );
+            ?>
+            <div style="margin-top:12px;">
+                <p style="margin:0 0 8px;color:#50575e;">
+                    <?php echo esc_html( sprintf( 'Página %1$d de %2$d', $current_page, $total_pages ) ); ?> ·
+                    <?php echo esc_html( sprintf( 'Total: %d registros', $total_rows ) ); ?>
+                </p>
+                <?php if ( $pagination ) : ?>
+                    <div class="tablenav-pages"><?php echo wp_kses_post( $pagination ); ?></div>
+                <?php endif; ?>
+            </div>
             <?php endif; ?>
         </div>
         <?php
