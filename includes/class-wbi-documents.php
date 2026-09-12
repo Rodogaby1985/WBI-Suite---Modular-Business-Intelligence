@@ -458,29 +458,45 @@ class WBI_Documents_Module {
     }
 
     private function export_remitos_csv() {
-        $order_ids = wc_get_orders( array(
+        $query_args = array(
             'meta_key'     => '_wbi_remito_number',
             'meta_compare' => 'EXISTS',
             'return'       => 'ids',
-            'limit'        => -1,
-        ) );
+        );
 
         header( 'Content-Type: text/csv; charset=utf-8' );
         header( 'Content-Disposition: attachment; filename="wbi-remitos-export-' . gmdate( 'Y-m-d' ) . '.csv"' );
         $out = fopen( 'php://output', 'w' );
         fputcsv( $out, array( 'remito_number', 'order_id', 'date', 'customer', 'total' ) );
-        foreach ( $order_ids as $order_id ) {
-            $order = wc_get_order( $order_id );
-            if ( ! $order ) continue;
-            $remito_date = $order->get_meta( '_wbi_remito_date', true );
-            fputcsv( $out, array(
-                str_pad( intval( $order->get_meta( '_wbi_remito_number', true ) ), 6, '0', STR_PAD_LEFT ),
-                $order_id,
-                $remito_date ? date_i18n( 'd/m/Y', strtotime( $remito_date ) ) : '',
-                trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ),
-                $order->get_total(),
-            ) );
-        }
+        $batch_size = 200;
+        $page       = 1;
+        do {
+            $batch_args             = $query_args;
+            $batch_args['limit']    = $batch_size;
+            $batch_args['page']     = $page;
+            $batch_args['paginate'] = true;
+            $result                 = wc_get_orders( $batch_args );
+            $order_ids              = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+
+            foreach ( $order_ids as $order_id ) {
+                $order = wc_get_order( $order_id );
+                if ( ! $order ) {
+                    continue;
+                }
+                $remito_date = $order->get_meta( '_wbi_remito_date', true );
+                fputcsv( $out, array(
+                    str_pad( intval( $order->get_meta( '_wbi_remito_number', true ) ), 6, '0', STR_PAD_LEFT ),
+                    $order_id,
+                    $remito_date ? date_i18n( 'd/m/Y', strtotime( $remito_date ) ) : '',
+                    trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ),
+                    $order->get_total(),
+                ) );
+            }
+
+            $max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : 0;
+            $has_more  = $max_pages > 0 ? $page < $max_pages : count( $order_ids ) === $batch_size;
+            $page++;
+        } while ( $has_more && ! empty( $order_ids ) );
         fclose( $out );
         exit;
     }
