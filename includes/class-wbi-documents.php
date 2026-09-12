@@ -1085,7 +1085,13 @@ class WBI_Documents_Module {
     // =========================================================================
 
     private function render_generate_interface( $order_id, $generate_type ) {
-        $back_url = admin_url( 'admin.php?page=wbi-documents&tab=pending' );
+        $back_url = add_query_arg(
+            array(
+                'page' => 'wbi-documents',
+                'tab'  => 'pending',
+            ),
+            admin_url( 'admin.php' )
+        );
         if ( ! in_array( $generate_type, array( 'invoice', 'remito', 'orden' ), true ) ) {
             WBI_Admin_Shell::open_page();
             WBI_Admin_Shell::render_header(
