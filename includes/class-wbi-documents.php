@@ -1078,15 +1078,27 @@ class WBI_Documents_Module {
     // =========================================================================
 
     private function render_generate_interface( $order_id, $generate_type ) {
+        $back_url = esc_url( admin_url( 'admin.php?page=wbi-documents&tab=pending' ) );
         $order = wc_get_order( $order_id );
         if ( ! $order ) {
             WBI_Admin_Shell::open_page();
+            WBI_Admin_Shell::render_header(
+                array(
+                    'title'       => 'Documento no disponible',
+                    'description' => 'No se encontró el pedido solicitado para este flujo administrativo.',
+                    'back_link'   => array(
+                        'url'   => $back_url,
+                        'label' => 'Volver a pedidos sin documento',
+                    ),
+                )
+            );
+            echo '<section class="wbi-card">';
             WBI_Admin_Shell::render_notice( esc_html__( 'Pedido no encontrado.', 'wbi-suite' ), 'danger' );
+            echo '</section>';
             WBI_Admin_Shell::close_page();
             return;
         }
 
-        $back_url   = esc_url( admin_url( 'admin.php?page=wbi-documents&tab=pending' ) );
         $action_url = esc_url( admin_url( 'admin-post.php' ) );
         $client_name = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
         $opts        = get_option( 'wbi_invoice_settings', array() );
