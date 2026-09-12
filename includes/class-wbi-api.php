@@ -304,7 +304,8 @@ class WBI_API_Module {
         ) );
 
         $data = array_map( function( $r ) {
-            return array( 'id' => intval( $r->ID ), 'email' => $r->user_email, 'rfm_score' => intval( $r->score ) );
+            $score = intval( $r->score );
+            return array( 'id' => intval( $r->ID ), 'email' => $r->user_email, 'score' => $score, 'rfm_score' => $score );
         }, $rows );
 
         $total = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT u.ID) FROM {$wpdb->users} u INNER JOIN {$wpdb->usermeta} um ON um.user_id = u.ID AND um.meta_key = '_wbi_score' WHERE um.meta_value != ''" );

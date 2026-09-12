@@ -458,9 +458,11 @@ class WBI_Documents_Module {
     }
 
     private function export_remitos_csv() {
+        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
         $query_args = array(
             'meta_key'     => '_wbi_remito_number',
             'meta_compare' => 'EXISTS',
+            'date_created' => $date_from . '...' . $date_to,
             'return'       => 'ids',
         );
 
@@ -786,38 +788,42 @@ class WBI_Documents_Module {
     // =========================================================================
 
     private function render_tab_remitos() {
+        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
         $per_page = 20;
-        $paged    = max( 1, absint( $_GET['paged'] ?? 1 ) );
-        $offset   = ( $paged - 1 ) * $per_page;
+        $paged    = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
 
-        $all_ids = wc_get_orders( array(
+        $result = wc_get_orders( array(
             'meta_key'     => '_wbi_remito_number',
             'meta_compare' => 'EXISTS',
-            'return'       => 'ids',
-            'limit'        => -1,
-        ) );
-        $total       = count( $all_ids );
-        $total_pages = $total > 0 ? (int) ceil( $total / $per_page ) : 1;
-
-        $paged_ids = wc_get_orders( array(
-            'meta_key'     => '_wbi_remito_number',
-            'meta_compare' => 'EXISTS',
+            'date_created' => $date_from . '...' . $date_to,
             'return'       => 'ids',
             'limit'        => $per_page,
-            'offset'       => $offset,
-            'orderby'      => 'meta_value_num',
+            'page'         => $paged,
+            'orderby'      => 'date',
             'order'        => 'DESC',
+            'paginate'     => true,
         ) );
+        $paged_ids    = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+        $total        = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $paged_ids );
+        $total_pages  = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : max( 1, (int) ceil( $total / $per_page ) );
 
         $export_url = wp_nonce_url(
-            admin_url( 'admin-post.php?action=wbi_document_export_csv&export_type=remitos' ),
+            admin_url( 'admin-post.php?action=wbi_document_export_csv&export_type=remitos&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) ),
             'wbi_remito_export'
         );
 
-        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=remitos' );
+        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=remitos&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) );
 
+        echo '<form method="get" style="margin-bottom:15px;">';
+        echo '<input type="hidden" name="page" value="wbi-documents">';
+        echo '<input type="hidden" name="tab" value="remitos">';
+        echo '<label>Desde: <input type="date" name="date_from" value="' . esc_attr( $date_from ) . '"></label>';
+        echo '<label style="margin-left:8px;">Hasta: <input type="date" name="date_to" value="' . esc_attr( $date_to ) . '"></label>';
+        echo '<button type="submit" class="button" style="margin-left:8px;">Filtrar</button>';
+        echo '<a href="' . esc_url( $export_url ) . '" class="button" style="margin-left:8px;">Exportar CSV</a>';
+        echo '</form>';
         echo '<p style="color:#555;">Total: <strong>' . intval( $total ) . '</strong> remitos &nbsp;';
-        echo '<a href="' . esc_url( $export_url ) . '" class="button">Exportar CSV</a></p>';
+        echo '</p>';
         ?>
         <div class="wbi-table-responsive">
         <table class="widefat striped wbi-sortable">
