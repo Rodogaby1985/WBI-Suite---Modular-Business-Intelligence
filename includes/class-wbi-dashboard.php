@@ -172,7 +172,7 @@ class WBI_Dashboard_View {
         $revenue = $this->engine->get_revenue( $start_date, $end_date, $statuses ) ?: 0;
         $units   = $this->engine->get_units_sold( $start_date, $end_date, $statuses ) ?: 0;
 
-        $status_raw   = $this->engine->get_order_status_counts();
+        $status_raw   = $this->engine->get_order_status_counts( $start_date, $end_date, $statuses );
         $c_completed  = $this->get_safe_count( $status_raw, 'wc-completed' );
         $c_processing = $this->get_safe_count( $status_raw, 'wc-processing' );
         $c_hold       = $this->get_safe_count( $status_raw, 'wc-on-hold' );
@@ -256,7 +256,7 @@ class WBI_Dashboard_View {
 
         $range_start_label = $this->format_display_date( $start_date );
         $range_end_label   = $this->format_display_date( $end_date );
-        $comparison_label  = $this->get_comparison_label( $compare, $prev_start, $prev_end );
+        $comparison_label  = $this->get_comparison_label( $compare );
         $range_field_value = $custom_range_requested ? 'custom' : $range;
         $show_custom_range = 'custom' === $range_field_value;
         $compare_field_value = $custom_compare_requested ? 'custom_compare' : $compare;
@@ -1140,15 +1140,17 @@ class WBI_Dashboard_View {
         $labels = array();
         $table  = array();
         $values = array();
+        global $wp_locale;
         for ( $month = 1; $month <= 12; $month++ ) {
             $date = DateTimeImmutable::createFromFormat( '!Y-n-j', $year . '-' . $month . '-1', wp_timezone() );
             if ( false === $date ) {
                 continue;
             }
-            $display_timestamp = $date->setTime( 12, 0, 0 )->getTimestamp();
-            $key               = $date->format( 'Y-m' );
-            $labels[]          = wp_date( 'M', $display_timestamp, wp_timezone() );
-            $table[]           = wp_date( 'F Y', $display_timestamp, wp_timezone() );
+            $month_name  = isset( $wp_locale ) ? $wp_locale->get_month( $month ) : $date->format( 'F' );
+            $month_abbr  = isset( $wp_locale ) ? $wp_locale->get_month_abbrev( $month_name ) : $date->format( 'M' );
+            $key         = $date->format( 'Y-m' );
+            $labels[]    = $month_abbr;
+            $table[]     = $month_name . ' ' . $date->format( 'Y' );
             $values[] = isset( $totals_by_month[ $key ] ) ? (float) $totals_by_month[ $key ] : 0.0;
         }
 
@@ -1173,7 +1175,7 @@ class WBI_Dashboard_View {
         return '';
     }
 
-    private function get_comparison_label( $compare, $prev_start, $prev_end ) {
+    private function get_comparison_label( $compare ) {
         switch ( $compare ) {
             case 'prev_period':
                 return __( 'Período anterior', 'wbi-suite' );
