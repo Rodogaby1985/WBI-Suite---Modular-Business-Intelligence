@@ -130,7 +130,17 @@ class WBI_API_Module {
             return new WP_Error( 'wbi_invalid_date_range', 'Parámetros date_from/date_to inválidos, incompletos o invertidos.', array( 'status' => 400 ) );
         }
 
-        return array( $range['from'], $range['to'] );
+        return array(
+            $range['from'] . ' 00:00:00',
+            $range['to'] . ' 23:59:59',
+        );
+    }
+
+    private function to_ymd( $date_value ) {
+        if ( ! is_scalar( $date_value ) ) {
+            return WBI_Admin_Query_Helper::get_site_date_ymd();
+        }
+        return substr( sanitize_text_field( (string) $date_value ), 0, 10 );
     }
 
     private function get_pagination( WP_REST_Request $request ) {
@@ -171,7 +181,9 @@ class WBI_API_Module {
         if ( is_wp_error( $date_range ) ) {
             return $date_range;
         }
-        list( $from, $to ) = $date_range;
+        list( $from_datetime, $to_datetime ) = $date_range;
+        $from = $this->to_ymd( $from_datetime );
+        $to   = $this->to_ymd( $to_datetime );
         $data = array(
             'revenue' => $this->engine->get_revenue( $from, $to ),
             'units'   => $this->engine->get_units_sold( $from, $to ),
@@ -189,7 +201,9 @@ class WBI_API_Module {
         if ( is_wp_error( $date_range ) ) {
             return $date_range;
         }
-        list( $from, $to ) = $date_range;
+        list( $from_datetime, $to_datetime ) = $date_range;
+        $from = $this->to_ymd( $from_datetime );
+        $to   = $this->to_ymd( $to_datetime );
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
         $statuses = WBI_Admin_Query_Helper::get_string_array(
             $request->get_params(),
@@ -286,7 +300,9 @@ class WBI_API_Module {
         if ( is_wp_error( $date_range ) ) {
             return $date_range;
         }
-        list( $from, $to ) = $date_range;
+        list( $from_datetime, $to_datetime ) = $date_range;
+        $from = $this->to_ymd( $from_datetime );
+        $to   = $this->to_ymd( $to_datetime );
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
         $statuses = WBI_Admin_Query_Helper::get_string_array(
             $request->get_params(),
@@ -337,7 +353,9 @@ class WBI_API_Module {
         if ( is_wp_error( $date_range ) ) {
             return $date_range;
         }
-        list( $from, $to ) = $date_range;
+        list( $from_datetime, $to_datetime ) = $date_range;
+        $from = $this->to_ymd( $from_datetime );
+        $to   = $this->to_ymd( $to_datetime );
         $period = sanitize_text_field( $request->get_param( 'period' ) ?? 'day' );
         if ( ! in_array( $period, array( 'day', 'week', 'month' ), true ) ) $period = 'day';
 
@@ -354,7 +372,9 @@ class WBI_API_Module {
         if ( is_wp_error( $date_range ) ) {
             return $date_range;
         }
-        list( $from, $to ) = $date_range;
+        list( $from_datetime, $to_datetime ) = $date_range;
+        $from = $this->to_ymd( $from_datetime );
+        $to   = $this->to_ymd( $to_datetime );
         $raw  = $this->engine->get_sales_by_province( $from, $to );
         $data = is_array( $raw ) ? $raw : array();
         return rest_ensure_response( $this->wrap( $data ) );
@@ -421,12 +441,15 @@ class WBI_API_Module {
         }
 
         $result = wc_get_orders( $query_args );
-        if ( is_array( $result ) ) {
-            $order_ids = isset( $result['orders'] ) ? $result['orders'] : $result;
-            $total     = isset( $result['total'] ) ? (int) $result['total'] : count( $order_ids );
-        } else {
+        if ( is_object( $result ) ) {
             $order_ids = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
             $total     = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $order_ids );
+        } elseif ( is_array( $result ) ) {
+            $order_ids = $result;
+            $total     = count( $order_ids );
+        } else {
+            $order_ids = array();
+            $total     = 0;
         }
         $data = array_map( function( $order_id ) {
             $order = wc_get_order( intval( $order_id ) );

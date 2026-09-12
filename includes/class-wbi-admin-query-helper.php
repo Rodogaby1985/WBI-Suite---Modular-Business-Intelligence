@@ -167,13 +167,16 @@ class WBI_Admin_Query_Helper {
             return 0;
         }
 
-        $updated        = 0;
-        $limit          = max( 1, (int) $batch_size );
-        $last_signature = '';
+        $updated   = 0;
+        $limit     = max( 1, (int) $batch_size );
+        $page      = 1;
+        $max_pages = 1;
         do {
             $query_args = array(
                 'return'       => 'ids',
                 'limit'        => $limit,
+                'page'         => $page,
+                'paginate'     => true,
                 'orderby'      => 'ID',
                 'order'        => 'DESC',
                 'date_created' => $date_from . '...' . $date_to,
@@ -196,15 +199,21 @@ class WBI_Admin_Query_Helper {
                 );
             }
 
-            $order_ids = wc_get_orders( $query_args );
-            if ( ! is_array( $order_ids ) || empty( $order_ids ) ) {
+            $result = wc_get_orders( $query_args );
+            if ( is_object( $result ) ) {
+                $order_ids  = isset( $result->orders ) ? (array) $result->orders : array();
+                $max_pages  = max( $max_pages, isset( $result->max_num_pages ) ? (int) $result->max_num_pages : $page );
+            } elseif ( is_array( $result ) ) {
+                $order_ids = $result;
+                if ( count( $order_ids ) === $limit ) {
+                    $max_pages = max( $max_pages, $page + 1 );
+                }
+            } else {
+                $order_ids = array();
+            }
+            if ( empty( $order_ids ) ) {
                 break;
             }
-            $signature = implode( ',', array_map( 'intval', $order_ids ) );
-            if ( $signature === $last_signature ) {
-                break;
-            }
-            $last_signature = $signature;
 
             foreach ( $order_ids as $order_id ) {
                 $order = wc_get_order( (int) $order_id );
@@ -218,7 +227,8 @@ class WBI_Admin_Query_Helper {
                 $order->save();
                 $updated++;
             }
-        } while ( count( $order_ids ) === $limit );
+            $page++;
+        } while ( $page <= $max_pages );
 
         return $updated;
     }

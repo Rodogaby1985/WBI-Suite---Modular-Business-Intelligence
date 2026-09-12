@@ -558,14 +558,18 @@ if ( ! empty( $custom_fields ) ) :
             );
         }
         $result = wc_get_orders( $query_args );
-        if ( is_array( $result ) ) {
-            $page_ids    = isset( $result['orders'] ) ? $result['orders'] : $result;
-            $total_rows  = isset( $result['total'] ) ? (int) $result['total'] : count( $page_ids );
-            $total_pages = isset( $result['max_num_pages'] ) ? (int) $result['max_num_pages'] : max( 1, (int) ceil( $total_rows / $per_page ) );
-        } else {
+        if ( is_object( $result ) ) {
             $page_ids    = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
             $total_rows  = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $page_ids );
             $total_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : max( 1, (int) ceil( $total_rows / $per_page ) );
+        } elseif ( is_array( $result ) ) {
+            $page_ids    = $result;
+            $total_rows  = count( $page_ids );
+            $total_pages = max( 1, (int) ceil( $total_rows / $per_page ) );
+        } else {
+            $page_ids    = array();
+            $total_rows  = 0;
+            $total_pages = 1;
         }
 
         echo '<div class="wrap">';
