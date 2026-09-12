@@ -239,8 +239,9 @@ class WBI_Dashboard_View {
 
         $period_data = $this->engine->get_sales_by_period( 'day', $start_date, $end_date, $statuses );
 
-        $year_start   = $today->modify( 'first day of january ' . $today->format( 'Y' ) )->format( 'Y-m-d' );
-        $year_end     = $today->modify( 'last day of december ' . $today->format( 'Y' ) )->format( 'Y-m-d' );
+        $current_year = (int) $today->format( 'Y' );
+        $year_start   = DateTimeImmutable::createFromFormat( '!Y-m-d', sprintf( '%d-01-01', $current_year ), wp_timezone() )->format( 'Y-m-d' );
+        $year_end     = DateTimeImmutable::createFromFormat( '!Y-m-d', sprintf( '%d-12-31', $current_year ), wp_timezone() )->format( 'Y-m-d' );
         $monthly_data = $this->engine->get_sales_by_period( 'month', $year_start, $year_end, $statuses );
 
         $daily_series   = $this->build_daily_chart_series( $period_data, $start_date, $end_date );
