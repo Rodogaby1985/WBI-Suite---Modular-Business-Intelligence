@@ -1126,7 +1126,7 @@ class WBI_Dashboard_View {
             case 'prev_period':
                 return sprintf( __( 'Período anterior (%1$s al %2$s)', 'wbi-suite' ), $this->format_display_date( $prev_start ), $this->format_display_date( $prev_end ) );
             case 'prev_year':
-                return __( 'Mismo período del año anterior', 'wbi-suite' );
+                return sprintf( __( 'Mismo período del año anterior (%1$s al %2$s)', 'wbi-suite' ), $this->format_display_date( $prev_start ), $this->format_display_date( $prev_end ) );
             case 'custom_compare':
                 return sprintf( __( 'Comparación personalizada (%1$s al %2$s)', 'wbi-suite' ), $this->format_display_date( $prev_start ), $this->format_display_date( $prev_end ) );
             default:

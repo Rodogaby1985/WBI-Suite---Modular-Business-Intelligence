@@ -876,7 +876,6 @@
    ========================================================= */
 .wbi-chart-container {
     position: relative;
-    height: 280px;
     min-height: 260px;
     max-height: 320px;
     width: 100%;
@@ -889,13 +888,11 @@
 }
 
 .wbi-chart-container-tall {
-    height: 320px;
     min-height: 320px;
     max-height: 320px;
 }
 
 .wbi-chart-container-compact {
-    height: 260px;
     min-height: 260px;
     max-height: 260px;
 }
