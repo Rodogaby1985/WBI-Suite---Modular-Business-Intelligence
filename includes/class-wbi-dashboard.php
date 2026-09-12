@@ -546,8 +546,10 @@ class WBI_Dashboard_View {
                             <?php if ( $prev_start && $prev_end ) : ?>
                                 <span class="wbi-field-help"><?php echo esc_html( sprintf( __( 'Rango comparado: %1$s al %2$s', 'wbi-suite' ), $this->format_display_date( $prev_start ), $this->format_display_date( $prev_end ) ) ); ?></span>
                             <?php endif; ?>
-                            <?php if ( null === $revenue_delta ) : ?>
-                                <span class="wbi-field-help"><?php esc_html_e( 'Sin delta porcentual porque el período comparado fue 0.', 'wbi-suite' ); ?></span>
+                            <?php if ( 0.0 === (float) $prev_revenue ) : ?>
+                                <span class="wbi-field-help">
+                                    <?php echo esc_html( $revenue > 0 ? __( 'Subió desde 0 en el período comparado.', 'wbi-suite' ) : __( 'Sin cambios: ambos períodos registran 0.', 'wbi-suite' ) ); ?>
+                                </span>
                             <?php else : ?>
                                 <span aria-hidden="true">·</span>
                                 <?php echo wp_kses_post( $this->render_delta( $revenue_delta ) ); ?>
@@ -566,8 +568,10 @@ class WBI_Dashboard_View {
                             <?php if ( $prev_start && $prev_end ) : ?>
                                 <span class="wbi-field-help"><?php echo esc_html( sprintf( __( 'Rango comparado: %1$s al %2$s', 'wbi-suite' ), $this->format_display_date( $prev_start ), $this->format_display_date( $prev_end ) ) ); ?></span>
                             <?php endif; ?>
-                            <?php if ( null === $units_delta ) : ?>
-                                <span class="wbi-field-help"><?php esc_html_e( 'Sin delta porcentual porque el período comparado fue 0.', 'wbi-suite' ); ?></span>
+                            <?php if ( 0.0 === (float) $prev_units ) : ?>
+                                <span class="wbi-field-help">
+                                    <?php echo esc_html( $units > 0 ? __( 'Subió desde 0 en el período comparado.', 'wbi-suite' ) : __( 'Sin cambios: ambos períodos registran 0.', 'wbi-suite' ) ); ?>
+                                </span>
                             <?php else : ?>
                                 <span aria-hidden="true">·</span>
                                 <?php echo wp_kses_post( $this->render_delta( $units_delta ) ); ?>
@@ -1276,10 +1280,10 @@ class WBI_Dashboard_View {
             return '';
         }
         if ( $delta > 0 ) {
-            return '<span class="wbi-delta positive">' . esc_html__( 'Subió', 'wbi-suite' ) . ' ' . esc_html( $delta ) . '%</span>';
+            return '<span class="wbi-delta positive">' . esc_html__( 'Subió', 'wbi-suite' ) . ' +' . esc_html( $delta ) . '%</span>';
         }
         if ( $delta < 0 ) {
-            return '<span class="wbi-delta negative">' . esc_html__( 'Bajó', 'wbi-suite' ) . ' ' . esc_html( abs( $delta ) ) . '%</span>';
+            return '<span class="wbi-delta negative">' . esc_html__( 'Bajó', 'wbi-suite' ) . ' -' . esc_html( abs( $delta ) ) . '%</span>';
         }
         return '<span class="wbi-delta neutral">' . esc_html__( 'Sin cambios (0%)', 'wbi-suite' ) . '</span>';
     }
