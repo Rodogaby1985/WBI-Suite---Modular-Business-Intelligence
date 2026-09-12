@@ -785,6 +785,10 @@
     color: var(--wbi-muted);
 }
 
+.wbi-table-spaced {
+    margin-bottom: var(--wbi-space-4);
+}
+
 .wbi-pagination .tablenav-pages {
     margin: 0;
     display: inline-flex;

@@ -807,16 +807,18 @@ class WBI_Documents_Module {
             $total_pages = 1;
         }
 
-        $export_url = WBI_Admin_Query_Helper::build_url(
-            admin_url( 'admin-post.php' ),
-            array(
-                'action'      => 'wbi_document_export_csv',
-                'export_type' => 'invoices',
-                'date_from'   => $date_from,
-                'date_to'     => $date_to,
-                'inv_type'    => $type_filter,
-                '_wpnonce'    => wp_create_nonce( 'wbi_invoice_export' ),
-            )
+        $export_url = wp_nonce_url(
+            add_query_arg(
+                array(
+                    'action'      => 'wbi_document_export_csv',
+                    'export_type' => 'invoices',
+                    'date_from'   => $date_from,
+                    'date_to'     => $date_to,
+                    'inv_type'    => $type_filter,
+                ),
+                admin_url( 'admin-post.php' )
+            ),
+            'wbi_invoice_export'
         );
 
         $base_url = add_query_arg(
@@ -971,15 +973,17 @@ class WBI_Documents_Module {
             $total_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : max( 1, (int) ceil( $total / $per_page ) );
         }
 
-        $export_url = WBI_Admin_Query_Helper::build_url(
-            admin_url( 'admin-post.php' ),
-            array(
-                'action'      => 'wbi_document_export_csv',
-                'export_type' => 'remitos',
-                'date_from'   => $date_from,
-                'date_to'     => $date_to,
-                '_wpnonce'    => wp_create_nonce( 'wbi_remito_export' ),
-            )
+        $export_url = wp_nonce_url(
+            add_query_arg(
+                array(
+                    'action'      => 'wbi_document_export_csv',
+                    'export_type' => 'remitos',
+                    'date_from'   => $date_from,
+                    'date_to'     => $date_to,
+                ),
+                admin_url( 'admin-post.php' )
+            ),
+            'wbi_remito_export'
         );
 
         $base_url = add_query_arg(
@@ -1203,7 +1207,7 @@ class WBI_Documents_Module {
             ?>
             <section class="wbi-card">
                 <h2 class="wbi-card-title">Resumen del pedido #<?php echo intval( $order_id ); ?></h2>
-                <table class="wbi-table" style="margin-bottom:16px;">
+                <table class="wbi-table wbi-table-spaced">
                     <tr><th>Pedido</th><td>#<?php echo intval( $order_id ); ?></td></tr>
                     <tr><th>Cliente</th><td><?php echo esc_html( $client_name ); ?></td></tr>
                     <tr><th>Dirección</th><td><?php echo esc_html( $order->get_billing_address_1() . ', ' . $order->get_billing_city() ); ?></td></tr>
@@ -1241,7 +1245,7 @@ class WBI_Documents_Module {
             ?>
             <section class="wbi-card">
                 <h2 class="wbi-card-title">Resumen del pedido #<?php echo intval( $order_id ); ?></h2>
-                <table class="wbi-table" style="margin-bottom:16px;">
+                <table class="wbi-table wbi-table-spaced">
                     <tr><th>Pedido</th><td>#<?php echo intval( $order_id ); ?></td></tr>
                     <tr><th>Cliente</th><td><?php echo esc_html( $client_name ); ?></td></tr>
                     <tr><th>Dirección</th><td><?php echo esc_html( $order->get_billing_address_1() . ', ' . $order->get_billing_city() ); ?></td></tr>
