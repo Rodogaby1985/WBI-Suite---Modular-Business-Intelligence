@@ -15,7 +15,7 @@ class WBI_Admin_Shell {
     public static function render_notice( $message, $type = 'info' ) {
         $allowed_types = array( 'success', 'warning', 'danger', 'info' );
         $type          = in_array( $type, $allowed_types, true ) ? $type : 'info';
-        $role          = in_array( $type, array( 'warning', 'danger' ), true ) ? 'alert' : 'status';
+        $role          = ( 'danger' === $type ) ? 'alert' : 'status';
 
         echo '<div class="wbi-alert wbi-alert-' . esc_attr( $type ) . '" role="' . esc_attr( $role ) . '"><p>' . wp_kses_post( $message ) . '</p></div>';
     }
