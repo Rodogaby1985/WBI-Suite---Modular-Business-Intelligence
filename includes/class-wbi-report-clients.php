@@ -70,54 +70,96 @@ class WBI_Report_Clients {
                 '_wpnonce'    => wp_create_nonce( 'wbi_export_dynamic' ),
             )
         );
+        $reset_url = admin_url( 'admin.php?page=wbi-clients-report' );
+        $tabs      = array(
+            'ranking' => array( 'label' => 'Rankings de facturación', 'url' => add_query_arg( array( 'page' => 'wbi-clients-report', 'tab' => 'ranking' ), admin_url( 'admin.php' ) ) ),
+            'active'  => array( 'label' => 'Clientes activos', 'url' => add_query_arg( array( 'page' => 'wbi-clients-report', 'tab' => 'active' ), admin_url( 'admin.php' ) ) ),
+            'zones'   => array( 'label' => 'Nuevos por zona', 'url' => add_query_arg( array( 'page' => 'wbi-clients-report', 'tab' => 'zones' ), admin_url( 'admin.php' ) ) ),
+        );
+        $back_link = array();
+
+        if ( 'zones' === $tab && '' !== $city ) {
+            $back_link = array(
+                'url'   => add_query_arg(
+                    array( 'page' => 'wbi-clients-report', 'tab' => 'zones' ),
+                    admin_url( 'admin.php' )
+                ),
+                'label' => 'Volver al listado de zonas',
+            );
+        }
 
         ?>
-        <div class="wrap">
+        <?php WBI_Admin_Shell::open_page(); ?>
             <?php if ( $date_range['has_error'] ) : ?>
-                <div class="notice notice-warning"><p><?php esc_html_e( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ); ?></p></div>
+                <?php WBI_Admin_Shell::render_notice( esc_html__( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ), 'warning' ); ?>
             <?php endif; ?>
-            <h1 class="wp-heading-inline">👥 Análisis Profundo de Clientes</h1>
-            <a href="<?php echo esc_url( $export_url ); ?>" class="page-title-action">📥 Exportar CSV</a>
-            <hr class="wp-header-end">
-            
-            <nav class="nav-tab-wrapper">
-                <a href="?page=wbi-clients-report&tab=ranking" class="nav-tab <?php echo $tab=='ranking'?'nav-tab-active':'';?>">Rankings de Facturación</a>
-                <a href="?page=wbi-clients-report&tab=active" class="nav-tab <?php echo $tab=='active'?'nav-tab-active':'';?>">Clientes Activos</a>
-                <a href="?page=wbi-clients-report&tab=zones" class="nav-tab <?php echo $tab=='zones'?'nav-tab-active':'';?>">Nuevos por Zona</a>
-            </nav>
+            <?php
+            WBI_Admin_Shell::render_header(
+                array(
+                    'title'       => 'Análisis de clientes',
+                    'description' => 'Estructura administrativa unificada para rankings, actividad reciente y altas por zona.',
+                    'back_link'   => $back_link,
+                    'actions'     => array(
+                        array(
+                            'url'        => $export_url,
+                            'label'      => 'Exportar CSV',
+                            'class'      => 'wbi-btn wbi-btn-primary',
+                            'aria_label' => 'Exportar la vista actual del análisis de clientes a CSV',
+                        ),
+                        array(
+                            'url'   => $reset_url,
+                            'label' => 'Restablecer',
+                            'class' => 'wbi-btn',
+                        ),
+                    ),
+                )
+            );
+            WBI_Admin_Shell::render_tabs( $tabs, $tab, array( 'label' => 'Secciones del análisis de clientes' ) );
+            ?>
 
             <!-- FILTRO DE FECHAS: SOLO PARA RANKING -->
             <?php if( $tab == 'ranking' ): ?>
-            <div style="background:#fff; padding:15px; border:1px solid #c3c4c7; border-top:none; margin-bottom:15px;">
-                <form method="get" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <form method="get" class="wbi-filter-panel">
+                <div class="wbi-filter-grid">
                     <input type="hidden" name="page" value="wbi-clients-report">
                     <input type="hidden" name="tab" value="<?php echo esc_attr($tab); ?>">
-                    <strong>📅 Analizar Ranking del:</strong> 
-                    <input type="date" name="start" value="<?php echo esc_attr($start); ?>"> 
-                    al <input type="date" name="end" value="<?php echo esc_attr($end); ?>">
-
-                    <strong style="margin-left:8px;">Estados:</strong>
-                    <select name="statuses[]" multiple size="4" style="height:72px; min-width:140px;" title="Mantené Ctrl/Cmd para seleccionar múltiples">
-                        <?php foreach ( $all_statuses as $val => $label ) : ?>
-                            <option value="<?php echo esc_attr($val); ?>" <?php echo in_array($val, $statuses, true) ? 'selected' : ''; ?>><?php echo esc_html($label); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <button class="button button-primary">Filtrar</button>
-                </form>
-            </div>
+                    <div class="wbi-filter-field wbi-col-3">
+                        <label for="wbi-clients-start">Desde</label>
+                        <input id="wbi-clients-start" type="date" name="start" value="<?php echo esc_attr( $start ); ?>">
+                    </div>
+                    <div class="wbi-filter-field wbi-col-3">
+                        <label for="wbi-clients-end">Hasta</label>
+                        <input id="wbi-clients-end" type="date" name="end" value="<?php echo esc_attr( $end ); ?>">
+                    </div>
+                    <div class="wbi-filter-field wbi-col-3">
+                        <label for="wbi-clients-statuses">Estados del pedido</label>
+                        <select id="wbi-clients-statuses" name="statuses[]" multiple size="4" title="Mantené Ctrl/Cmd para seleccionar múltiples">
+                            <?php foreach ( $all_statuses as $val => $label ) : ?>
+                                <option value="<?php echo esc_attr($val); ?>" <?php echo in_array($val, $statuses, true) ? 'selected' : ''; ?>><?php echo esc_html($label); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="wbi-filter-field wbi-col-3">
+                        <div class="wbi-filter-actions">
+                            <button class="wbi-btn wbi-btn-primary" type="submit">Filtrar</button>
+                            <a class="wbi-btn" href="<?php echo esc_url( add_query_arg( array( 'page' => 'wbi-clients-report', 'tab' => 'ranking' ), admin_url( 'admin.php' ) ) ); ?>">Limpiar</a>
+                        </div>
+                    </div>
+                </div>
+            </form>
             <?php endif; ?>
 
-            <div style="background:#fff; padding:20px; margin-top:10px; border:1px solid #c3c4c7;">
+            <section class="wbi-card">
                 <?php
                 if($tab=='ranking'){
                     $top = $this->engine->get_clients_ranking('revenue', $start, $end, $statuses);
-                    echo "<h3>🏆 Top Clientes ({$start} al {$end})</h3>";
+                    echo "<h3 class='wbi-card-title'>Top clientes ({$start} al {$end})</h3>";
 
                     if ( $top ) {
                         $chart_top = array_slice( $top, 0, 10 );
                         $c_labels  = wp_json_encode( array_map( function( $c ) { return $c->display_name; }, $chart_top ) );
                         $c_data    = wp_json_encode( array_map( function( $c ) { return (float) $c->total_val; }, $chart_top ) );
-                        echo '<canvas id="wbiClientsChart" style="max-height:300px; margin-bottom:20px;"></canvas>';
+                        echo '<div class="wbi-chart-container"><canvas id="wbiClientsChart" aria-label="Gráfico de dona del top de clientes por facturación"></canvas></div>';
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiClientsChart");
@@ -127,37 +169,32 @@ class WBI_Report_Clients {
                     }
 
                     echo '<div class="wbi-table-responsive">'; 
-                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Total Gastado</th><th>Cant. Pedidos</th></tr></thead><tbody>';
-                    if($top) foreach($top as $c) echo "<tr><td><strong>" . esc_html($c->display_name) . "</strong></td><td>" . esc_html($c->user_email) . "</td><td>".wc_price($c->total_val)."</td><td>" . intval($c->count_val) . "</td></tr>";
+                    echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th data-align="right">Total gastado</th><th data-align="right">Cantidad de pedidos</th></tr></thead><tbody>';
+                    if($top) foreach($top as $c) echo "<tr><td><strong>" . esc_html($c->display_name) . "</strong></td><td>" . esc_html($c->user_email) . "</td><td data-align='right'>".wc_price($c->total_val)."</td><td data-align='right'>" . intval($c->count_val) . "</td></tr>";
                     else echo "<tr><td colspan=4>No hay datos.</td></tr>";
                     echo '</tbody></table>';
                     echo '</div>';
                     
                 } elseif($tab=='active'){
                     $active = $this->engine->get_active_customers_list();
-                    echo '<h3>✅ Clientes Activos (Últimos 60 días)</h3>';
+                    echo '<h3 class="wbi-card-title">Clientes activos (últimos 60 días)</h3>';
                     echo '<div class="wbi-table-responsive">'; 
-                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Última Compra</th></tr></thead><tbody>';
-                    if($active) foreach($active as $a) echo "<tr><td>" . esc_html($a->display_name) . "</td><td>" . esc_html($a->user_email) . "</td><td>".date('d/m/Y', strtotime($a->last_buy))."</td></tr>";
+                    echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Última compra</th></tr></thead><tbody>';
+                    if($active) foreach($active as $a) echo "<tr><td>" . esc_html($a->display_name) . "</td><td>" . esc_html($a->user_email) . "</td><td>".esc_html( date_i18n( 'd/m/Y', strtotime($a->last_buy) ) )."</td></tr>";
                     else echo "<tr><td colspan=3>Sin actividad.</td></tr>";
                     echo '</tbody></table>';
                     echo '</div>';
                 } elseif($tab=='zones'){
                     if ( $city !== '' ) {
                         // Detail view: show users for the selected city
-                        $back_url = esc_url( add_query_arg(
-                            array( 'page' => 'wbi-clients-report', 'tab' => 'zones' ),
-                            admin_url( 'admin.php' )
-                        ) );
-                        echo '<p><a href="' . $back_url . '">← Volver al listado de zonas</a></p>';
                         $customers = $this->engine->get_customers_by_city( $city );
                         $count = $customers ? count( $customers ) : 0;
-                        echo '<h3>👥 Detalle de usuarios en: ' . esc_html( $city ) . ' (' . intval( $count ) . ')</h3>';
+                        echo '<h3 class="wbi-card-title">Usuarios registrados en ' . esc_html( $city ) . ' (' . intval( $count ) . ')</h3>';
                         echo '<div class="wbi-table-responsive">'; 
-                        echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Fecha de Registro</th><th>Ciudad</th></tr></thead><tbody>';
+                        echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Fecha de registro</th><th>Ciudad</th></tr></thead><tbody>';
                         if ( $customers ) {
                             foreach ( $customers as $u ) {
-                                echo '<tr><td>' . esc_html( $u->display_name ) . '</td><td>' . esc_html( $u->user_email ) . '</td><td>' . esc_html( date( 'd/m/Y', strtotime( $u->user_registered ) ) ) . '</td><td>' . esc_html( $u->city ) . '</td></tr>';
+                                echo '<tr><td>' . esc_html( $u->display_name ) . '</td><td>' . esc_html( $u->user_email ) . '</td><td>' . esc_html( date_i18n( 'd/m/Y', strtotime( $u->user_registered ) ) ) . '</td><td>' . esc_html( $u->city ) . '</td></tr>';
                             }
                         } else {
                             echo '<tr><td colspan="4">Sin datos.</td></tr>';
@@ -167,9 +204,9 @@ class WBI_Report_Clients {
                     } else {
                         // Summary view: show zones table with clickable counts
                         $zones = $this->engine->get_new_customers_zones();
-                        echo '<h3>🗺️ Nuevos registros (Últimos 60 días)</h3>';
+                        echo '<h3 class="wbi-card-title">Nuevos registros (últimos 60 días)</h3>';
                         echo '<div class="wbi-table-responsive">'; 
-                        echo '<table class="widefat striped wbi-sortable" style="max-width:500px;"><thead><tr><th>Ciudad</th><th>Nuevos Registros</th></tr></thead><tbody>';
+                        echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Ciudad</th><th data-align="right">Nuevos registros</th></tr></thead><tbody>';
                         if ( $zones ) {
                             foreach ( $zones as $z ) {
                                 if ( $z->city ) {
@@ -177,9 +214,9 @@ class WBI_Report_Clients {
                                         array( 'page' => 'wbi-clients-report', 'tab' => 'zones', 'city' => $z->city ),
                                         admin_url( 'admin.php' )
                                     ) );
-                                    echo '<tr><td>' . esc_html( $z->city ) . '</td><td><a href="' . $zone_url . '"><strong>' . intval( $z->count ) . '</strong></a></td></tr>';
+                                    echo '<tr><td>' . esc_html( $z->city ) . '</td><td data-align="right"><a href="' . $zone_url . '"><strong>' . intval( $z->count ) . '</strong></a></td></tr>';
                                 } else {
-                                    echo '<tr><td>Desconocido</td><td>' . intval( $z->count ) . '</td></tr>';
+                                    echo '<tr><td>Desconocido</td><td data-align="right">' . intval( $z->count ) . '</td></tr>';
                                 }
                             }
                         } else {
@@ -190,8 +227,8 @@ class WBI_Report_Clients {
                     }
                 }
                 ?>
-            </div>
-        </div>
+            </section>
+        <?php WBI_Admin_Shell::close_page(); ?>
         <?php
     }
 }
