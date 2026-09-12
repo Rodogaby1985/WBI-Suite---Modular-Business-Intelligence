@@ -31,7 +31,7 @@ Definidos en `:root` con variables `--wbi-*`:
 - `.wbi-card`, `.wbi-card-header`, `.wbi-card-title`, `.wbi-card-subtitle`
 - Variantes semánticas: `.wbi-card.green|blue|orange|red|indigo`
 - KPI: `.wbi-stat-card`, `.wbi-number`, `.wbi-label`, `.wbi-compare-value`
-- Comparaciones/deltas: `.wbi-delta.positive|negative|neutral` con significado textual visible (`Subió`, `Bajó`, `Sin cambios`, `Sin base comparable`)
+- Comparaciones/deltas: `.wbi-delta.positive|negative|neutral` con significado textual visible (`Subió`, `Bajó`, `Sin cambios`, `sin delta porcentual con base en cero`)
 
 ### 3) Filtros y grillas de campos
 - `.wbi-filter-panel`

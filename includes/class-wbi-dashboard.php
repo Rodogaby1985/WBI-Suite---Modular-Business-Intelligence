@@ -340,6 +340,9 @@ class WBI_Dashboard_View {
         $source_totals_json       = wp_json_encode( $source_totals );
         $status_chart_palette     = wp_json_encode( array( '#059669', '#0284c7', '#d97706', '#dc2626', '#8c3130' ) );
         $source_chart_palette     = wp_json_encode( array( '#4f46e5', '#059669', '#0284c7', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#475569' ) );
+        $chart_locale_json        = wp_json_encode( str_replace( '_', '-', get_locale() ) );
+        $chart_currency_json      = wp_json_encode( get_woocommerce_currency() );
+        $chart_decimals_json      = wp_json_encode( wc_get_price_decimals() );
 
         $best_pagination_base = add_query_arg(
             $this->get_allowed_query_args( $normalized_query_args, $allowed_query_fields, array( 'wbi_top_page' ) ),
@@ -848,13 +851,17 @@ class WBI_Dashboard_View {
                 return;
             }
 
-            var currencyFormatter = new Intl.NumberFormat('es-AR', {
+            var chartLocale = <?php echo $chart_locale_json; ?> || undefined;
+            var chartCurrency = <?php echo $chart_currency_json; ?> || 'USD';
+            var chartDecimals = <?php echo $chart_decimals_json; ?>;
+            var currencyFormatter = new Intl.NumberFormat(chartLocale, {
                 style: 'currency',
-                currency: 'ARS',
-                maximumFractionDigits: 0
+                currency: chartCurrency,
+                minimumFractionDigits: chartDecimals,
+                maximumFractionDigits: chartDecimals
             });
 
-            var numberFormatter = new Intl.NumberFormat('es-AR');
+            var numberFormatter = new Intl.NumberFormat(chartLocale);
 
             function hasMeaningfulValues(values) {
                 return Array.isArray(values) && values.some(function(value) {
@@ -1184,7 +1191,7 @@ class WBI_Dashboard_View {
 
     private function render_delta( $delta ) {
         if ( null === $delta ) {
-            return '<span class="wbi-delta neutral">' . esc_html__( 'Sin base comparable', 'wbi-suite' ) . '</span>';
+            return '<span class="wbi-delta neutral">' . esc_html__( 'Sin delta porcentual (anterior en 0)', 'wbi-suite' ) . '</span>';
         }
         if ( $delta > 0 ) {
             return '<span class="wbi-delta positive">' . esc_html__( 'Subió', 'wbi-suite' ) . ' ' . esc_html( $delta ) . '%</span>';
