@@ -176,6 +176,7 @@ class WBI_Dashboard_View {
         $c_completed  = $this->get_safe_count( $status_raw, 'wc-completed' );
         $c_processing = $this->get_safe_count( $status_raw, 'wc-processing' );
         $c_hold       = $this->get_safe_count( $status_raw, 'wc-on-hold' );
+        $c_pending    = $this->get_safe_count( $status_raw, 'wc-pending' );
         $c_cancelled  = $this->get_safe_count( $status_raw, 'wc-cancelled' );
         $c_failed     = $this->get_safe_count( $status_raw, 'wc-failed' );
 
@@ -298,10 +299,11 @@ class WBI_Dashboard_View {
             __( 'Completados', 'wbi-suite' ),
             __( 'En proceso', 'wbi-suite' ),
             __( 'En espera', 'wbi-suite' ),
+            __( 'Pendientes', 'wbi-suite' ),
             __( 'Cancelados', 'wbi-suite' ),
             __( 'Fallidos', 'wbi-suite' ),
         );
-        $status_chart_values = array( $c_completed, $c_processing, $c_hold, $c_cancelled, $c_failed );
+        $status_chart_values = array( $c_completed, $c_processing, $c_hold, $c_pending, $c_cancelled, $c_failed );
 
         $status_cards = array(
             array(
@@ -321,6 +323,12 @@ class WBI_Dashboard_View {
                 'value'       => $c_hold,
                 'accent'      => 'warning',
                 'description' => __( 'Pedidos detenidos por pago, stock o validación.', 'wbi-suite' ),
+            ),
+            array(
+                'label'       => __( 'Pendientes', 'wbi-suite' ),
+                'value'       => $c_pending,
+                'accent'      => 'primary',
+                'description' => __( 'Pedidos creados que todavía no avanzaron al siguiente estado.', 'wbi-suite' ),
             ),
             array(
                 'label'       => __( 'Cancelados o fallidos', 'wbi-suite' ),
@@ -346,7 +354,7 @@ class WBI_Dashboard_View {
         $top5_qtys_json           = wp_json_encode( $top5_qtys );
         $source_labels_json       = wp_json_encode( $source_labels );
         $source_totals_json       = wp_json_encode( $source_totals );
-        $status_chart_palette     = wp_json_encode( array( '#059669', '#0284c7', '#d97706', '#dc2626', '#8c3130' ) );
+        $status_chart_palette     = wp_json_encode( array( '#059669', '#0284c7', '#d97706', '#4f46e5', '#dc2626', '#8c3130' ) );
         $source_chart_palette     = wp_json_encode( array( '#4f46e5', '#059669', '#0284c7', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#475569' ) );
         $chart_locale_json        = wp_json_encode( str_replace( '_', '-', get_locale() ) );
         $chart_currency_json      = wp_json_encode( get_woocommerce_currency() );
@@ -864,6 +872,9 @@ class WBI_Dashboard_View {
                 document.querySelectorAll('.wbi-dashboard-chart-error').forEach(function(node) {
                     node.classList.remove('wbi-is-hidden');
                 });
+                document.querySelectorAll('.wbi-dashboard-chart-details').forEach(function(node) {
+                    node.setAttribute('open', 'open');
+                });
                 return;
             }
 
@@ -1113,7 +1124,11 @@ class WBI_Dashboard_View {
             if ( empty( $row->period ) ) {
                 continue;
             }
-            $totals_by_month[ (string) $row->period ] = isset( $row->total ) ? (float) $row->total : 0.0;
+            $month_key = $this->normalize_month_period_key( (string) $row->period );
+            if ( '' === $month_key ) {
+                continue;
+            }
+            $totals_by_month[ $month_key ] = isset( $row->total ) ? (float) $row->total : 0.0;
         }
 
         $labels = array();
@@ -1135,6 +1150,20 @@ class WBI_Dashboard_View {
             'table_labels' => $table,
             'values'       => $values,
         );
+    }
+
+    private function normalize_month_period_key( $period ) {
+        $period = trim( (string) $period );
+        if ( preg_match( '/^(\\d{4}-\\d{2})/', $period, $matches ) ) {
+            return $matches[1];
+        }
+
+        $timestamp = strtotime( $period );
+        if ( false !== $timestamp ) {
+            return gmdate( 'Y-m', $timestamp );
+        }
+
+        return '';
     }
 
     private function get_comparison_label( $compare, $prev_start, $prev_end ) {
