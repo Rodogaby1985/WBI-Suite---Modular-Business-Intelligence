@@ -279,7 +279,7 @@ class WBI_API_Module {
         if ( empty( $statuses ) ) {
             $statuses = null;
         }
-        $total = $this->engine->count_clients_ranking( $from, $to, $statuses );
+        $total = $this->engine->count_clients_ranking( 'revenue', $from, $to, $statuses );
         $data = $this->engine->get_clients_ranking( 'revenue', $from, $to, $statuses, $per_page, $offset );
         return rest_ensure_response( $this->wrap( is_array( $data ) ? $data : array(), $total, $page, $per_page ) );
     }
@@ -307,7 +307,7 @@ class WBI_API_Module {
             return array( 'id' => intval( $r->ID ), 'email' => $r->user_email, 'rfm_score' => intval( $r->score ) );
         }, $rows );
 
-        $total = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT user_id) FROM {$wpdb->usermeta} WHERE meta_key = '_wbi_score' AND meta_value != ''" );
+        $total = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT u.ID) FROM {$wpdb->users} u INNER JOIN {$wpdb->usermeta} um ON um.user_id = u.ID AND um.meta_key = '_wbi_score' WHERE um.meta_value != ''" );
         return rest_ensure_response( $this->wrap( $data, $total, $page, $per_page ) );
     }
 
@@ -348,7 +348,7 @@ class WBI_API_Module {
         $result = wc_get_orders( array(
             'meta_key'     => '_wbi_invoice_number',
             'meta_compare' => 'EXISTS',
-            'date_created' => $from . '...' . $to,
+            'date_created' => substr( $from, 0, 10 ) . '...' . substr( $to, 0, 10 ),
             'return'       => 'ids',
             'limit'        => $per_page,
             'offset'       => $offset,

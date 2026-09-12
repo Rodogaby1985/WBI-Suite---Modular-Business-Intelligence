@@ -289,7 +289,8 @@ class WBI_Metrics_Engine {
                             FROM {$this->wpdb->prefix}woocommerce_order_items i
                             JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta meta ON i.order_item_id = meta.order_item_id
                             JOIN {$this->wpdb->prefix}wc_orders o ON i.order_id = o.id
-                            WHERE o.status IN {$statuses_in}
+                            WHERE o.type = 'shop_order'
+                              AND o.status IN {$statuses_in}
                               AND meta.meta_key = '_qty' {$d}
                             GROUP BY i.order_item_name
                         ) ranked";
@@ -300,7 +301,8 @@ class WBI_Metrics_Engine {
                             FROM {$this->wpdb->prefix}woocommerce_order_items i
                             JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta meta ON i.order_item_id = meta.order_item_id
                             JOIN {$this->wpdb->posts} posts ON i.order_id = posts.ID
-                            WHERE posts.post_status IN {$statuses_in}
+                            WHERE posts.post_type = 'shop_order'
+                              AND posts.post_status IN {$statuses_in}
                               AND meta.meta_key = '_qty' {$d}
                             GROUP BY i.order_item_name
                         ) ranked";
@@ -594,8 +596,8 @@ class WBI_Metrics_Engine {
         } );
     }
 
-    public function count_clients_ranking( $s, $e, $statuses = null ) {
-        $key = 'wbi_clients_ranking_count_' . md5( $s . $e . wp_json_encode( $statuses ) );
+    public function count_clients_ranking( $by, $s, $e, $statuses = null ) {
+        $key = 'wbi_clients_ranking_count_' . md5( $by . '|' . $s . $e . wp_json_encode( $statuses ) );
         return $this->cached_query( $key, function() use ( $s, $e, $statuses ) {
             $statuses_in = $this->build_statuses_in( $statuses );
             if ( $this->is_hpos_active() ) {

@@ -399,7 +399,7 @@ class WBI_Documents_Module {
     }
 
     private function export_invoices_csv() {
-        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', gmdate( 'Y-m-d', strtotime( '-30 days' ) ), gmdate( 'Y-m-d' ) );
+        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
         $type_filter = WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
         $query_args = array(
             'meta_key'     => '_wbi_invoice_number',
@@ -664,7 +664,7 @@ class WBI_Documents_Module {
     // =========================================================================
 
     private function render_tab_invoices() {
-        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', gmdate( 'Y-m-d', strtotime( '-30 days' ) ), gmdate( 'Y-m-d' ) );
+        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
         $type_filter = WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
         $paged       = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $per_page    = 20;
