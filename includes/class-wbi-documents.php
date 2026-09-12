@@ -237,6 +237,9 @@ class WBI_Documents_Module {
 
         $order_id = absint( $_POST['order_id'] ?? 0 );
         $doc_type = sanitize_text_field( wp_unslash( $_POST['doc_type'] ?? '' ) );
+        if ( ! in_array( $doc_type, array( 'invoice', 'remito', 'orden' ), true ) ) {
+            wp_die( 'Tipo de documento inválido.' );
+        }
 
         $order = wc_get_order( $order_id );
         if ( ! $order ) wp_die( 'Pedido no encontrado.' );
@@ -247,8 +250,6 @@ class WBI_Documents_Module {
             $this->generate_remito( $order );
         } elseif ( $doc_type === 'orden' ) {
             $this->generate_orden( $order );
-        } else {
-            wp_die( 'Tipo de documento inválido.' );
         }
     }
 
