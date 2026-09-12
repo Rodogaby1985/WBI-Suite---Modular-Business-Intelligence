@@ -97,13 +97,12 @@ class WBI_POS_Cash_Admin {
         $can_see_all          = current_user_can( 'manage_woocommerce' );
 
         // ── Filters ──────────────────────────────────────────────────────────
-        $filter_user   = isset( $_GET['filter_user'] )   ? absint( $_GET['filter_user'] )                         : 0;
-        $filter_status = isset( $_GET['filter_status'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_status'] ) ) : '';
-        $filter_from   = isset( $_GET['filter_from'] )   ? sanitize_text_field( wp_unslash( $_GET['filter_from'] ) )  : '';
-        $filter_to     = isset( $_GET['filter_to'] )     ? sanitize_text_field( wp_unslash( $_GET['filter_to'] ) )    : '';
-        $current_page  = max( 1, absint( $_GET['paged'] ?? 1 ) );
+        $filter_user   = WBI_Admin_Query_Helper::get_absint( $_GET, 'filter_user', 0 );
+        $filter_status = WBI_Admin_Query_Helper::get_key( $_GET, 'filter_status', '' );
+        list( $filter_from, $filter_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'filter_from', 'filter_to', '', '' );
+        $current_page  = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $allowed_per_page = array( 10, 25, 50, 100 );
-        $requested_per_page = absint( $_GET['per_page'] ?? 25 );
+        $requested_per_page = WBI_Admin_Query_Helper::get_absint( $_GET, 'per_page', 25 );
         $per_page = in_array( $requested_per_page, $allowed_per_page, true ) ? $requested_per_page : 25;
 
         $where  = array( '1=1' );
@@ -588,10 +587,9 @@ class WBI_POS_Cash_Admin {
         $current_user_id = get_current_user_id();
         $can_see_all     = current_user_can( 'manage_woocommerce' );
 
-        $filter_user   = isset( $_GET['filter_user'] )   ? absint( $_GET['filter_user'] )                         : 0;
-        $filter_status = isset( $_GET['filter_status'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_status'] ) ) : '';
-        $filter_from   = isset( $_GET['filter_from'] )   ? sanitize_text_field( wp_unslash( $_GET['filter_from'] ) )  : '';
-        $filter_to     = isset( $_GET['filter_to'] )     ? sanitize_text_field( wp_unslash( $_GET['filter_to'] ) )    : '';
+        $filter_user   = WBI_Admin_Query_Helper::get_absint( $_GET, 'filter_user', 0 );
+        $filter_status = WBI_Admin_Query_Helper::get_key( $_GET, 'filter_status', '' );
+        list( $filter_from, $filter_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'filter_from', 'filter_to', '', '' );
 
         $where  = array( '1=1' );
         $params = array();
@@ -624,10 +622,10 @@ class WBI_POS_Cash_Admin {
         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         if ( $params ) {
             // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-            $sessions = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table_sessions} WHERE {$where_sql} ORDER BY opened_at DESC LIMIT 2000", ...$params ) );
+            $sessions = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table_sessions} WHERE {$where_sql} ORDER BY opened_at DESC", ...$params ) );
         } else {
             // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-            $sessions = $wpdb->get_results( "SELECT * FROM {$table_sessions} ORDER BY opened_at DESC LIMIT 2000" );
+            $sessions = $wpdb->get_results( "SELECT * FROM {$table_sessions} ORDER BY opened_at DESC" );
         }
         // phpcs:enable
 

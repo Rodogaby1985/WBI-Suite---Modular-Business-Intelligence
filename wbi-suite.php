@@ -252,6 +252,7 @@ class WBI_Suite_Loader {
     public function load_modules() {
         // ALWAYS load the license manager first
         require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-license.php';
+        require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-admin-query-helper.php';
         require_once plugin_dir_path( __FILE__ ) . 'includes/class-wbi-minimum-order-resolver.php';
 
         // If license is NOT active, don't load any modules

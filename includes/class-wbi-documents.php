@@ -387,7 +387,7 @@ class WBI_Documents_Module {
     public function handle_export_csv() {
         if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos.' );
 
-        $export_type = sanitize_text_field( wp_unslash( $_GET['export_type'] ?? 'invoices' ) );
+        $export_type = WBI_Admin_Query_Helper::get_key( $_GET, 'export_type', 'invoices' );
 
         if ( $export_type === 'invoices' ) {
             check_admin_referer( 'wbi_invoice_export' );
@@ -399,14 +399,27 @@ class WBI_Documents_Module {
     }
 
     private function export_invoices_csv() {
-        $order_ids = wc_get_orders( array(
+        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', gmdate( 'Y-m-d', strtotime( '-30 days' ) ), gmdate( 'Y-m-d' ) );
+        $type_filter = WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
+        $query_args = array(
             'meta_key'     => '_wbi_invoice_number',
             'meta_compare' => 'EXISTS',
-            'limit'        => 10000,
+            'date_created' => $date_from . '...' . $date_to,
             'orderby'      => 'ID',
             'order'        => 'DESC',
             'return'       => 'ids',
-        ) );
+            'limit'        => -1,
+        );
+        if ( in_array( $type_filter, array( 'A', 'B', 'C' ), true ) ) {
+            $query_args['meta_query'] = array(
+                array(
+                    'key'     => '_wbi_invoice_type',
+                    'value'   => $type_filter,
+                    'compare' => '=',
+                ),
+            );
+        }
+        $order_ids = wc_get_orders( $query_args );
 
         header( 'Content-Type: text/csv; charset=UTF-8' );
         header( 'Content-Disposition: attachment; filename="facturas-wbi-' . gmdate( 'Y-m-d' ) . '.csv"' );
@@ -435,7 +448,7 @@ class WBI_Documents_Module {
             'meta_key'     => '_wbi_remito_number',
             'meta_compare' => 'EXISTS',
             'return'       => 'ids',
-            'limit'        => 10000,
+            'limit'        => -1,
         ) );
 
         header( 'Content-Type: text/csv; charset=utf-8' );
@@ -621,10 +634,9 @@ class WBI_Documents_Module {
     // =========================================================================
 
     private function render_tab_invoices() {
-        $date_from   = isset( $_GET['date_from'] ) ? sanitize_text_field( wp_unslash( $_GET['date_from'] ) ) : gmdate( 'Y-m-d', strtotime( '-30 days' ) );
-        $date_to     = isset( $_GET['date_to'] )   ? sanitize_text_field( wp_unslash( $_GET['date_to'] ) )   : gmdate( 'Y-m-d' );
-        $type_filter = isset( $_GET['inv_type'] )  ? sanitize_text_field( wp_unslash( $_GET['inv_type'] ) )  : '';
-        $paged       = max( 1, absint( $_GET['paged'] ?? 1 ) );
+        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', gmdate( 'Y-m-d', strtotime( '-30 days' ) ), gmdate( 'Y-m-d' ) );
+        $type_filter = WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
+        $paged       = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $per_page    = 20;
         $offset      = ( $paged - 1 ) * $per_page;
 
@@ -649,11 +661,11 @@ class WBI_Documents_Module {
         $page_ids   = array_slice( $all_ids, $offset, $per_page );
 
         $export_url = wp_nonce_url(
-            admin_url( 'admin-post.php?action=wbi_document_export_csv&export_type=invoices' ),
+            admin_url( 'admin-post.php?action=wbi_document_export_csv&export_type=invoices&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) . '&inv_type=' . urlencode( $type_filter ) ),
             'wbi_invoice_export'
         );
 
-        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=invoices&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) );
+        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=invoices&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) . '&inv_type=' . urlencode( $type_filter ) );
         ?>
         <form method="get" style="margin-bottom:15px;">
             <input type="hidden" name="page" value="wbi-documents">

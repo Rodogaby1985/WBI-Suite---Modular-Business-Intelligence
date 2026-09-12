@@ -60,9 +60,35 @@ class WBI_Metrics_Engine {
         return $result;
     }
 
+    private function normalize_date_bounds( $start, $end ) {
+        $now = current_time( 'timestamp' );
+        list( $from, $to ) = WBI_Admin_Query_Helper::normalize_date_range(
+            array(
+                'start' => $start,
+                'end'   => $end,
+            ),
+            'start',
+            'end',
+            date( 'Y-m-01', $now ),
+            date( 'Y-m-d', $now )
+        );
+
+        return array(
+            $from . ' 00:00:00',
+            $to . ' 23:59:59',
+        );
+    }
+
+    private function get_limit_offset_sql( $limit = null, $offset = 0 ) {
+        if ( null === $limit || intval( $limit ) < 1 ) {
+            return '';
+        }
+
+        return ' LIMIT ' . intval( $limit ) . ' OFFSET ' . max( 0, intval( $offset ) );
+    }
+
     private function get_date_query( $start, $end, $alias = 'p', $col = 'post_date' ) {
-        $s = date( 'Y-m-d 00:00:00', strtotime( $start ) );
-        $e = date( 'Y-m-d 23:59:59', strtotime( $end ) );
+        list( $s, $e ) = $this->normalize_date_bounds( $start, $end );
         return $this->wpdb->prepare( " AND $alias.$col >= %s AND $alias.$col <= %s ", $s, $e );
     }
 
@@ -224,10 +250,11 @@ class WBI_Metrics_Engine {
 
     // --- 2. PRODUCTOS ---
     
-    public function get_best_sellers( $s, $e, $statuses = null ) {
-        $key = 'wbi_best_sellers_' . md5( $s . $e . wp_json_encode( $statuses ) );
-        return $this->cached_query( $key, function() use ( $s, $e, $statuses ) {
+    public function get_best_sellers( $s, $e, $statuses = null, $limit = null, $offset = 0 ) {
+        $key = 'wbi_best_sellers_' . md5( $s . $e . wp_json_encode( $statuses ) . '|' . wp_json_encode( array( $limit, $offset ) ) );
+        return $this->cached_query( $key, function() use ( $s, $e, $statuses, $limit, $offset ) {
             $statuses_in = $this->build_statuses_in( $statuses );
+            $limit_sql   = $this->get_limit_offset_sql( $limit, $offset );
             if ( $this->is_hpos_active() ) {
                 $d   = $this->get_date_query( $s, $e, 'o', 'date_created_gmt' );
                 $sql = "SELECT i.order_item_name as name, SUM(meta.meta_value) as qty
@@ -236,7 +263,7 @@ class WBI_Metrics_Engine {
                         JOIN {$this->wpdb->prefix}wc_orders o ON i.order_id=o.id
                         WHERE o.status IN {$statuses_in}
                         AND meta.meta_key='_qty' {$d}
-                        GROUP BY i.order_item_name ORDER BY qty DESC LIMIT 10";
+                        GROUP BY i.order_item_name ORDER BY qty DESC{$limit_sql}";
             } else {
                 $d   = $this->get_date_query( $s, $e, 'posts' );
                 $sql = "SELECT order_item_name as name, SUM(meta.meta_value) as qty 
@@ -245,16 +272,49 @@ class WBI_Metrics_Engine {
                         JOIN {$this->wpdb->posts} posts ON i.order_id=posts.ID 
                         WHERE posts.post_status IN {$statuses_in} 
                         AND meta.meta_key='_qty' {$d} 
-                        GROUP BY name ORDER BY qty DESC LIMIT 10";
+                        GROUP BY name ORDER BY qty DESC{$limit_sql}";
             }
             return $this->wpdb->get_results( $sql );
         } );
     }
 
-    public function get_least_sold( $s, $e, $statuses = null ) {
-        $key = 'wbi_least_sold_' . md5( $s . $e . wp_json_encode( $statuses ) );
+    public function count_best_sellers( $s, $e, $statuses = null ) {
+        $key = 'wbi_best_sellers_count_' . md5( $s . $e . wp_json_encode( $statuses ) );
         return $this->cached_query( $key, function() use ( $s, $e, $statuses ) {
             $statuses_in = $this->build_statuses_in( $statuses );
+            if ( $this->is_hpos_active() ) {
+                $d   = $this->get_date_query( $s, $e, 'o', 'date_created_gmt' );
+                $sql = "SELECT COUNT(*) FROM (
+                            SELECT i.order_item_name
+                            FROM {$this->wpdb->prefix}woocommerce_order_items i
+                            JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta meta ON i.order_item_id = meta.order_item_id
+                            JOIN {$this->wpdb->prefix}wc_orders o ON i.order_id = o.id
+                            WHERE o.status IN {$statuses_in}
+                              AND meta.meta_key = '_qty' {$d}
+                            GROUP BY i.order_item_name
+                        ) ranked";
+            } else {
+                $d   = $this->get_date_query( $s, $e, 'posts' );
+                $sql = "SELECT COUNT(*) FROM (
+                            SELECT i.order_item_name
+                            FROM {$this->wpdb->prefix}woocommerce_order_items i
+                            JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta meta ON i.order_item_id = meta.order_item_id
+                            JOIN {$this->wpdb->posts} posts ON i.order_id = posts.ID
+                            WHERE posts.post_status IN {$statuses_in}
+                              AND meta.meta_key = '_qty' {$d}
+                            GROUP BY i.order_item_name
+                        ) ranked";
+            }
+
+            return (int) $this->wpdb->get_var( $sql );
+        } );
+    }
+
+    public function get_least_sold( $s, $e, $statuses = null, $limit = null, $offset = 0 ) {
+        $key = 'wbi_least_sold_' . md5( $s . $e . wp_json_encode( $statuses ) . '|' . wp_json_encode( array( $limit, $offset ) ) );
+        return $this->cached_query( $key, function() use ( $s, $e, $statuses, $limit, $offset ) {
+            $statuses_in = $this->build_statuses_in( $statuses );
+            $limit_sql   = $this->get_limit_offset_sql( $limit, $offset );
             if ( $this->is_hpos_active() ) {
                 $d   = $this->get_date_query( $s, $e, 'o', 'date_created_gmt' );
                 $sql = "SELECT i.order_item_name as name, SUM(meta.meta_value) as qty
@@ -263,7 +323,7 @@ class WBI_Metrics_Engine {
                         JOIN {$this->wpdb->prefix}wc_orders o ON i.order_id=o.id
                         WHERE o.status IN {$statuses_in}
                         AND meta.meta_key='_qty' {$d}
-                        GROUP BY i.order_item_name ORDER BY qty ASC LIMIT 10";
+                        GROUP BY i.order_item_name ORDER BY qty ASC{$limit_sql}";
             } else {
                 $d   = $this->get_date_query( $s, $e, 'posts' );
                 $sql = "SELECT order_item_name as name, SUM(meta.meta_value) as qty 
@@ -272,10 +332,14 @@ class WBI_Metrics_Engine {
                         JOIN {$this->wpdb->posts} posts ON i.order_id=posts.ID 
                         WHERE posts.post_status IN {$statuses_in} 
                         AND meta.meta_key='_qty' {$d} 
-                        GROUP BY name ORDER BY qty ASC LIMIT 10";
+                        GROUP BY name ORDER BY qty ASC{$limit_sql}";
             }
             return $this->wpdb->get_results( $sql );
         } );
+    }
+
+    public function count_least_sold( $s, $e, $statuses = null ) {
+        return $this->count_best_sellers( $s, $e, $statuses );
     }
     
     /**
@@ -302,12 +366,14 @@ class WBI_Metrics_Engine {
     }
 
     // --- 3. STOCK (Funciones necesarias para los otros tabs) ---
-    public function get_realtime_stock() {
-        $results = $this->wpdb->get_results( "SELECT p.post_title, pm.meta_value as stock FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND p.post_status='publish' AND pm.meta_key='_stock' ORDER BY CAST(stock AS SIGNED) DESC LIMIT 100" );
+    public function get_realtime_stock( $limit = null, $offset = 0 ) {
+        $limit_sql = $this->get_limit_offset_sql( $limit, $offset );
+        $results = $this->wpdb->get_results( "SELECT p.post_title, pm.meta_value as stock FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND p.post_status='publish' AND pm.meta_key='_stock' ORDER BY CAST(stock AS SIGNED) DESC{$limit_sql}" );
         return is_array( $results ) ? $results : array();
     }
 
-    public function get_committed_stock() {
+    public function get_committed_stock( $limit = null, $offset = 0 ) {
+        $limit_sql = $this->get_limit_offset_sql( $limit, $offset );
         // Try HPOS-compatible query first (WooCommerce 7.1+ with HPOS enabled)
         if ( $this->is_hpos_active() ) {
             $sql = "SELECT i.order_item_name as name, m.meta_value as qty, o.id as order_id
@@ -316,7 +382,7 @@ class WBI_Metrics_Engine {
                     JOIN {$this->wpdb->prefix}wc_orders o ON i.order_id = o.id
                     WHERE m.meta_key = '_qty'
                     AND o.status IN ('wc-processing','wc-on-hold')
-                    LIMIT 500";
+                    ORDER BY o.date_created_gmt DESC{$limit_sql}";
             $results = $this->wpdb->get_results( $sql );
             return is_array( $results ) ? $results : array();
         }
@@ -329,13 +395,14 @@ class WBI_Metrics_Engine {
                 WHERE m.meta_key = '_qty'
                 AND p.post_type = 'shop_order'
                 AND p.post_status IN ('wc-processing','wc-on-hold')
-                LIMIT 500";
+                ORDER BY p.post_date DESC{$limit_sql}";
         $results = $this->wpdb->get_results( $sql );
         return is_array( $results ) ? $results : array();
     }
 
-    public function get_dormant_stock() {
-        $results = $this->wpdb->get_results( "SELECT p.post_title, pm.meta_value as stock, p.post_modified FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND pm.meta_key='_stock' AND pm.meta_value > 0 AND p.post_modified < DATE_SUB(NOW(), INTERVAL 90 DAY) LIMIT 200" );
+    public function get_dormant_stock( $limit = null, $offset = 0 ) {
+        $limit_sql = $this->get_limit_offset_sql( $limit, $offset );
+        $results = $this->wpdb->get_results( "SELECT p.post_title, pm.meta_value as stock, p.post_modified FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND pm.meta_key='_stock' AND pm.meta_value > 0 AND p.post_modified < DATE_SUB(NOW(), INTERVAL 90 DAY) ORDER BY p.post_modified ASC{$limit_sql}" );
         return is_array( $results ) ? $results : array();
     }
 
@@ -487,10 +554,11 @@ class WBI_Metrics_Engine {
         } );
     }
 
-    public function get_clients_ranking( $by, $s, $e, $statuses = null ) {
-        $key = 'wbi_clients_ranking_' . md5( $by . $s . $e . wp_json_encode( $statuses ) );
-        return $this->cached_query( $key, function() use ( $by, $s, $e, $statuses ) {
+    public function get_clients_ranking( $by, $s, $e, $statuses = null, $limit = null, $offset = 0 ) {
+        $key = 'wbi_clients_ranking_' . md5( $by . $s . $e . wp_json_encode( $statuses ) . '|' . wp_json_encode( array( $limit, $offset ) ) );
+        return $this->cached_query( $key, function() use ( $by, $s, $e, $statuses, $limit, $offset ) {
             $statuses_in = $this->build_statuses_in( $statuses );
+            $limit_sql   = $this->get_limit_offset_sql( $limit, $offset );
             if ( $this->is_hpos_active() ) {
                 $d   = $this->get_date_query( $s, $e, 'o', 'date_created_gmt' );
                 $sql = "SELECT u.display_name, u.user_email,
@@ -503,13 +571,12 @@ class WBI_Metrics_Engine {
                         AND o.customer_id > 0
                         {$d}
                         GROUP BY u.ID
-                        ORDER BY total_val DESC
-                        LIMIT 50";
+                        ORDER BY total_val DESC{$limit_sql}";
             } else {
                 $d   = $this->get_date_query( $s, $e, 'p' );
                 $sql = "SELECT u.display_name, u.user_email,
-                               SUM(pm_total.meta_value) as total_val,
-                               COUNT(p.ID) as count_val
+                              SUM(pm_total.meta_value) as total_val,
+                              COUNT(p.ID) as count_val
                         FROM {$this->wpdb->posts} p
                         JOIN {$this->wpdb->postmeta} pm_cust
                              ON p.ID = pm_cust.post_id AND pm_cust.meta_key = '_customer_user'
@@ -521,25 +588,72 @@ class WBI_Metrics_Engine {
                         AND pm_cust.meta_value > 0
                         {$d}
                         GROUP BY u.ID
-                        ORDER BY total_val DESC
-                        LIMIT 50";
+                        ORDER BY total_val DESC{$limit_sql}";
             }
             return $this->wpdb->get_results( $sql );
         } );
     }
 
+    public function count_clients_ranking( $s, $e, $statuses = null ) {
+        $key = 'wbi_clients_ranking_count_' . md5( $s . $e . wp_json_encode( $statuses ) );
+        return $this->cached_query( $key, function() use ( $s, $e, $statuses ) {
+            $statuses_in = $this->build_statuses_in( $statuses );
+            if ( $this->is_hpos_active() ) {
+                $d   = $this->get_date_query( $s, $e, 'o', 'date_created_gmt' );
+                $sql = "SELECT COUNT(*) FROM (
+                           SELECT u.ID
+                           FROM {$this->wpdb->prefix}wc_orders o
+                           JOIN {$this->wpdb->users} u ON u.ID = o.customer_id
+                           WHERE o.type = 'shop_order'
+                             AND o.status IN {$statuses_in}
+                             AND o.customer_id > 0
+                             {$d}
+                           GROUP BY u.ID
+                        ) ranked";
+            } else {
+                $d   = $this->get_date_query( $s, $e, 'p' );
+                $sql = "SELECT COUNT(*) FROM (
+                           SELECT u.ID
+                           FROM {$this->wpdb->posts} p
+                           JOIN {$this->wpdb->postmeta} pm_cust
+                                ON p.ID = pm_cust.post_id AND pm_cust.meta_key = '_customer_user'
+                           JOIN {$this->wpdb->users} u ON u.ID = pm_cust.meta_value
+                           WHERE p.post_type = 'shop_order'
+                             AND p.post_status IN {$statuses_in}
+                             AND pm_cust.meta_value > 0
+                             {$d}
+                           GROUP BY u.ID
+                        ) ranked";
+            }
+
+            return (int) $this->wpdb->get_var( $sql );
+        } );
+    }
+
     public function get_active_customers_list() {
-        $sql = "SELECT u.display_name, u.user_email, MAX(p.post_date) as last_buy
-                FROM {$this->wpdb->posts} p
-                JOIN {$this->wpdb->postmeta} pm
-                     ON p.ID = pm.post_id AND pm.meta_key = '_customer_user'
-                JOIN {$this->wpdb->users} u ON u.ID = pm.meta_value
-                WHERE p.post_type = 'shop_order'
-                AND p.post_status IN ('wc-completed','wc-processing')
-                AND pm.meta_value > 0
-                AND p.post_date >= DATE_SUB(NOW(), INTERVAL 60 DAY)
-                GROUP BY u.ID
-                ORDER BY last_buy DESC";
+        if ( $this->is_hpos_active() ) {
+            $sql = "SELECT u.display_name, u.user_email, MAX(o.date_created_gmt) as last_buy
+                    FROM {$this->wpdb->prefix}wc_orders o
+                    JOIN {$this->wpdb->users} u ON u.ID = o.customer_id
+                    WHERE o.type = 'shop_order'
+                    AND o.status IN ('wc-completed','wc-processing')
+                    AND o.customer_id > 0
+                    AND o.date_created_gmt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 60 DAY)
+                    GROUP BY u.ID
+                    ORDER BY last_buy DESC";
+        } else {
+            $sql = "SELECT u.display_name, u.user_email, MAX(p.post_date) as last_buy
+                    FROM {$this->wpdb->posts} p
+                    JOIN {$this->wpdb->postmeta} pm
+                         ON p.ID = pm.post_id AND pm.meta_key = '_customer_user'
+                    JOIN {$this->wpdb->users} u ON u.ID = pm.meta_value
+                    WHERE p.post_type = 'shop_order'
+                    AND p.post_status IN ('wc-completed','wc-processing')
+                    AND pm.meta_value > 0
+                    AND p.post_date >= DATE_SUB(NOW(), INTERVAL 60 DAY)
+                    GROUP BY u.ID
+                    ORDER BY last_buy DESC";
+        }
         return $this->wpdb->get_results( $sql );
     }
 
@@ -730,8 +844,11 @@ class WBI_Metrics_Engine {
      * @return array
      */
     public function get_products_with_costs( $per_page = 20, $offset = 0, $category_id = 0, $min_margin = -999, $max_margin = 999 ) {
-        $per_page = max( 1, intval( $per_page ) );
-        $offset   = max( 0, intval( $offset ) );
+        $offset    = max( 0, intval( $offset ) );
+        $limit_sql = '';
+        if ( null !== $per_page && intval( $per_page ) > 0 ) {
+            $limit_sql = ' LIMIT ' . intval( $per_page ) . ' OFFSET ' . $offset;
+        }
 
         $cat_join_sql  = '';
         $cat_where_sql = '';
@@ -762,8 +879,7 @@ class WBI_Metrics_Engine {
                       {$cat_where_sql}
                   ) AS base
                   WHERE margin >= {$min_m} AND margin <= {$max_m}
-                  ORDER BY post_title ASC
-                  LIMIT " . intval( $per_page ) . " OFFSET " . intval( $offset );
+                  ORDER BY post_title ASC{$limit_sql}";
 
         return $this->wpdb->get_results( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
     }
@@ -822,22 +938,34 @@ class WBI_Metrics_Engine {
     public function get_tax_summary( $start, $end, $statuses = null ) {
         $key = 'wbi_tax_summary_' . md5( $start . $end . wp_json_encode( $statuses ) );
         return $this->cached_query( $key, function() use ( $start, $end, $statuses ) {
-            $d           = $this->get_date_query( $start, $end, 'p' );
             $statuses_in = $this->build_statuses_in( $statuses );
-
-            $sql = "SELECT pm_state.meta_value AS province,
-                           COUNT(p.ID) AS orders,
-                           SUM(CAST(pm_total.meta_value AS DECIMAL(12,2))) AS total
-                    FROM {$this->wpdb->posts} p
-                    JOIN {$this->wpdb->postmeta} pm_state
-                         ON p.ID = pm_state.post_id AND pm_state.meta_key = '_billing_state'
-                    JOIN {$this->wpdb->postmeta} pm_total
-                         ON p.ID = pm_total.post_id AND pm_total.meta_key = '_order_total'
-                    WHERE p.post_type = 'shop_order'
-                    AND p.post_status IN {$statuses_in}
-                    {$d}
-                    GROUP BY pm_state.meta_value
-                    ORDER BY total DESC";
+            if ( $this->is_hpos_active() ) {
+                $d = $this->get_date_query( $start, $end, 'o', 'date_created_gmt' );
+                $sql = "SELECT o.billing_state AS province,
+                               COUNT(o.id) AS orders,
+                               SUM(o.total_amount) AS total
+                        FROM {$this->wpdb->prefix}wc_orders o
+                        WHERE o.type = 'shop_order'
+                        AND o.status IN {$statuses_in}
+                        {$d}
+                        GROUP BY o.billing_state
+                        ORDER BY total DESC";
+            } else {
+                $d = $this->get_date_query( $start, $end, 'p' );
+                $sql = "SELECT pm_state.meta_value AS province,
+                               COUNT(p.ID) AS orders,
+                               SUM(CAST(pm_total.meta_value AS DECIMAL(12,2))) AS total
+                        FROM {$this->wpdb->posts} p
+                        JOIN {$this->wpdb->postmeta} pm_state
+                             ON p.ID = pm_state.post_id AND pm_state.meta_key = '_billing_state'
+                        JOIN {$this->wpdb->postmeta} pm_total
+                             ON p.ID = pm_total.post_id AND pm_total.meta_key = '_order_total'
+                        WHERE p.post_type = 'shop_order'
+                        AND p.post_status IN {$statuses_in}
+                        {$d}
+                        GROUP BY pm_state.meta_value
+                        ORDER BY total DESC";
+            }
 
             $rows       = $this->wpdb->get_results( $sql );
             $tax_config = get_option( 'wbi_tax_config', array() );

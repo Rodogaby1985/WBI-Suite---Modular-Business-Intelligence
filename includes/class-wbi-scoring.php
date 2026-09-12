@@ -218,9 +218,9 @@ class WBI_Scoring_Module {
         }
 
         $per_page   = 20;
-        $paged      = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
+        $paged      = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $offset     = ( $paged - 1 ) * $per_page;
-        $filter_class = isset( $_GET['score_class'] ) ? sanitize_text_field( wp_unslash( $_GET['score_class'] ) ) : '';
+        $filter_class = WBI_Admin_Query_Helper::get_key( $_GET, 'score_class', '' );
 
         // Count distribution
         $distribution = $this->get_class_distribution();
@@ -233,6 +233,7 @@ class WBI_Scoring_Module {
 
         $export_url = add_query_arg( array(
             'action'   => 'wbi_scoring_export',
+            'score_class' => $filter_class ?: null,
             '_wpnonce' => wp_create_nonce( 'wbi_scoring_export' ),
         ), admin_url( 'admin-post.php' ) );
 
@@ -476,20 +477,21 @@ class WBI_Scoring_Module {
     // Public method for CSV export
     // -------------------------------------------------------------------------
 
-    public static function get_all_scored_users_for_export() {
+    public static function get_all_scored_users_for_export( $class_filter = '' ) {
         global $wpdb;
-        return $wpdb->get_results(
-            "SELECT u.ID, u.display_name, u.user_email,
-                    um_score.meta_value AS score,
-                    um_class.meta_value AS class,
-                    um_date.meta_value  AS score_date
-             FROM {$wpdb->users} u
-             JOIN {$wpdb->usermeta} um_score ON u.ID = um_score.user_id AND um_score.meta_key = '_wbi_score'
-             JOIN {$wpdb->usermeta} um_class ON u.ID = um_class.user_id AND um_class.meta_key = '_wbi_score_class'
-             LEFT JOIN {$wpdb->usermeta} um_date  ON u.ID = um_date.user_id  AND um_date.meta_key  = '_wbi_score_date'
-             ORDER BY CAST(um_score.meta_value AS SIGNED) DESC
-             LIMIT 10000"
-        );
+        $sql = "SELECT u.ID, u.display_name, u.user_email,
+                       um_score.meta_value AS score,
+                       um_class.meta_value AS class,
+                       um_date.meta_value  AS score_date
+                FROM {$wpdb->users} u
+                JOIN {$wpdb->usermeta} um_score ON u.ID = um_score.user_id AND um_score.meta_key = '_wbi_score'
+                JOIN {$wpdb->usermeta} um_class ON u.ID = um_class.user_id AND um_class.meta_key = '_wbi_score_class'
+                LEFT JOIN {$wpdb->usermeta} um_date  ON u.ID = um_date.user_id  AND um_date.meta_key  = '_wbi_score_date'";
+        if ( $class_filter ) {
+            $sql .= $wpdb->prepare( ' WHERE um_class.meta_value = %s', $class_filter );
+        }
+        $sql .= ' ORDER BY CAST(um_score.meta_value AS SIGNED) DESC';
+        return $wpdb->get_results( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
     }
 
     // -------------------------------------------------------------------------
@@ -501,6 +503,11 @@ class WBI_Scoring_Module {
         if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos' );
 
         global $wpdb;
+        $filter_class = WBI_Admin_Query_Helper::get_key( $_GET, 'score_class', '' );
+        $class_where  = '';
+        if ( $filter_class ) {
+            $class_where = $wpdb->prepare( ' WHERE um_class.meta_value = %s', $filter_class );
+        }
 
         $users = $wpdb->get_results(
             "SELECT u.ID, u.display_name, u.user_email,
@@ -517,9 +524,9 @@ class WBI_Scoring_Module {
              LEFT JOIN {$wpdb->usermeta} um_freq  ON u.ID = um_freq.user_id  AND um_freq.meta_key  = '_wbi_score_frequency'
              LEFT JOIN {$wpdb->usermeta} um_mon   ON u.ID = um_mon.user_id   AND um_mon.meta_key   = '_wbi_score_monetary'
              LEFT JOIN {$wpdb->usermeta} um_seg   ON u.ID = um_seg.user_id   AND um_seg.meta_key   = '_wbi_score_segment'
-             ORDER BY CAST(um_score.meta_value AS SIGNED) DESC
-             LIMIT 10000"
-        );
+             {$class_where}
+             ORDER BY CAST(um_score.meta_value AS SIGNED) DESC"
+        ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
         header( 'Content-Type: text/csv; charset=utf-8' );
         header( 'Content-Disposition: attachment; filename="wbi-scoring-export-' . gmdate( 'Y-m-d' ) . '.csv"' );

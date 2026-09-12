@@ -104,11 +104,16 @@ class WBI_Costs_Module {
 
         $engine      = WBI_Metrics_Engine::instance();
         $per_page    = 20;
-        $paged       = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
+        $paged       = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $offset      = ( $paged - 1 ) * $per_page;
-        $category_id = isset( $_GET['category_id'] ) ? intval( $_GET['category_id'] ) : 0;
-        $min_margin  = isset( $_GET['min_margin'] ) ? floatval( $_GET['min_margin'] ) : -999;
-        $max_margin  = isset( $_GET['max_margin'] ) ? floatval( $_GET['max_margin'] ) : 999;
+        $category_id = WBI_Admin_Query_Helper::get_absint( $_GET, 'category_id', 0 );
+        $min_margin  = WBI_Admin_Query_Helper::get_float( $_GET, 'min_margin', -999 );
+        $max_margin  = WBI_Admin_Query_Helper::get_float( $_GET, 'max_margin', 999 );
+        if ( $min_margin > $max_margin ) {
+            $swap       = $min_margin;
+            $min_margin = $max_margin;
+            $max_margin = $swap;
+        }
 
         $alert_threshold = floatval( get_option( 'wbi_margin_alert_threshold', 20 ) );
 
@@ -122,7 +127,10 @@ class WBI_Costs_Module {
         $export_url = add_query_arg( array(
             'action'      => 'wbi_export_dynamic',
             'report_type' => 'costs_margins',
-            '_wpnonce'    => wp_create_nonce( 'wbi_export' ),
+            'category_id' => $category_id ?: null,
+            'min_margin'  => $min_margin !== -999.0 ? $min_margin : null,
+            'max_margin'  => $max_margin !== 999.0 ? $max_margin : null,
+            '_wpnonce'    => wp_create_nonce( 'wbi_export_dynamic' ),
         ), admin_url( 'admin-post.php' ) );
         ?>
         <div class="wrap">

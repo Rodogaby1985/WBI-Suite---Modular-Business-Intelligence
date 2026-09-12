@@ -21,11 +21,18 @@ class WBI_Report_Products {
     }
 
     public function render() {
-        $tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'stock';
-        $start = isset($_GET['start']) ? sanitize_text_field($_GET['start']) : date('Y-01-01');
-        $end   = isset($_GET['end'])   ? sanitize_text_field($_GET['end'])   : date('Y-m-d');
+        $tab = WBI_Admin_Query_Helper::get_key( $_GET, 'tab', 'stock' );
+        list( $start, $end ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'start', 'end', date( 'Y-01-01' ), date( 'Y-m-d' ) );
         $default_statuses = array('wc-completed', 'wc-processing');
-        $statuses = isset($_GET['statuses']) ? array_map('sanitize_text_field', (array)$_GET['statuses']) : $default_statuses;
+        $statuses = WBI_Admin_Query_Helper::get_string_array( $_GET, 'statuses', array_keys( array(
+            'wc-completed' => true,
+            'wc-processing' => true,
+            'wc-on-hold' => true,
+            'wc-pending' => true,
+        ) ) );
+        if ( empty( $statuses ) ) {
+            $statuses = $default_statuses;
+        }
 
         $all_statuses = array(
             'wc-completed'  => '✅ Completado',
@@ -43,8 +50,17 @@ class WBI_Report_Products {
             'worst'     => 'worst_sellers'
         ];
         $export_type = $export_map[$tab] ?? 'stock_real';
-        $statuses_qs = implode('', array_map(function($s){ return '&statuses[]=' . rawurlencode($s); }, $statuses));
-        $export_url = admin_url("admin-post.php?action=wbi_export_dynamic&report_type={$export_type}&start={$start}&end={$end}{$statuses_qs}");
+        $export_url = WBI_Admin_Query_Helper::build_url(
+            admin_url( 'admin-post.php' ),
+            array(
+                'action'      => 'wbi_export_dynamic',
+                'report_type' => $export_type,
+                'start'       => $start,
+                'end'         => $end,
+                'statuses'    => $statuses,
+                '_wpnonce'    => wp_create_nonce( 'wbi_export_dynamic' ),
+            )
+        );
 
         ?>
         <div class="wrap">

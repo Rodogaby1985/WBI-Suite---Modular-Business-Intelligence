@@ -896,11 +896,11 @@ class WBI_Email_Marketing_Module {
     private function render_subscribers_page() {
         $base_url   = admin_url( 'admin.php?page=wbi-email-marketing' );
         $subs_url   = $base_url . '&action=subscribers';
-        $search     = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '';
-        $status_f   = isset( $_GET['status'] ) ? sanitize_key( $_GET['status'] ) : '';
-        $current_page = max( 1, absint( $_GET['paged'] ?? 1 ) );
+        $search       = WBI_Admin_Query_Helper::get_string( $_GET, 's', '' );
+        $status_f     = WBI_Admin_Query_Helper::get_key( $_GET, 'status', '' );
+        $current_page = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $allowed_per_page = array( 10, 25, 50, 100 );
-        $requested_per_page = absint( $_GET['per_page'] ?? 25 );
+        $requested_per_page = WBI_Admin_Query_Helper::get_absint( $_GET, 'per_page', 25 );
         $per_page = in_array( $requested_per_page, $allowed_per_page, true ) ? $requested_per_page : 25;
 
         $where  = array( '1=1' );
@@ -955,7 +955,7 @@ class WBI_Email_Marketing_Module {
                 </div>
                 <div>
                     <h4 style="margin:0 0 8px;">Exportar CSV</h4>
-                    <a href="<?php echo esc_url( add_query_arg( array( 'wbi_export_subscribers' => 1, '_wpnonce' => wp_create_nonce( 'wbi_export_subs' ) ), admin_url( 'admin.php' ) ) ); ?>" class="button">
+                    <a href="<?php echo esc_url( add_query_arg( array_filter( array( 'page' => 'wbi-email-marketing', 'action' => 'subscribers', 'wbi_export_subscribers' => 1, 's' => $search ?: null, 'status' => $status_f ?: null, '_wpnonce' => wp_create_nonce( 'wbi_export_subs' ) ) ), admin_url( 'admin.php' ) ) ); ?>" class="button">
                         ⬇ Exportar suscriptores
                     </a>
                 </div>
@@ -1144,13 +1144,29 @@ class WBI_Email_Marketing_Module {
         // Handle CSV export
         if ( isset( $_GET['wbi_export_subscribers'] ) && isset( $_GET['_wpnonce'] ) ) {
             if ( wp_verify_nonce( sanitize_key( $_GET['_wpnonce'] ), 'wbi_export_subs' ) ) {
-                $this->export_subscribers_csv();
+                $this->export_subscribers_csv( $search, $status_f );
             }
         }
     }
 
-    private function export_subscribers_csv() {
-        $all = $this->db->get_results( "SELECT email, first_name, last_name, source, status, subscribed_at FROM {$this->tbl_subscribers} ORDER BY subscribed_at DESC" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+    private function export_subscribers_csv( $search = '', $status_f = '' ) {
+        $where  = array( '1=1' );
+        $params = array();
+        if ( $search ) {
+            $where[]  = '(email LIKE %s OR first_name LIKE %s OR last_name LIKE %s)';
+            $like     = '%' . $this->db->esc_like( $search ) . '%';
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
+        if ( $status_f ) {
+            $where[]  = 'status = %s';
+            $params[] = $status_f;
+        }
+        $sql = "SELECT email, first_name, last_name, source, status, subscribed_at FROM {$this->tbl_subscribers} WHERE " . implode( ' AND ', $where ) . ' ORDER BY subscribed_at DESC';
+        $all = $params
+            ? $this->db->get_results( $this->db->prepare( $sql, $params ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            : $this->db->get_results( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         header( 'Content-Type: text/csv; charset=UTF-8' );
         header( 'Content-Disposition: attachment; filename="wbi-subscribers-' . gmdate( 'Y-m-d' ) . '.csv"' );
         $out = fopen( 'php://output', 'w' );

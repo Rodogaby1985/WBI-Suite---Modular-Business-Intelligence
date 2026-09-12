@@ -115,8 +115,16 @@ class WBI_API_Module {
     // -------------------------------------------------------------------------
 
     private function get_date_range( WP_REST_Request $request ) {
-        $from = sanitize_text_field( $request->get_param( 'date_from' ) ?? date( 'Y-m-d', strtotime( '-30 days' ) ) );
-        $to   = sanitize_text_field( $request->get_param( 'date_to' )   ?? date( 'Y-m-d' ) );
+        list( $from, $to ) = WBI_Admin_Query_Helper::normalize_date_range(
+            array(
+                'date_from' => $request->get_param( 'date_from' ),
+                'date_to'   => $request->get_param( 'date_to' ),
+            ),
+            'date_from',
+            'date_to',
+            date( 'Y-m-d', strtotime( '-30 days' ) ),
+            date( 'Y-m-d' )
+        );
         return array( $from . ' 00:00:00', $to . ' 23:59:59' );
     }
 
@@ -169,8 +177,10 @@ class WBI_API_Module {
         $this->log_request( '/products/best-sellers' );
 
         list( $from, $to ) = $this->get_date_range( $request );
-        $data = $this->engine->get_best_sellers( $from, $to );
-        return rest_ensure_response( $this->wrap( is_array( $data ) ? array_slice( $data, 0, 10 ) : array() ) );
+        list( $per_page, $page, $offset ) = $this->get_pagination( $request );
+        $total = $this->engine->count_best_sellers( $from, $to );
+        $data = $this->engine->get_best_sellers( $from, $to, null, $per_page, $offset );
+        return rest_ensure_response( $this->wrap( is_array( $data ) ? $data : array(), $total, $page, $per_page ) );
     }
 
     public function endpoint_stock( WP_REST_Request $request ) {
@@ -227,19 +237,15 @@ class WBI_API_Module {
     }
 
     public function endpoint_order_status_counts( WP_REST_Request $request ) {
-        global $wpdb;
         if ( ! $this->authenticate( $request ) ) { $this->log_request( '/orders/status-counts', 401 ); return $this->auth_error(); }
         $this->log_request( '/orders/status-counts' );
 
-        $rows = $wpdb->get_results(
-            "SELECT post_status, COUNT(*) AS count
-             FROM {$wpdb->posts}
-             WHERE post_type = 'shop_order'
-             GROUP BY post_status"
-        );
+        $rows = $this->engine->get_order_status_counts();
         $data = array();
         foreach ( $rows as $row ) {
-            $data[ $row->post_status ] = intval( $row->count );
+            if ( isset( $row->post_status, $row->count ) ) {
+                $data[ $row->post_status ] = intval( $row->count );
+            }
         }
         return rest_ensure_response( $this->wrap( $data ) );
     }
@@ -250,9 +256,9 @@ class WBI_API_Module {
 
         list( $from, $to ) = $this->get_date_range( $request );
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
-        $data = $this->engine->get_clients_ranking( 'revenue', $from, $to );
-        $data = is_array( $data ) ? array_slice( $data, $offset, $per_page ) : array();
-        return rest_ensure_response( $this->wrap( $data, null, $page, $per_page ) );
+        $total = $this->engine->count_clients_ranking( $from, $to );
+        $data = $this->engine->get_clients_ranking( 'revenue', $from, $to, null, $per_page, $offset );
+        return rest_ensure_response( $this->wrap( is_array( $data ) ? $data : array(), $total, $page, $per_page ) );
     }
 
     public function endpoint_customer_scoring( WP_REST_Request $request ) {
@@ -268,7 +274,7 @@ class WBI_API_Module {
         $rows = $wpdb->get_results( $wpdb->prepare(
             "SELECT u.ID, u.user_email, um.meta_value AS score
              FROM {$wpdb->users} u
-             INNER JOIN {$wpdb->usermeta} um ON um.user_id = u.ID AND um.meta_key = 'wbi_rfm_score'
+             INNER JOIN {$wpdb->usermeta} um ON um.user_id = u.ID AND um.meta_key = '_wbi_score'
              ORDER BY CAST(um.meta_value AS SIGNED) DESC
              LIMIT %d OFFSET %d",
             $per_page, $offset
@@ -278,7 +284,8 @@ class WBI_API_Module {
             return array( 'id' => intval( $r->ID ), 'email' => $r->user_email, 'rfm_score' => intval( $r->score ) );
         }, $rows );
 
-        return rest_ensure_response( $this->wrap( $data, null, $page, $per_page ) );
+        $total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->usermeta} WHERE meta_key = '_wbi_score' AND meta_value != ''" );
+        return rest_ensure_response( $this->wrap( $data, $total, $page, $per_page ) );
     }
 
     public function endpoint_sales_by_period( WP_REST_Request $request ) {
@@ -305,7 +312,6 @@ class WBI_API_Module {
     }
 
     public function endpoint_invoices( WP_REST_Request $request ) {
-        global $wpdb;
         if ( ! $this->authenticate( $request ) ) { $this->log_request( '/invoices', 401 ); return $this->auth_error(); }
         $this->log_request( '/invoices' );
 
@@ -316,30 +322,32 @@ class WBI_API_Module {
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
         list( $from, $to ) = $this->get_date_range( $request );
 
-        $rows = $wpdb->get_results( $wpdb->prepare(
-            "SELECT pm.post_id, pm.meta_value AS inv_number, pm2.meta_value AS inv_type, p.post_date
-             FROM {$wpdb->postmeta} pm
-             INNER JOIN {$wpdb->postmeta} pm2 ON pm2.post_id = pm.post_id AND pm2.meta_key = '_wbi_invoice_type'
-             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-             WHERE pm.meta_key = '_wbi_invoice_number'
-             AND p.post_date BETWEEN %s AND %s
-             ORDER BY pm.post_id DESC
-             LIMIT %d OFFSET %d",
-            $from, $to, $per_page, $offset
+        $result = wc_get_orders( array(
+            'meta_key'     => '_wbi_invoice_number',
+            'meta_compare' => 'EXISTS',
+            'date_created' => substr( $from, 0, 10 ) . '...' . substr( $to, 0, 10 ),
+            'return'       => 'ids',
+            'limit'        => $per_page,
+            'offset'       => $offset,
+            'orderby'      => 'ID',
+            'order'        => 'DESC',
+            'paginate'     => true,
         ) );
+        $order_ids = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+        $total     = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $order_ids );
 
-        $data = array_map( function( $r ) {
-            $order = wc_get_order( intval( $r->post_id ) );
+        $data = array_map( function( $order_id ) {
+            $order = wc_get_order( intval( $order_id ) );
             return array(
-                'order_id'   => intval( $r->post_id ),
-                'inv_number' => $r->inv_number,
-                'inv_type'   => $r->inv_type,
-                'date'       => $r->post_date,
+                'order_id'   => intval( $order_id ),
+                'inv_number' => $order ? $order->get_meta( '_wbi_invoice_number', true ) : '',
+                'inv_type'   => $order ? $order->get_meta( '_wbi_invoice_type', true ) : '',
+                'date'       => $order && $order->get_date_created() ? $order->get_date_created()->date( 'Y-m-d H:i:s' ) : null,
                 'total'      => $order ? floatval( $order->get_total() ) : null,
             );
-        }, $rows );
+        }, $order_ids );
 
-        return rest_ensure_response( $this->wrap( $data, count( $data ), $page, $per_page ) );
+        return rest_ensure_response( $this->wrap( $data, $total, $page, $per_page ) );
     }
 
     public function endpoint_notifications( WP_REST_Request $request ) {
