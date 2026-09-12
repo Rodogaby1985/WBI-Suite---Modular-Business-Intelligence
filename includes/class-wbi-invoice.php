@@ -635,7 +635,13 @@ if ( ! empty( $custom_fields ) ) :
             $batch_args['page']     = $page;
             $batch_args['paginate'] = true;
             $result                 = wc_get_orders( $batch_args );
-            $order_ids              = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+            if ( is_array( $result ) ) {
+                $order_ids = isset( $result['orders'] ) ? $result['orders'] : $result;
+                $max_pages = isset( $result['max_num_pages'] ) ? (int) $result['max_num_pages'] : 0;
+            } else {
+                $order_ids = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+                $max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : 0;
+            }
 
             foreach ( $order_ids as $oid ) {
                 $oid   = intval( $oid );
@@ -661,7 +667,6 @@ if ( ! empty( $custom_fields ) ) :
                 ) ) ) . "\n";
             }
 
-            $max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : 0;
             $has_more  = $max_pages > 0 ? $page < $max_pages : count( $order_ids ) === $batch_size;
             $page++;
         } while ( $has_more && ! empty( $order_ids ) );

@@ -955,7 +955,7 @@ class WBI_Email_Marketing_Module {
                 </div>
                 <div>
                     <h4 style="margin:0 0 8px;">Exportar CSV</h4>
-                    <a href="<?php echo esc_url( add_query_arg( array_filter( array( 'page' => 'wbi-email-marketing', 'action' => 'subscribers', 'wbi_export_subscribers' => 1, 's' => $search ?: null, 'status' => $status_f ?: null, '_wpnonce' => wp_create_nonce( 'wbi_export_subs' ) ) ), admin_url( 'admin.php' ) ) ); ?>" class="button">
+                    <a href="<?php echo esc_url( add_query_arg( array_filter( array( 'page' => 'wbi-email-marketing', 'action' => 'subscribers', 'wbi_export_subscribers' => 1, 's' => '' !== $search ? $search : null, 'status' => '' !== $status_f ? $status_f : null, '_wpnonce' => wp_create_nonce( 'wbi_export_subs' ) ), static function ( $value ) { return null !== $value && '' !== $value; } ), admin_url( 'admin.php' ) ) ); ?>" class="button">
                         ⬇ Exportar suscriptores
                     </a>
                 </div>

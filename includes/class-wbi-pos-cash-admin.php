@@ -647,19 +647,23 @@ class WBI_POS_Cash_Admin {
             'Nota cierre',
         ), ';' );
 
-        $batch_size = 500;
-        $offset     = 0;
+        $batch_size     = 500;
+        $last_opened_at = null;
+        $last_id        = 0;
         do {
             $batch_params = $params;
-            if ( $batch_params ) {
-                $batch_params[] = $batch_size;
-                $batch_params[] = $offset;
-                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-                $sessions = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table_sessions} WHERE {$where_sql} ORDER BY opened_at DESC LIMIT %d OFFSET %d", ...$batch_params ) );
-            } else {
-                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-                $sessions = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table_sessions} ORDER BY opened_at DESC LIMIT %d OFFSET %d", $batch_size, $offset ) );
+            $batch_where  = $where;
+            if ( null !== $last_opened_at ) {
+                $batch_where[]  = '(opened_at < %s OR (opened_at = %s AND id < %d))';
+                $batch_params[] = $last_opened_at;
+                $batch_params[] = $last_opened_at;
+                $batch_params[] = $last_id;
             }
+            $batch_where_sql = implode( ' AND ', $batch_where );
+            $batch_params[]  = $batch_size;
+
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+            $sessions = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table_sessions} WHERE {$batch_where_sql} ORDER BY opened_at DESC, id DESC LIMIT %d", ...$batch_params ) );
 
             foreach ( $sessions as $session ) {
                 $seller = get_userdata( $session->seller_user_id );
@@ -686,7 +690,11 @@ class WBI_POS_Cash_Admin {
                 ), ';' );
             }
 
-            $offset += $batch_size;
+            if ( ! empty( $sessions ) ) {
+                $last_session   = end( $sessions );
+                $last_opened_at = $last_session->opened_at;
+                $last_id        = (int) $last_session->id;
+            }
         } while ( count( $sessions ) === $batch_size );
 
         fclose( $out );

@@ -369,9 +369,13 @@ class WBI_API_Module {
         }
 
         $result = wc_get_orders( $query_args );
-        $order_ids = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
-        $total     = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $order_ids );
-
+        if ( is_array( $result ) ) {
+            $order_ids = isset( $result['orders'] ) ? $result['orders'] : $result;
+            $total     = isset( $result['total'] ) ? (int) $result['total'] : count( $order_ids );
+        } else {
+            $order_ids = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+            $total     = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $order_ids );
+        }
         $data = array_map( function( $order_id ) {
             $order = wc_get_order( intval( $order_id ) );
             return array(

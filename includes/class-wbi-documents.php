@@ -430,7 +430,13 @@ class WBI_Documents_Module {
             $batch_args['page']     = $page;
             $batch_args['paginate'] = true;
             $result                 = wc_get_orders( $batch_args );
-            $order_ids              = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+            if ( is_array( $result ) ) {
+                $order_ids = isset( $result['orders'] ) ? $result['orders'] : $result;
+                $max_pages = isset( $result['max_num_pages'] ) ? (int) $result['max_num_pages'] : 0;
+            } else {
+                $order_ids = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+                $max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : 0;
+            }
 
             foreach ( $order_ids as $oid ) {
                 $oid   = intval( $oid );
@@ -450,7 +456,6 @@ class WBI_Documents_Module {
                 ) ) ) . "\n";
             }
 
-            $max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : 0;
             $has_more  = $max_pages > 0 ? $page < $max_pages : count( $order_ids ) === $batch_size;
             $page++;
         } while ( $has_more && ! empty( $order_ids ) );
@@ -478,7 +483,13 @@ class WBI_Documents_Module {
             $batch_args['page']     = $page;
             $batch_args['paginate'] = true;
             $result                 = wc_get_orders( $batch_args );
-            $order_ids              = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+            if ( is_array( $result ) ) {
+                $order_ids = isset( $result['orders'] ) ? $result['orders'] : $result;
+                $max_pages = isset( $result['max_num_pages'] ) ? (int) $result['max_num_pages'] : 0;
+            } else {
+                $order_ids = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+                $max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : 0;
+            }
 
             foreach ( $order_ids as $order_id ) {
                 $order = wc_get_order( $order_id );
@@ -495,7 +506,6 @@ class WBI_Documents_Module {
                 ) );
             }
 
-            $max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : 0;
             $has_more  = $max_pages > 0 ? $page < $max_pages : count( $order_ids ) === $batch_size;
             $page++;
         } while ( $has_more && ! empty( $order_ids ) );
@@ -803,9 +813,15 @@ class WBI_Documents_Module {
             'order'        => 'DESC',
             'paginate'     => true,
         ) );
-        $paged_ids    = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
-        $total        = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $paged_ids );
-        $total_pages  = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : max( 1, (int) ceil( $total / $per_page ) );
+        if ( is_array( $result ) ) {
+            $paged_ids   = isset( $result['orders'] ) ? $result['orders'] : $result;
+            $total       = isset( $result['total'] ) ? (int) $result['total'] : count( $paged_ids );
+            $total_pages = isset( $result['max_num_pages'] ) ? (int) $result['max_num_pages'] : max( 1, (int) ceil( $total / $per_page ) );
+        } else {
+            $paged_ids   = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+            $total       = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $paged_ids );
+            $total_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : max( 1, (int) ceil( $total / $per_page ) );
+        }
 
         $export_url = wp_nonce_url(
             admin_url( 'admin-post.php?action=wbi_document_export_csv&export_type=remitos&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) ),
