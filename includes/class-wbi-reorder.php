@@ -144,7 +144,7 @@ class WBI_Reorder_Module {
 
         // Filters
         $filter_supplier = WBI_Admin_Query_Helper::get_absint( $_GET, 'filter_supplier', 0 );
-        $filter_active   = WBI_Admin_Query_Helper::get_key( $_GET, 'filter_active', '' );
+        $filter_active   = WBI_Admin_Query_Helper::get_enum( $_GET, 'filter_active', array( 'active', 'inactive' ), '' );
         $filter_below    = WBI_Admin_Query_Helper::get_bool_flag( $_GET, 'filter_below', false );
 
         // Build query

@@ -21,8 +21,17 @@ class WBI_Report_Products {
     }
 
     public function render() {
-        $tab = WBI_Admin_Query_Helper::get_key( $_GET, 'tab', 'stock' );
-        list( $start, $end ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'start', 'end', date( 'Y-01-01' ), date( 'Y-m-d' ) );
+        $allowed_tabs = array( 'stock', 'committed', 'dormant', 'best', 'worst' );
+        $tab = WBI_Admin_Query_Helper::get_enum( $_GET, 'tab', $allowed_tabs, 'stock' );
+        $date_range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
+            $_GET,
+            'start',
+            'end',
+            WBI_Admin_Query_Helper::get_site_date_ymd( 'first day of january' ),
+            WBI_Admin_Query_Helper::get_site_date_ymd()
+        );
+        $start = $date_range['from'];
+        $end   = $date_range['to'];
         $default_statuses = array('wc-completed', 'wc-processing');
         $statuses = WBI_Admin_Query_Helper::get_string_array( $_GET, 'statuses', array_keys( array(
             'wc-completed' => true,
@@ -33,6 +42,13 @@ class WBI_Report_Products {
         if ( empty( $statuses ) ) {
             $statuses = $default_statuses;
         }
+        $allowed_per_page = array( 10, 25, 50, 100 );
+        $requested_per_page = WBI_Admin_Query_Helper::get_absint( $_GET, 'per_page', 25 );
+        $per_page = in_array( $requested_per_page, $allowed_per_page, true ) ? $requested_per_page : 25;
+        $current_page = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
+        $offset       = ( $current_page - 1 ) * $per_page;
+        $total_rows   = 0;
+        $total_pages  = 1;
 
         $all_statuses = array(
             'wc-completed'  => '✅ Completado',
@@ -64,6 +80,9 @@ class WBI_Report_Products {
 
         ?>
         <div class="wrap">
+            <?php if ( $date_range['has_error'] ) : ?>
+                <div class="notice notice-warning"><p><?php esc_html_e( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ); ?></p></div>
+            <?php endif; ?>
             <h1 class="wp-heading-inline">📦 Productos & Stock</h1>
             <a href="<?php echo esc_url($export_url); ?>" class="page-title-action">📥 Exportar esta Tabla a CSV</a>
             <hr class="wp-header-end">
@@ -100,8 +119,25 @@ class WBI_Report_Products {
             <div style="background:#fff; padding:20px; border:1px solid #c3c4c7; margin-top:10px;">
                 <?php
                 if($tab=='stock'){
-                    $data = $this->engine->get_realtime_stock();
+                    $total_rows = $this->engine->count_realtime_stock();
+                    $total_pages = max( 1, (int) ceil( $total_rows / $per_page ) );
+                    if ( $current_page > $total_pages ) {
+                        $current_page = $total_pages;
+                        $offset       = ( $current_page - 1 ) * $per_page;
+                    }
+                    $data = $this->engine->get_realtime_stock( $per_page, $offset );
                     echo '<p><i>Inventario físico actual en sistema.</i></p>';
+                    echo '<form method="get" style="margin:0 0 12px;display:flex;gap:8px;align-items:center;">';
+                    echo '<input type="hidden" name="page" value="wbi-products-report">';
+                    echo '<input type="hidden" name="tab" value="stock">';
+                    echo '<label for="wbi-stock-per-page">Por página</label>';
+                    echo '<select id="wbi-stock-per-page" name="per_page">';
+                    foreach ( $allowed_per_page as $pp ) {
+                        echo '<option value="' . esc_attr( $pp ) . '" ' . selected( $per_page, $pp, false ) . '>' . esc_html( $pp ) . '</option>';
+                    }
+                    echo '</select>';
+                    echo '<button class="button" type="submit">Aplicar</button>';
+                    echo '</form>';
                     echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Stock Actual</th></tr></thead><tbody>';
                     if ( ! empty( $data ) ) {
@@ -112,8 +148,25 @@ class WBI_Report_Products {
                     echo '</tbody></table>';
                     echo '</div>';
                 } elseif($tab=='committed'){
-                    $data = $this->engine->get_committed_stock();
+                    $total_rows = $this->engine->count_committed_stock();
+                    $total_pages = max( 1, (int) ceil( $total_rows / $per_page ) );
+                    if ( $current_page > $total_pages ) {
+                        $current_page = $total_pages;
+                        $offset       = ( $current_page - 1 ) * $per_page;
+                    }
+                    $data = $this->engine->get_committed_stock( $per_page, $offset );
                     echo '<p><i>Productos reservados en pedidos pendientes de envío.</i></p>';
+                    echo '<form method="get" style="margin:0 0 12px;display:flex;gap:8px;align-items:center;">';
+                    echo '<input type="hidden" name="page" value="wbi-products-report">';
+                    echo '<input type="hidden" name="tab" value="committed">';
+                    echo '<label for="wbi-committed-per-page">Por página</label>';
+                    echo '<select id="wbi-committed-per-page" name="per_page">';
+                    foreach ( $allowed_per_page as $pp ) {
+                        echo '<option value="' . esc_attr( $pp ) . '" ' . selected( $per_page, $pp, false ) . '>' . esc_html( $pp ) . '</option>';
+                    }
+                    echo '</select>';
+                    echo '<button class="button" type="submit">Aplicar</button>';
+                    echo '</form>';
                     echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Cant.</th><th>Pedido</th></tr></thead><tbody>';
                     if ( ! empty( $data ) ) {
@@ -124,8 +177,25 @@ class WBI_Report_Products {
                     echo '</tbody></table>';
                     echo '</div>';
                 } elseif($tab=='dormant'){
-                    $data = $this->engine->get_dormant_stock();
+                    $total_rows = $this->engine->count_dormant_stock();
+                    $total_pages = max( 1, (int) ceil( $total_rows / $per_page ) );
+                    if ( $current_page > $total_pages ) {
+                        $current_page = $total_pages;
+                        $offset       = ( $current_page - 1 ) * $per_page;
+                    }
+                    $data = $this->engine->get_dormant_stock( $per_page, $offset );
                     echo '<p style="color:red;"><i>Productos con stock positivo sin movimiento en 90 días.</i></p>';
+                    echo '<form method="get" style="margin:0 0 12px;display:flex;gap:8px;align-items:center;">';
+                    echo '<input type="hidden" name="page" value="wbi-products-report">';
+                    echo '<input type="hidden" name="tab" value="dormant">';
+                    echo '<label for="wbi-dormant-per-page">Por página</label>';
+                    echo '<select id="wbi-dormant-per-page" name="per_page">';
+                    foreach ( $allowed_per_page as $pp ) {
+                        echo '<option value="' . esc_attr( $pp ) . '" ' . selected( $per_page, $pp, false ) . '>' . esc_html( $pp ) . '</option>';
+                    }
+                    echo '</select>';
+                    echo '<button class="button" type="submit">Aplicar</button>';
+                    echo '</form>';
                     echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Stock Inmovilizado</th><th>Último Mov.</th></tr></thead><tbody>';
                     if ( ! empty( $data ) ) {
@@ -181,6 +251,35 @@ class WBI_Report_Products {
                     echo '</div>';
                 }
                 ?>
+                <?php if ( in_array( $tab, array( 'stock', 'committed', 'dormant' ), true ) ) : ?>
+                    <?php
+                    $pagination = paginate_links( array(
+                        'base'      => add_query_arg(
+                            array(
+                                'page'     => 'wbi-products-report',
+                                'tab'      => $tab,
+                                'per_page' => $per_page,
+                                'paged'    => '%#%',
+                            ),
+                            admin_url( 'admin.php' )
+                        ),
+                        'format'    => '',
+                        'current'   => $current_page,
+                        'total'     => max( 1, $total_pages ),
+                        'prev_text' => '« Anterior',
+                        'next_text' => 'Siguiente »',
+                        'type'      => 'list',
+                    ) );
+                    ?>
+                    <div style="margin-top:12px;">
+                        <p style="margin:0 0 8px;color:#50575e;">
+                            <?php echo esc_html( sprintf( 'Página %1$d de %2$d · Total: %3$d', $current_page, max( 1, $total_pages ), (int) $total_rows ) ); ?>
+                        </p>
+                        <?php if ( $pagination ) : ?>
+                            <div class="tablenav-pages"><?php echo wp_kses_post( $pagination ); ?></div>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
         <?php

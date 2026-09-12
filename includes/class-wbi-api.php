@@ -115,17 +115,22 @@ class WBI_API_Module {
     // -------------------------------------------------------------------------
 
     private function get_date_range( WP_REST_Request $request ) {
-        list( $from, $to ) = WBI_Admin_Query_Helper::normalize_date_range(
-            array(
-                'date_from' => $request->get_param( 'date_from' ),
-                'date_to'   => $request->get_param( 'date_to' ),
-            ),
+        $date_params = array(
+            'date_from' => $request->get_param( 'date_from' ),
+            'date_to'   => $request->get_param( 'date_to' ),
+        );
+        $range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
+            $date_params,
             'date_from',
             'date_to',
-            date( 'Y-m-d', strtotime( '-30 days' ) ),
-            date( 'Y-m-d' )
+            WBI_Admin_Query_Helper::get_site_date_ymd( '-30 days' ),
+            WBI_Admin_Query_Helper::get_site_date_ymd()
         );
-        return array( $from . ' 00:00:00', $to . ' 23:59:59' );
+        if ( in_array( $range['error_code'], array( 'invalid_date', 'reversed_range' ), true ) ) {
+            return new WP_Error( 'wbi_invalid_date_range', 'Parámetros date_from/date_to inválidos o invertidos.', array( 'status' => 400 ) );
+        }
+
+        return array( $range['from'] . ' 00:00:00', $range['to'] . ' 23:59:59' );
     }
 
     private function get_pagination( WP_REST_Request $request ) {
@@ -162,7 +167,11 @@ class WBI_API_Module {
         if ( ! $this->authenticate( $request ) ) { $this->log_request( '/dashboard', 401 ); return $this->auth_error(); }
         $this->log_request( '/dashboard' );
 
-        list( $from, $to ) = $this->get_date_range( $request );
+        $date_range = $this->get_date_range( $request );
+        if ( is_wp_error( $date_range ) ) {
+            return $date_range;
+        }
+        list( $from, $to ) = $date_range;
         $data = array(
             'revenue' => $this->engine->get_revenue( $from, $to ),
             'units'   => $this->engine->get_units_sold( $from, $to ),
@@ -176,7 +185,11 @@ class WBI_API_Module {
         if ( ! $this->authenticate( $request ) ) { $this->log_request( '/products/best-sellers', 401 ); return $this->auth_error(); }
         $this->log_request( '/products/best-sellers' );
 
-        list( $from, $to ) = $this->get_date_range( $request );
+        $date_range = $this->get_date_range( $request );
+        if ( is_wp_error( $date_range ) ) {
+            return $date_range;
+        }
+        list( $from, $to ) = $date_range;
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
         $statuses = WBI_Admin_Query_Helper::get_string_array(
             $request->get_params(),
@@ -269,7 +282,11 @@ class WBI_API_Module {
         if ( ! $this->authenticate( $request ) ) { $this->log_request( '/customers/ranking', 401 ); return $this->auth_error(); }
         $this->log_request( '/customers/ranking' );
 
-        list( $from, $to ) = $this->get_date_range( $request );
+        $date_range = $this->get_date_range( $request );
+        if ( is_wp_error( $date_range ) ) {
+            return $date_range;
+        }
+        list( $from, $to ) = $date_range;
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
         $statuses = WBI_Admin_Query_Helper::get_string_array(
             $request->get_params(),
@@ -316,7 +333,11 @@ class WBI_API_Module {
         if ( ! $this->authenticate( $request ) ) { $this->log_request( '/sales/by-period', 401 ); return $this->auth_error(); }
         $this->log_request( '/sales/by-period' );
 
-        list( $from, $to ) = $this->get_date_range( $request );
+        $date_range = $this->get_date_range( $request );
+        if ( is_wp_error( $date_range ) ) {
+            return $date_range;
+        }
+        list( $from, $to ) = $date_range;
         $period = sanitize_text_field( $request->get_param( 'period' ) ?? 'day' );
         if ( ! in_array( $period, array( 'day', 'week', 'month' ), true ) ) $period = 'day';
 
@@ -329,7 +350,11 @@ class WBI_API_Module {
         if ( ! $this->authenticate( $request ) ) { $this->log_request( '/sales/by-province', 401 ); return $this->auth_error(); }
         $this->log_request( '/sales/by-province' );
 
-        list( $from, $to ) = $this->get_date_range( $request );
+        $date_range = $this->get_date_range( $request );
+        if ( is_wp_error( $date_range ) ) {
+            return $date_range;
+        }
+        list( $from, $to ) = $date_range;
         $raw  = $this->engine->get_sales_by_province( $from, $to );
         $data = is_array( $raw ) ? $raw : array();
         return rest_ensure_response( $this->wrap( $data ) );
@@ -344,10 +369,15 @@ class WBI_API_Module {
         }
 
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
-        list( $from, $to ) = $this->get_date_range( $request );
-        $invoice_type = WBI_Admin_Query_Helper::get_string( $request->get_params(), 'inv_type', '' );
+        $date_range = $this->get_date_range( $request );
+        if ( is_wp_error( $date_range ) ) {
+            return $date_range;
+        }
+        list( $from, $to ) = $date_range;
+        $invoice_type = strtoupper( WBI_Admin_Query_Helper::get_enum( $request->get_params(), 'inv_type', array( 'a', 'b', 'c' ), '' ) );
         $date_from    = substr( $from, 0, 10 );
         $date_to      = substr( $to, 0, 10 );
+        WBI_Admin_Query_Helper::backfill_missing_invoice_dates( $date_from, $date_to, $invoice_type );
 
         $query_args = array(
             'return'     => 'ids',

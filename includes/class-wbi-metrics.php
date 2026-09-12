@@ -61,22 +61,28 @@ class WBI_Metrics_Engine {
     }
 
     private function normalize_date_bounds( $start, $end ) {
-        $now = current_time( 'timestamp' );
-        list( $from, $to ) = WBI_Admin_Query_Helper::normalize_date_range(
+        $range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
             array(
                 'start' => $start,
                 'end'   => $end,
             ),
             'start',
             'end',
-            date( 'Y-m-01', $now ),
-            date( 'Y-m-d', $now )
+            WBI_Admin_Query_Helper::get_site_date_ymd( 'first day of this month' ),
+            WBI_Admin_Query_Helper::get_site_date_ymd()
         );
 
-        return array(
-            $from . ' 00:00:00',
-            $to . ' 23:59:59',
-        );
+        $timezone = wp_timezone();
+        $from     = DateTimeImmutable::createFromFormat( '!Y-m-d', $range['from'], $timezone );
+        $to       = DateTimeImmutable::createFromFormat( '!Y-m-d', $range['to'], $timezone );
+        if ( false === $from ) {
+            $from = new DateTimeImmutable( WBI_Admin_Query_Helper::get_site_date_ymd( 'first day of this month' ), $timezone );
+        }
+        if ( false === $to ) {
+            $to = new DateTimeImmutable( WBI_Admin_Query_Helper::get_site_date_ymd(), $timezone );
+        }
+
+        return array( $from->setTime( 0, 0, 0 ), $to->setTime( 23, 59, 59 ) );
     }
 
     private function get_limit_offset_sql( $limit = null, $offset = 0 ) {
@@ -88,7 +94,17 @@ class WBI_Metrics_Engine {
     }
 
     private function get_date_query( $start, $end, $alias = 'p', $col = 'post_date' ) {
-        list( $s, $e ) = $this->normalize_date_bounds( $start, $end );
+        list( $local_start, $local_end ) = $this->normalize_date_bounds( $start, $end );
+
+        if ( '_gmt' === substr( $col, -4 ) ) {
+            $utc = new DateTimeZone( 'UTC' );
+            $s   = $local_start->setTimezone( $utc )->format( 'Y-m-d H:i:s' );
+            $e   = $local_end->setTimezone( $utc )->format( 'Y-m-d H:i:s' );
+        } else {
+            $s = $local_start->format( 'Y-m-d H:i:s' );
+            $e = $local_end->format( 'Y-m-d H:i:s' );
+        }
+
         return $this->wpdb->prepare( " AND $alias.$col >= %s AND $alias.$col <= %s ", $s, $e );
     }
 
@@ -263,7 +279,7 @@ class WBI_Metrics_Engine {
                         JOIN {$this->wpdb->prefix}wc_orders o ON i.order_id=o.id
                         WHERE o.status IN {$statuses_in}
                         AND meta.meta_key='_qty' {$d}
-                        GROUP BY i.order_item_name ORDER BY qty DESC{$limit_sql}";
+                        GROUP BY i.order_item_name ORDER BY qty DESC, i.order_item_name ASC{$limit_sql}";
             } else {
                 $d   = $this->get_date_query( $s, $e, 'posts' );
                 $sql = "SELECT order_item_name as name, SUM(meta.meta_value) as qty 
@@ -272,7 +288,7 @@ class WBI_Metrics_Engine {
                         JOIN {$this->wpdb->posts} posts ON i.order_id=posts.ID 
                         WHERE posts.post_status IN {$statuses_in} 
                         AND meta.meta_key='_qty' {$d} 
-                        GROUP BY name ORDER BY qty DESC{$limit_sql}";
+                        GROUP BY name ORDER BY qty DESC, name ASC{$limit_sql}";
             }
             return $this->wpdb->get_results( $sql );
         } );
@@ -325,7 +341,7 @@ class WBI_Metrics_Engine {
                         JOIN {$this->wpdb->prefix}wc_orders o ON i.order_id=o.id
                         WHERE o.status IN {$statuses_in}
                         AND meta.meta_key='_qty' {$d}
-                        GROUP BY i.order_item_name ORDER BY qty ASC{$limit_sql}";
+                        GROUP BY i.order_item_name ORDER BY qty ASC, i.order_item_name ASC{$limit_sql}";
             } else {
                 $d   = $this->get_date_query( $s, $e, 'posts' );
                 $sql = "SELECT order_item_name as name, SUM(meta.meta_value) as qty 
@@ -334,7 +350,7 @@ class WBI_Metrics_Engine {
                         JOIN {$this->wpdb->posts} posts ON i.order_id=posts.ID 
                         WHERE posts.post_status IN {$statuses_in} 
                         AND meta.meta_key='_qty' {$d} 
-                        GROUP BY name ORDER BY qty ASC{$limit_sql}";
+                        GROUP BY name ORDER BY qty ASC, name ASC{$limit_sql}";
             }
             return $this->wpdb->get_results( $sql );
         } );
@@ -370,11 +386,12 @@ class WBI_Metrics_Engine {
     // --- 3. STOCK (Funciones necesarias para los otros tabs) ---
     public function get_realtime_stock( $limit = null, $offset = 0 ) {
         $limit_sql = $this->get_limit_offset_sql( $limit, $offset );
-        $results = $this->wpdb->get_results( "SELECT p.post_title, pm.meta_value as stock FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND p.post_status='publish' AND pm.meta_key='_stock' ORDER BY CAST(stock AS SIGNED) DESC{$limit_sql}" );
+        $results = $this->wpdb->get_results( "SELECT p.post_title, pm.meta_value as stock FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND p.post_status='publish' AND pm.meta_key='_stock' ORDER BY CAST(stock AS SIGNED) DESC, p.ID DESC{$limit_sql}" );
         return is_array( $results ) ? $results : array();
     }
 
-    public function get_committed_stock() {
+    public function get_committed_stock( $limit = null, $offset = 0 ) {
+        $limit_sql = $this->get_limit_offset_sql( $limit, $offset );
         // Try HPOS-compatible query first (WooCommerce 7.1+ with HPOS enabled)
         if ( $this->is_hpos_active() ) {
             $sql = "SELECT i.order_item_name as name, m.meta_value as qty, o.id as order_id
@@ -383,7 +400,7 @@ class WBI_Metrics_Engine {
                     JOIN {$this->wpdb->prefix}wc_orders o ON i.order_id = o.id
                     WHERE m.meta_key = '_qty'
                     AND o.status IN ('wc-processing','wc-on-hold')
-                    ORDER BY o.date_created_gmt DESC";
+                    ORDER BY o.date_created_gmt DESC, o.id DESC{$limit_sql}";
             $results = $this->wpdb->get_results( $sql );
             return is_array( $results ) ? $results : array();
         }
@@ -396,14 +413,60 @@ class WBI_Metrics_Engine {
                 WHERE m.meta_key = '_qty'
                 AND p.post_type = 'shop_order'
                 AND p.post_status IN ('wc-processing','wc-on-hold')
-                ORDER BY p.post_date DESC";
+                ORDER BY p.post_date DESC, p.ID DESC{$limit_sql}";
         $results = $this->wpdb->get_results( $sql );
         return is_array( $results ) ? $results : array();
     }
 
+    public function count_realtime_stock() {
+        return (int) $this->wpdb->get_var(
+            "SELECT COUNT(*)
+             FROM {$this->wpdb->posts} p
+             JOIN {$this->wpdb->postmeta} pm ON p.ID = pm.post_id
+             WHERE p.post_type IN ('product','product_variation')
+             AND p.post_status = 'publish'
+             AND pm.meta_key = '_stock'"
+        );
+    }
+
+    public function count_committed_stock() {
+        if ( $this->is_hpos_active() ) {
+            return (int) $this->wpdb->get_var(
+                "SELECT COUNT(*)
+                 FROM {$this->wpdb->prefix}woocommerce_order_items i
+                 JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta m ON i.order_item_id = m.order_item_id
+                 JOIN {$this->wpdb->prefix}wc_orders o ON i.order_id = o.id
+                 WHERE m.meta_key = '_qty'
+                 AND o.status IN ('wc-processing','wc-on-hold')"
+            );
+        }
+
+        return (int) $this->wpdb->get_var(
+            "SELECT COUNT(*)
+             FROM {$this->wpdb->prefix}woocommerce_order_items i
+             JOIN {$this->wpdb->prefix}woocommerce_order_itemmeta m ON i.order_item_id = m.order_item_id
+             JOIN {$this->wpdb->posts} p ON i.order_id = p.ID
+             WHERE m.meta_key = '_qty'
+             AND p.post_type = 'shop_order'
+             AND p.post_status IN ('wc-processing','wc-on-hold')"
+        );
+    }
+
+    public function count_dormant_stock() {
+        return (int) $this->wpdb->get_var(
+            "SELECT COUNT(*)
+             FROM {$this->wpdb->posts} p
+             JOIN {$this->wpdb->postmeta} pm ON p.ID = pm.post_id
+             WHERE p.post_type IN ('product','product_variation')
+             AND pm.meta_key = '_stock'
+             AND pm.meta_value > 0
+             AND p.post_modified < DATE_SUB(NOW(), INTERVAL 90 DAY)"
+        );
+    }
+
     public function get_dormant_stock( $limit = null, $offset = 0 ) {
         $limit_sql = $this->get_limit_offset_sql( $limit, $offset );
-        $results = $this->wpdb->get_results( "SELECT p.post_title, pm.meta_value as stock, p.post_modified FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND pm.meta_key='_stock' AND pm.meta_value > 0 AND p.post_modified < DATE_SUB(NOW(), INTERVAL 90 DAY) ORDER BY p.post_modified ASC{$limit_sql}" );
+        $results = $this->wpdb->get_results( "SELECT p.post_title, pm.meta_value as stock, p.post_modified FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND pm.meta_key='_stock' AND pm.meta_value > 0 AND p.post_modified < DATE_SUB(NOW(), INTERVAL 90 DAY) ORDER BY p.post_modified ASC, p.ID ASC{$limit_sql}" );
         return is_array( $results ) ? $results : array();
     }
 
@@ -884,7 +947,7 @@ class WBI_Metrics_Engine {
                       {$cat_where_sql}
                   ) AS base
                   WHERE margin >= {$min_m} AND margin <= {$max_m}
-                  ORDER BY post_title ASC{$limit_sql}";
+                  ORDER BY post_title ASC, ID ASC{$limit_sql}";
 
         return $this->wpdb->get_results( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
     }

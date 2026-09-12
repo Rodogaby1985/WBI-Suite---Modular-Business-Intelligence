@@ -36,13 +36,32 @@ class WBI_Export_Module {
         if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Sin permisos' );
         if ( ! wp_verify_nonce( WBI_Admin_Query_Helper::get_string( $_GET, '_wpnonce', '' ), 'wbi_export_dynamic' ) ) wp_die( 'Nonce inválido' );
 
-        $type = WBI_Admin_Query_Helper::get_key( $_GET, 'report_type', '' );
+        $allowed_types = array(
+            'stock_real',
+            'stock_committed',
+            'stock_dormant',
+            'best_sellers',
+            'worst_sellers',
+            'clients_ranking',
+            'clients_active',
+            'clients_zone_detail',
+            'sales_period',
+            'sales_province',
+            'sales_province_detail',
+            'costs_margins',
+            'scoring',
+            'taxes_summary',
+        );
+        $type = WBI_Admin_Query_Helper::get_enum( $_GET, 'report_type', $allowed_types, '' );
+        if ( '' === $type ) {
+            wp_die( 'Tipo de reporte inválido.' );
+        }
         list( $start, $end ) = WBI_Admin_Query_Helper::normalize_date_range(
             $_GET,
             'start',
             'end',
-            date( 'Y-m-01' ),
-            date( 'Y-m-d' )
+            WBI_Admin_Query_Helper::get_site_date_ymd( 'first day of this month' ),
+            WBI_Admin_Query_Helper::get_site_date_ymd()
         );
         $statuses = WBI_Admin_Query_Helper::get_string_array(
             $_GET,
@@ -59,34 +78,69 @@ class WBI_Export_Module {
             // --- PRODUCTOS Y STOCK ---
             case 'stock_real':
                 fputcsv($output, ['Producto', 'Tipo', 'Stock Actual']);
-                $data = $this->engine->get_realtime_stock();
-                foreach($data as $r) fputcsv($output, [$r->post_title, 'N/A', $r->stock]);
+                $batch_size = 500;
+                $offset     = 0;
+                do {
+                    $data = $this->engine->get_realtime_stock( $batch_size, $offset );
+                    foreach ( $data as $r ) {
+                        fputcsv( $output, array( $r->post_title, 'N/A', $r->stock ) );
+                    }
+                    $offset += count( $data );
+                } while ( count( $data ) === $batch_size );
                 break;
 
             case 'stock_committed':
                 fputcsv($output, ['Producto', 'Cant. Comprometida', 'ID Pedido']);
-                $data = $this->engine->get_committed_stock();
-                foreach($data as $r) fputcsv($output, [$r->name, $r->qty, $r->order_id]);
+                $batch_size = 500;
+                $offset     = 0;
+                do {
+                    $data = $this->engine->get_committed_stock( $batch_size, $offset );
+                    foreach ( $data as $r ) {
+                        fputcsv( $output, array( $r->name, $r->qty, $r->order_id ) );
+                    }
+                    $offset += count( $data );
+                } while ( count( $data ) === $batch_size );
                 break;
 
             case 'stock_dormant':
                 fputcsv($output, ['Producto', 'Stock Inmovilizado', 'Último Movimiento']);
-                $data = $this->engine->get_dormant_stock();
-                foreach($data as $r) fputcsv($output, [$r->post_title, $r->stock, $r->post_modified]);
+                $batch_size = 500;
+                $offset     = 0;
+                do {
+                    $data = $this->engine->get_dormant_stock( $batch_size, $offset );
+                    foreach ( $data as $r ) {
+                        fputcsv( $output, array( $r->post_title, $r->stock, $r->post_modified ) );
+                    }
+                    $offset += count( $data );
+                } while ( count( $data ) === $batch_size );
                 break;
 
             case 'best_sellers':
                 fputcsv($output, ['Reporte', 'Productos Más Vendidos', $start . ' al ' . $end]);
                 fputcsv($output, ['Producto', 'Unidades Vendidas']);
-                $data = $this->engine->get_best_sellers($start, $end, $statuses);
-                foreach($data as $r) fputcsv($output, [$r->name, $r->qty]);
+                $batch_size = 500;
+                $offset     = 0;
+                do {
+                    $data = $this->engine->get_best_sellers( $start, $end, $statuses, $batch_size, $offset );
+                    foreach ( $data as $r ) {
+                        fputcsv( $output, array( $r->name, $r->qty ) );
+                    }
+                    $offset += count( $data );
+                } while ( count( $data ) === $batch_size );
                 break;
 
             case 'worst_sellers':
                 fputcsv($output, ['Reporte', 'Productos Menos Vendidos', $start . ' al ' . $end]);
                 fputcsv($output, ['Producto', 'Unidades Vendidas']);
-                $data = $this->engine->get_least_sold($start, $end, $statuses);
-                foreach($data as $r) fputcsv($output, [$r->name, $r->qty]);
+                $batch_size = 500;
+                $offset     = 0;
+                do {
+                    $data = $this->engine->get_least_sold( $start, $end, $statuses, $batch_size, $offset );
+                    foreach ( $data as $r ) {
+                        fputcsv( $output, array( $r->name, $r->qty ) );
+                    }
+                    $offset += count( $data );
+                } while ( count( $data ) === $batch_size );
                 break;
 
             // --- CLIENTES ---
@@ -170,37 +224,47 @@ class WBI_Export_Module {
                     $min_margin = $max_margin;
                     $max_margin = $swap;
                 }
-                $data = $this->engine->get_products_with_costs( null, 0, $category_id, $min_margin, $max_margin );
-                foreach ( $data as $row ) {
-                    $price  = floatval( $row->price );
-                    $cost   = floatval( $row->cost );
-                    $margin = ( $cost > 0 && $price > 0 ) ? round( ( ( $price - $cost ) / $price ) * 100, 2 ) : 0;
-                    if ( $margin < 0 ) {
-                        $estado = 'Negativo';
-                    } elseif ( $margin < $alert_threshold ) {
-                        $estado = 'Bajo';
-                    } else {
-                        $estado = 'OK';
+                $batch_size = 500;
+                $offset     = 0;
+                do {
+                    $data = $this->engine->get_products_with_costs( $batch_size, $offset, $category_id, $min_margin, $max_margin );
+                    foreach ( $data as $row ) {
+                        $price  = floatval( $row->price );
+                        $cost   = floatval( $row->cost );
+                        $margin = ( $cost > 0 && $price > 0 ) ? round( ( ( $price - $cost ) / $price ) * 100, 2 ) : 0;
+                        if ( $margin < 0 ) {
+                            $estado = 'Negativo';
+                        } elseif ( $margin < $alert_threshold ) {
+                            $estado = 'Bajo';
+                        } else {
+                            $estado = 'OK';
+                        }
+                        fputcsv($output, [$row->post_title, $row->sku, $row->price, $row->cost, $margin, $estado]);
                     }
-                    fputcsv($output, [$row->post_title, $row->sku, $row->price, $row->cost, $margin, $estado]);
-                }
+                    $offset += count( $data );
+                } while ( count( $data ) === $batch_size );
                 break;
 
             // --- SCORING DE CLIENTES ---
             case 'scoring':
                 fputcsv($output, ['Nombre', 'Email', 'Score', 'Clase', 'Fecha Score']);
                 if ( class_exists( 'WBI_Scoring_Module' ) ) {
-                    $score_class  = WBI_Admin_Query_Helper::get_key( $_GET, 'score_class', '' );
-                    $scored_users = WBI_Scoring_Module::get_all_scored_users_for_export( $score_class );
-                    foreach ( $scored_users as $u ) {
-                        fputcsv($output, [
-                            $u->display_name,
-                            $u->user_email,
-                            $u->score,
-                            $u->class,
-                            $u->score_date ? date( 'd/m/Y', strtotime( $u->score_date ) ) : '',
-                        ]);
-                    }
+                    $score_class = WBI_Admin_Query_Helper::get_enum( $_GET, 'score_class', array( 'a', 'b', 'c', 'd' ), '' );
+                    $batch_size  = 500;
+                    $offset      = 0;
+                    do {
+                        $scored_users = WBI_Scoring_Module::get_scored_users_for_export_batch( strtoupper( $score_class ), $batch_size, $offset );
+                        foreach ( $scored_users as $u ) {
+                            fputcsv($output, [
+                                $u->display_name,
+                                $u->user_email,
+                                $u->score,
+                                $u->class,
+                                $u->score_date ? date_i18n( 'd/m/Y', strtotime( $u->score_date ) ) : '',
+                            ]);
+                        }
+                        $offset += count( $scored_users );
+                    } while ( count( $scored_users ) === $batch_size );
                 }
                 break;
 
@@ -221,6 +285,8 @@ class WBI_Export_Module {
                     ]);
                 }
                 break;
+            default:
+                wp_die( 'Tipo de reporte inválido.' );
         }
 
         fclose( $output );
