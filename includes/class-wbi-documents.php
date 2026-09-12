@@ -238,7 +238,7 @@ class WBI_Documents_Module {
         $order_id = absint( $_POST['order_id'] ?? 0 );
         $doc_type = sanitize_text_field( wp_unslash( $_POST['doc_type'] ?? '' ) );
         if ( ! in_array( $doc_type, array( 'invoice', 'remito', 'orden' ), true ) ) {
-            wp_die( 'Tipo de documento inválido.' );
+            wp_die( esc_html__( 'Tipo de documento inválido.', 'wbi-suite' ) );
         }
 
         $order = wc_get_order( $order_id );
