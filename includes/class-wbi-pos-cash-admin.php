@@ -98,7 +98,7 @@ class WBI_POS_Cash_Admin {
 
         // ── Filters ──────────────────────────────────────────────────────────
         $filter_user   = WBI_Admin_Query_Helper::get_absint( $_GET, 'filter_user', 0 );
-        $filter_status = WBI_Admin_Query_Helper::get_key( $_GET, 'filter_status', '' );
+        $filter_status = WBI_Admin_Query_Helper::get_enum( $_GET, 'filter_status', array( 'open', 'closed' ), '' );
         list( $filter_from, $filter_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'filter_from', 'filter_to', '', '' );
         $current_page  = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $allowed_per_page = array( 10, 25, 50, 100 );
@@ -116,7 +116,7 @@ class WBI_POS_Cash_Admin {
             $params[] = $filter_user;
         }
 
-        if ( in_array( $filter_status, array( 'open', 'closed' ), true ) ) {
+        if ( '' !== $filter_status ) {
             $where[]  = 'status = %s';
             $params[] = $filter_status;
         }
@@ -588,7 +588,7 @@ class WBI_POS_Cash_Admin {
         $can_see_all     = current_user_can( 'manage_woocommerce' );
 
         $filter_user   = WBI_Admin_Query_Helper::get_absint( $_GET, 'filter_user', 0 );
-        $filter_status = WBI_Admin_Query_Helper::get_key( $_GET, 'filter_status', '' );
+        $filter_status = WBI_Admin_Query_Helper::get_enum( $_GET, 'filter_status', array( 'open', 'closed' ), '' );
         list( $filter_from, $filter_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'filter_from', 'filter_to', '', '' );
 
         $where  = array( '1=1' );
@@ -602,7 +602,7 @@ class WBI_POS_Cash_Admin {
             $params[] = $filter_user;
         }
 
-        if ( in_array( $filter_status, array( 'open', 'closed' ), true ) ) {
+        if ( '' !== $filter_status ) {
             $where[]  = 'status = %s';
             $params[] = $filter_status;
         }

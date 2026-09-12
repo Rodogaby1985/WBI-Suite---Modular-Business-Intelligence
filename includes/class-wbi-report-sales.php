@@ -29,8 +29,16 @@ class WBI_Report_Sales {
     }
 
     public function render() {
-        $tab      = WBI_Admin_Query_Helper::get_key( $_GET, 'tab', 'period' );
-        list( $start, $end ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'start', 'end', date( 'Y-m-01' ), date( 'Y-m-d' ) );
+        $tab      = WBI_Admin_Query_Helper::get_enum( $_GET, 'tab', array( 'period', 'source', 'cat', 'collection', 'province' ), 'period' );
+        $date_range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
+            $_GET,
+            'start',
+            'end',
+            WBI_Admin_Query_Helper::get_site_date_ymd( 'first day of this month' ),
+            WBI_Admin_Query_Helper::get_site_date_ymd()
+        );
+        $start = $date_range['from'];
+        $end   = $date_range['to'];
         $default_statuses = array('wc-completed', 'wc-processing');
         $statuses = WBI_Admin_Query_Helper::get_string_array( $_GET, 'statuses', array_keys( array(
             'wc-completed' => true,
@@ -59,6 +67,9 @@ class WBI_Report_Sales {
         );
         ?>
         <div class="wrap">
+            <?php if ( $date_range['has_error'] ) : ?>
+                <div class="notice notice-warning"><p><?php esc_html_e( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ); ?></p></div>
+            <?php endif; ?>
             <h1 class="wp-heading-inline">📊 Análisis Profundo de Ventas</h1>
             <hr class="wp-header-end">
             

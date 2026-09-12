@@ -387,7 +387,7 @@ class WBI_Documents_Module {
     public function handle_export_csv() {
         if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos.' );
 
-        $export_type = WBI_Admin_Query_Helper::get_key( $_GET, 'export_type', 'invoices' );
+        $export_type = WBI_Admin_Query_Helper::get_enum( $_GET, 'export_type', array( 'invoices', 'remitos' ), 'invoices' );
 
         if ( $export_type === 'invoices' ) {
             check_admin_referer( 'wbi_invoice_export' );
@@ -399,8 +399,20 @@ class WBI_Documents_Module {
     }
 
     private function export_invoices_csv() {
-        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
-        $type_filter = WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
+        $date_range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
+            $_GET,
+            'date_from',
+            'date_to',
+            WBI_Admin_Query_Helper::get_site_date_ymd( '-30 days' ),
+            WBI_Admin_Query_Helper::get_site_date_ymd()
+        );
+        if ( in_array( $date_range['error_code'], array( 'invalid_date', 'incomplete_range', 'reversed_range' ), true ) ) {
+            wp_die( 'Rango de fechas inválido para exportación de facturas.' );
+        }
+        $date_from = $date_range['from'];
+        $date_to   = $date_range['to'];
+        $type_filter = strtoupper( WBI_Admin_Query_Helper::get_enum( $_GET, 'inv_type', array( 'a', 'b', 'c' ), '' ) );
+        WBI_Admin_Query_Helper::backfill_missing_invoice_dates( $date_from, $date_to, $type_filter );
         $query_args = array(
             'orderby'    => 'ID',
             'order'      => 'DESC',
@@ -482,7 +494,18 @@ class WBI_Documents_Module {
     }
 
     private function export_remitos_csv() {
-        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
+        $date_range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
+            $_GET,
+            'date_from',
+            'date_to',
+            WBI_Admin_Query_Helper::get_site_date_ymd( '-30 days' ),
+            WBI_Admin_Query_Helper::get_site_date_ymd()
+        );
+        if ( in_array( $date_range['error_code'], array( 'invalid_date', 'incomplete_range', 'reversed_range' ), true ) ) {
+            wp_die( 'Rango de fechas inválido para exportación de remitos.' );
+        }
+        $date_from = $date_range['from'];
+        $date_to   = $date_range['to'];
         $query_args = array(
             'meta_key'     => '_wbi_remito_number',
             'meta_compare' => 'EXISTS',
@@ -544,7 +567,7 @@ class WBI_Documents_Module {
     public function render_page() {
         if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Sin permisos.' );
 
-        $active_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'pending';
+        $active_tab = WBI_Admin_Query_Helper::get_enum( $_GET, 'tab', array( 'pending', 'invoices', 'remitos', 'ordenes' ), 'pending' );
         $base_url   = admin_url( 'admin.php?page=wbi-documents' );
 
         // If a generate form was submitted, show the generate interface instead of the tab
@@ -695,15 +718,27 @@ class WBI_Documents_Module {
     // =========================================================================
 
     private function render_tab_invoices() {
-        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
-        $type_filter = WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
+        $date_range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
+            $_GET,
+            'date_from',
+            'date_to',
+            WBI_Admin_Query_Helper::get_site_date_ymd( '-30 days' ),
+            WBI_Admin_Query_Helper::get_site_date_ymd()
+        );
+        $date_from = $date_range['from'];
+        $date_to   = $date_range['to'];
+        $type_filter = strtoupper( WBI_Admin_Query_Helper::get_enum( $_GET, 'inv_type', array( 'a', 'b', 'c' ), '' ) );
         $paged       = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $per_page    = 20;
-        $offset      = ( $paged - 1 ) * $per_page;
+        WBI_Admin_Query_Helper::backfill_missing_invoice_dates( $date_from, $date_to, $type_filter );
 
         $query_args = array(
             'return'     => 'ids',
-            'limit'      => -1,
+            'limit'      => $per_page,
+            'page'       => $paged,
+            'paginate'   => true,
+            'orderby'    => 'ID',
+            'order'      => 'DESC',
             'meta_query' => array(
                 array(
                     'key'     => '_wbi_invoice_number',
@@ -737,9 +772,20 @@ class WBI_Documents_Module {
                 ),
             );
         }
-        $all_ids    = wc_get_orders( $query_args );
-        $total_rows = count( $all_ids );
-        $page_ids   = array_slice( $all_ids, $offset, $per_page );
+        $result = wc_get_orders( $query_args );
+        if ( is_object( $result ) ) {
+            $page_ids    = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+            $total_rows  = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $page_ids );
+            $total_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : max( 1, (int) ceil( $total_rows / $per_page ) );
+        } elseif ( is_array( $result ) ) {
+            $page_ids    = $result;
+            $total_rows  = count( $page_ids );
+            $total_pages = max( 1, (int) ceil( $total_rows / $per_page ) );
+        } else {
+            $page_ids    = array();
+            $total_rows  = 0;
+            $total_pages = 1;
+        }
 
         $export_url = wp_nonce_url(
             admin_url( 'admin-post.php?action=wbi_document_export_csv&export_type=invoices&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) . '&inv_type=' . urlencode( $type_filter ) ),
@@ -749,6 +795,9 @@ class WBI_Documents_Module {
         $base_url = admin_url( 'admin.php?page=wbi-documents&tab=invoices&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) . '&inv_type=' . urlencode( $type_filter ) );
         ?>
         <form method="get" style="margin-bottom:15px;">
+            <?php if ( $date_range['has_error'] ) : ?>
+                <div class="notice notice-warning"><p><?php esc_html_e( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ); ?></p></div>
+            <?php endif; ?>
             <input type="hidden" name="page" value="wbi-documents">
             <input type="hidden" name="tab" value="invoices">
             <label>Desde: <input type="date" name="date_from" value="<?php echo esc_attr( $date_from ); ?>"></label>
@@ -818,13 +867,13 @@ class WBI_Documents_Module {
         </div>
 
         <?php
-        if ( $total_rows > $per_page ) {
+        if ( $total_pages > 1 ) {
             echo '<div class="tablenav"><div class="tablenav-pages">';
             echo paginate_links( array(
                 'base'      => add_query_arg( 'paged', '%#%', $base_url ),
                 'format'    => '',
                 'current'   => $paged,
-                'total'     => ceil( $total_rows / $per_page ),
+                'total'     => $total_pages,
                 'prev_text' => '&laquo;',
                 'next_text' => '&raquo;',
             ) );
@@ -837,7 +886,15 @@ class WBI_Documents_Module {
     // =========================================================================
 
     private function render_tab_remitos() {
-        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
+        $date_range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
+            $_GET,
+            'date_from',
+            'date_to',
+            WBI_Admin_Query_Helper::get_site_date_ymd( '-30 days' ),
+            WBI_Admin_Query_Helper::get_site_date_ymd()
+        );
+        $date_from = $date_range['from'];
+        $date_to   = $date_range['to'];
         $per_page = 20;
         $paged    = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
 
@@ -871,6 +928,9 @@ class WBI_Documents_Module {
         $base_url = admin_url( 'admin.php?page=wbi-documents&tab=remitos&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) );
 
         echo '<form method="get" style="margin-bottom:15px;">';
+        if ( $date_range['has_error'] ) {
+            echo '<div class="notice notice-warning"><p>' . esc_html__( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ) . '</p></div>';
+        }
         echo '<input type="hidden" name="page" value="wbi-documents">';
         echo '<input type="hidden" name="tab" value="remitos">';
         echo '<label>Desde: <input type="date" name="date_from" value="' . esc_attr( $date_from ) . '"></label>';

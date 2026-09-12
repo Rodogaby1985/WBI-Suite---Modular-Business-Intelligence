@@ -897,7 +897,7 @@ class WBI_Email_Marketing_Module {
         $base_url   = admin_url( 'admin.php?page=wbi-email-marketing' );
         $subs_url   = $base_url . '&action=subscribers';
         $search       = WBI_Admin_Query_Helper::get_string( $_GET, 's', '' );
-        $status_f     = WBI_Admin_Query_Helper::get_key( $_GET, 'status', '' );
+        $status_f     = WBI_Admin_Query_Helper::get_enum( $_GET, 'status', array( 'subscribed', 'unsubscribed', 'bounced' ), '' );
         $current_page = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $allowed_per_page = array( 10, 25, 50, 100 );
         $requested_per_page = WBI_Admin_Query_Helper::get_absint( $_GET, 'per_page', 25 );
@@ -929,7 +929,7 @@ class WBI_Email_Marketing_Module {
         $offset = ( $current_page - 1 ) * $per_page;
 
         // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-        $query = "SELECT * FROM {$this->tbl_subscribers} WHERE {$where_sql} ORDER BY subscribed_at DESC LIMIT %d OFFSET %d";
+        $query = "SELECT * FROM {$this->tbl_subscribers} WHERE {$where_sql} ORDER BY subscribed_at DESC, id DESC LIMIT %d OFFSET %d";
         $query_params = array_merge( $params, array( $per_page, $offset ) );
         $subs  = $params
             ? $this->db->get_results( $this->db->prepare( $query, $query_params ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -1150,6 +1150,7 @@ class WBI_Email_Marketing_Module {
     }
 
     private function export_subscribers_csv( $search = '', $status_f = '' ) {
+        $status_f = WBI_Admin_Query_Helper::get_enum( array( 'status' => $status_f ), 'status', array( 'subscribed', 'unsubscribed', 'bounced' ), '' );
         $where  = array( '1=1' );
         $params = array();
         if ( $search ) {
@@ -1163,17 +1164,42 @@ class WBI_Email_Marketing_Module {
             $where[]  = 'status = %s';
             $params[] = $status_f;
         }
-        $sql = "SELECT email, first_name, last_name, source, status, subscribed_at FROM {$this->tbl_subscribers} WHERE " . implode( ' AND ', $where ) . ' ORDER BY subscribed_at DESC';
-        $all = $params
-            ? $this->db->get_results( $this->db->prepare( $sql, ...$params ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-            : $this->db->get_results( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         header( 'Content-Type: text/csv; charset=UTF-8' );
         header( 'Content-Disposition: attachment; filename="wbi-subscribers-' . gmdate( 'Y-m-d' ) . '.csv"' );
         $out = fopen( 'php://output', 'w' );
         fputcsv( $out, array( 'email', 'first_name', 'last_name', 'source', 'status', 'subscribed_at' ) );
-        foreach ( $all as $s ) {
-            fputcsv( $out, array( $s->email, $s->first_name, $s->last_name, $s->source, $s->status, $s->subscribed_at ) );
-        }
+        $batch_size         = 500;
+        $last_subscribed_at = null;
+        $last_id            = 0;
+        do {
+            $batch_where  = $where;
+            $batch_params = $params;
+
+            if ( null !== $last_subscribed_at ) {
+                $batch_where[]  = '(subscribed_at < %s OR (subscribed_at = %s AND id < %d))';
+                $batch_params[] = $last_subscribed_at;
+                $batch_params[] = $last_subscribed_at;
+                $batch_params[] = $last_id;
+            }
+
+            $batch_sql = "SELECT id, email, first_name, last_name, source, status, subscribed_at
+                FROM {$this->tbl_subscribers}
+                WHERE " . implode( ' AND ', $batch_where ) . '
+                ORDER BY subscribed_at DESC, id DESC
+                LIMIT %d';
+            $batch_params[] = $batch_size;
+
+            $rows = $this->db->get_results( $this->db->prepare( $batch_sql, ...$batch_params ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            foreach ( $rows as $s ) {
+                fputcsv( $out, array( $s->email, $s->first_name, $s->last_name, $s->source, $s->status, $s->subscribed_at ) );
+            }
+
+            if ( ! empty( $rows ) ) {
+                $last               = end( $rows );
+                $last_subscribed_at = $last->subscribed_at;
+                $last_id            = (int) $last->id;
+            }
+        } while ( count( $rows ) === $batch_size );
         fclose( $out );
         exit;
     }

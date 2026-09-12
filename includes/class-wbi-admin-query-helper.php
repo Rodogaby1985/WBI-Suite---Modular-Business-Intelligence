@@ -19,6 +19,11 @@ class WBI_Admin_Query_Helper {
         return sanitize_key( wp_unslash( (string) $source[ $key ] ) );
     }
 
+    public static function get_enum( array $source, $key, array $allowed, $default = '' ) {
+        $value = self::get_key( $source, $key, '' );
+        return in_array( $value, $allowed, true ) ? $value : $default;
+    }
+
     public static function get_absint( array $source, $key, $default = 0 ) {
         if ( ! isset( $source[ $key ] ) || is_array( $source[ $key ] ) ) {
             return (int) $default;
@@ -101,16 +106,128 @@ class WBI_Admin_Query_Helper {
     }
 
     public static function normalize_date_range( array $source, $from_key, $to_key, $default_from, $default_to ) {
-        $from = self::get_valid_date( $source, $from_key, $default_from );
-        $to   = self::get_valid_date( $source, $to_key, $default_to );
+        $result = self::normalize_date_range_with_meta( $source, $from_key, $to_key, $default_from, $default_to );
+        return array( $result['from'], $result['to'] );
+    }
 
-        if ( '' !== $from && '' !== $to && $from > $to ) {
-            $tmp  = $from;
-            $from = $to;
-            $to   = $tmp;
+    public static function normalize_date_range_with_meta( array $source, $from_key, $to_key, $default_from, $default_to ) {
+        $raw_from = self::get_string( $source, $from_key, '' );
+        $raw_to   = self::get_string( $source, $to_key, '' );
+
+        $from = '' !== $raw_from && self::is_valid_date_ymd( $raw_from ) ? $raw_from : '';
+        $to   = '' !== $raw_to && self::is_valid_date_ymd( $raw_to ) ? $raw_to : '';
+
+        $error_code = '';
+        if ( ( '' !== $raw_from && '' === $from ) || ( '' !== $raw_to && '' === $to ) ) {
+            $error_code = 'invalid_date';
+        } elseif ( ( '' === $raw_from ) xor ( '' === $raw_to ) ) {
+            $error_code = 'incomplete_range';
         }
 
-        return array( $from, $to );
+        if ( '' === $from ) {
+            $from = $default_from;
+        }
+        if ( '' === $to ) {
+            $to = $default_to;
+        }
+
+        $is_reversed = false;
+        if ( '' !== $from && '' !== $to && $from > $to ) {
+            $is_reversed = true;
+            $tmp         = $from;
+            $from        = $to;
+            $to          = $tmp;
+            if ( '' === $error_code ) {
+                $error_code = 'reversed_range';
+            }
+        }
+
+        return array(
+            'from'        => $from,
+            'to'          => $to,
+            'is_reversed' => $is_reversed,
+            'error_code'  => $error_code,
+            'has_error'   => '' !== $error_code,
+        );
+    }
+
+    public static function get_site_date_ymd( $modify = null ) {
+        $date = new DateTimeImmutable( 'now', wp_timezone() );
+        if ( is_string( $modify ) && '' !== $modify ) {
+            $modified = $date->modify( $modify );
+            if ( false !== $modified ) {
+                $date = $modified;
+            }
+        }
+        return $date->format( 'Y-m-d' );
+    }
+
+    public static function backfill_missing_invoice_dates( $date_from, $date_to, $invoice_type = '', $batch_size = 200 ) {
+        if ( ! function_exists( 'wc_get_orders' ) || ! function_exists( 'wc_get_order' ) ) {
+            return 0;
+        }
+        $cache_key = 'wbi_inv_backfill_' . md5( implode( '|', array( (string) $invoice_type, (string) $batch_size ) ) );
+        if ( false !== get_transient( $cache_key ) ) {
+            return 0;
+        }
+
+        $updated   = 0;
+        $limit     = max( 1, (int) $batch_size );
+        do {
+            $query_args = array(
+                'return'       => 'ids',
+                'limit'        => $limit,
+                'orderby'      => 'ID',
+                'order'        => 'DESC',
+                'meta_query'   => array(
+                    array(
+                        'key'     => '_wbi_invoice_number',
+                        'compare' => 'EXISTS',
+                    ),
+                    array(
+                        'key'     => '_wbi_invoice_date',
+                        'compare' => 'NOT EXISTS',
+                    ),
+                ),
+            );
+            if ( in_array( $invoice_type, array( 'A', 'B', 'C' ), true ) ) {
+                $query_args['meta_query'][] = array(
+                    'key'     => '_wbi_invoice_type',
+                    'value'   => $invoice_type,
+                    'compare' => '=',
+                );
+            }
+
+            $order_ids = wc_get_orders( $query_args );
+            if ( ! is_array( $order_ids ) ) {
+                $order_ids = array();
+            }
+            if ( empty( $order_ids ) ) {
+                break;
+            }
+
+            $batch_updated = 0;
+            foreach ( $order_ids as $order_id ) {
+                $order = wc_get_order( (int) $order_id );
+                if ( ! $order || $order->get_meta( '_wbi_invoice_date', true ) ) {
+                    continue;
+                }
+
+                $created = $order->get_date_created();
+                $date    = $created ? wp_date( 'Y-m-d', $created->getTimestamp(), wp_timezone() ) : self::get_site_date_ymd();
+                $order->update_meta_data( '_wbi_invoice_date', $date );
+                $order->save();
+                $updated++;
+                $batch_updated++;
+            }
+
+            if ( 0 === $batch_updated ) {
+                break;
+            }
+        } while ( count( $order_ids ) === $limit );
+
+        set_transient( $cache_key, 1, 15 * MINUTE_IN_SECONDS );
+        return $updated;
     }
 
     public static function build_url( $base_url, array $args ) {

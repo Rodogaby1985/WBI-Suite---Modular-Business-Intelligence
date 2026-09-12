@@ -244,7 +244,7 @@ class WBI_Invoice_Module {
         if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Sin permisos.' );
 
         $order_id = absint( $_GET['order_id'] ?? 0 );
-        if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wbi_view_invoice_' . $order_id ) ) wp_die( 'Nonce inválido.' );
+        if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'wbi_view_invoice_' . $order_id ) ) wp_die( 'Nonce inválido.' );
 
         $order = wc_get_order( $order_id );
         if ( ! $order ) wp_die( 'Pedido no encontrado.' );
@@ -502,16 +502,28 @@ if ( ! empty( $custom_fields ) ) :
             return;
         }
 
-        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
-        $type_filter= WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
+        $date_range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
+            $_GET,
+            'date_from',
+            'date_to',
+            WBI_Admin_Query_Helper::get_site_date_ymd( '-30 days' ),
+            WBI_Admin_Query_Helper::get_site_date_ymd()
+        );
+        $date_from  = $date_range['from'];
+        $date_to    = $date_range['to'];
+        $type_filter= strtoupper( WBI_Admin_Query_Helper::get_enum( $_GET, 'inv_type', array( 'a', 'b', 'c' ), '' ) );
         $paged      = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $per_page   = 20;
-        $offset     = ( $paged - 1 ) * $per_page;
+        WBI_Admin_Query_Helper::backfill_missing_invoice_dates( $date_from, $date_to, $type_filter );
 
         // Build wc_get_orders() args for HPOS-compatible queries
         $query_args = array(
             'return'     => 'ids',
-            'limit'      => -1,
+            'limit'      => $per_page,
+            'page'       => $paged,
+            'paginate'   => true,
+            'orderby'    => 'ID',
+            'order'      => 'DESC',
             'meta_query' => array(
                 array(
                     'key'     => '_wbi_invoice_number',
@@ -545,12 +557,26 @@ if ( ! empty( $custom_fields ) ) :
                 ),
             );
         }
-        $all_ids    = wc_get_orders( $query_args );
-        $total_rows = count( $all_ids );
-        $page_ids   = array_slice( $all_ids, $offset, $per_page );
+        $result = wc_get_orders( $query_args );
+        if ( is_object( $result ) ) {
+            $page_ids    = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+            $total_rows  = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $page_ids );
+            $total_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : max( 1, (int) ceil( $total_rows / $per_page ) );
+        } elseif ( is_array( $result ) ) {
+            $page_ids    = $result;
+            $total_rows  = count( $page_ids );
+            $total_pages = max( 1, (int) ceil( $total_rows / $per_page ) );
+        } else {
+            $page_ids    = array();
+            $total_rows  = 0;
+            $total_pages = 1;
+        }
 
         echo '<div class="wrap">';
         echo '<h1>📑 Facturación AFIP</h1>';
+        if ( $date_range['has_error'] ) {
+            echo '<div class="notice notice-warning"><p>' . esc_html__( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ) . '</p></div>';
+        }
 
         // Filter form
         echo '<form method="get" style="margin-bottom:15px;">';
@@ -606,7 +632,7 @@ if ( ! empty( $custom_fields ) ) :
             'base'    => add_query_arg( 'paged', '%#%' ),
             'format'  => '',
             'current' => $paged,
-            'total'   => ceil( $total_rows / $per_page ),
+            'total'   => max( 1, $total_pages ),
         ) );
 
         echo '</div>';
@@ -623,8 +649,15 @@ if ( ! empty( $custom_fields ) ) :
     }
 
     private function export_csv() {
-        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
-        $type_filter = WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
+        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range(
+            $_GET,
+            'date_from',
+            'date_to',
+            WBI_Admin_Query_Helper::get_site_date_ymd( '-30 days' ),
+            WBI_Admin_Query_Helper::get_site_date_ymd()
+        );
+        $type_filter = strtoupper( WBI_Admin_Query_Helper::get_enum( $_GET, 'inv_type', array( 'a', 'b', 'c' ), '' ) );
+        WBI_Admin_Query_Helper::backfill_missing_invoice_dates( $date_from, $date_to, $type_filter );
         $query_args = array(
             'orderby'    => 'ID',
             'order'      => 'DESC',
