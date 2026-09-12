@@ -374,8 +374,7 @@ class WBI_Metrics_Engine {
         return is_array( $results ) ? $results : array();
     }
 
-    public function get_committed_stock( $limit = null, $offset = 0 ) {
-        $limit_sql = $this->get_limit_offset_sql( $limit, $offset );
+    public function get_committed_stock() {
         // Try HPOS-compatible query first (WooCommerce 7.1+ with HPOS enabled)
         if ( $this->is_hpos_active() ) {
             $sql = "SELECT i.order_item_name as name, m.meta_value as qty, o.id as order_id
@@ -384,7 +383,7 @@ class WBI_Metrics_Engine {
                     JOIN {$this->wpdb->prefix}wc_orders o ON i.order_id = o.id
                     WHERE m.meta_key = '_qty'
                     AND o.status IN ('wc-processing','wc-on-hold')
-                    ORDER BY o.date_created_gmt DESC{$limit_sql}";
+                    ORDER BY o.date_created_gmt DESC";
             $results = $this->wpdb->get_results( $sql );
             return is_array( $results ) ? $results : array();
         }
@@ -397,7 +396,7 @@ class WBI_Metrics_Engine {
                 WHERE m.meta_key = '_qty'
                 AND p.post_type = 'shop_order'
                 AND p.post_status IN ('wc-processing','wc-on-hold')
-                ORDER BY p.post_date DESC{$limit_sql}";
+                ORDER BY p.post_date DESC";
         $results = $this->wpdb->get_results( $sql );
         return is_array( $results ) ? $results : array();
     }

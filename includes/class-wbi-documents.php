@@ -799,7 +799,7 @@ class WBI_Documents_Module {
             'return'       => 'ids',
             'limit'        => $per_page,
             'page'         => $paged,
-            'orderby'      => 'date',
+            'orderby'      => 'meta_value_num',
             'order'        => 'DESC',
             'paginate'     => true,
         ) );

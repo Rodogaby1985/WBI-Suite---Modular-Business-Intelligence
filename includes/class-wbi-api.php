@@ -345,8 +345,9 @@ class WBI_API_Module {
 
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
         list( $from, $to ) = $this->get_date_range( $request );
+        $invoice_type = WBI_Admin_Query_Helper::get_string( $request->get_params(), 'inv_type', '' );
 
-        $result = wc_get_orders( array(
+        $query_args = array(
             'meta_key'     => '_wbi_invoice_number',
             'meta_compare' => 'EXISTS',
             'date_created' => substr( $from, 0, 10 ) . '...' . substr( $to, 0, 10 ),
@@ -356,7 +357,18 @@ class WBI_API_Module {
             'orderby'      => 'ID',
             'order'        => 'DESC',
             'paginate'     => true,
-        ) );
+        );
+        if ( in_array( $invoice_type, array( 'A', 'B', 'C' ), true ) ) {
+            $query_args['meta_query'] = array(
+                array(
+                    'key'     => '_wbi_invoice_type',
+                    'value'   => $invoice_type,
+                    'compare' => '=',
+                ),
+            );
+        }
+
+        $result = wc_get_orders( $query_args );
         $order_ids = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
         $total     = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $order_ids );
 
