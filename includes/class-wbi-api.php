@@ -256,8 +256,9 @@ class WBI_API_Module {
 
         list( $from, $to ) = $this->get_date_range( $request );
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
-        $total = $this->engine->count_clients_ranking( $from, $to );
-        $data = $this->engine->get_clients_ranking( 'revenue', $from, $to, null, $per_page, $offset );
+        $statuses = array( 'wc-completed', 'wc-processing' );
+        $total = $this->engine->count_clients_ranking( $from, $to, $statuses );
+        $data = $this->engine->get_clients_ranking( 'revenue', $from, $to, $statuses, $per_page, $offset );
         return rest_ensure_response( $this->wrap( is_array( $data ) ? $data : array(), $total, $page, $per_page ) );
     }
 
