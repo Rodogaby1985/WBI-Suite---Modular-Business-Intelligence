@@ -348,7 +348,7 @@ class WBI_API_Module {
         $result = wc_get_orders( array(
             'meta_key'     => '_wbi_invoice_number',
             'meta_compare' => 'EXISTS',
-            'date_created' => substr( $from, 0, 10 ) . '...' . substr( $to, 0, 10 ),
+            'date_created' => strtotime( $from ) . '...' . strtotime( $to ),
             'return'       => 'ids',
             'limit'        => $per_page,
             'offset'       => $offset,

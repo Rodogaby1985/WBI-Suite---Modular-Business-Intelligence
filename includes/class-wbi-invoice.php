@@ -613,7 +613,6 @@ if ( ! empty( $custom_fields ) ) :
             'orderby'      => 'ID',
             'order'        => 'DESC',
             'return'       => 'ids',
-            'limit'        => -1,
         );
         if ( in_array( $type_filter, array( 'A', 'B', 'C' ), true ) ) {
             $query_args['meta_query'] = array(
@@ -624,33 +623,48 @@ if ( ! empty( $custom_fields ) ) :
                 ),
             );
         }
-        $order_ids = wc_get_orders( $query_args );
-
         header( 'Content-Type: text/csv; charset=UTF-8' );
         header( 'Content-Disposition: attachment; filename="facturas-wbi-' . date( 'Y-m-d' ) . '.csv"' );
         echo "\xEF\xBB\xBF"; // UTF-8 BOM
         echo "Nro Factura,Tipo,Fecha,Nro Pedido,Cliente,CUIT,Total\n";
-        foreach ( $order_ids as $oid ) {
-            $oid   = intval( $oid );
-            $order = wc_get_order( $oid );
-            if ( ! $order ) continue;
-            $name       = $order->get_billing_first_name() . ' ' . $order->get_billing_last_name();
-            $total      = $order->get_total();
-            $cuit       = $order->get_meta( '_wbi_customer_cuit', true );
-            $inv_number = $order->get_meta( '_wbi_invoice_number', true );
-            $inv_type   = $order->get_meta( '_wbi_invoice_type', true );
-            $inv_date_raw = $order->get_date_created();
-            $inv_date   = $inv_date_raw ? $inv_date_raw->date( 'd/m/Y' ) : '';
-            echo implode( ',', array_map( 'wbi_csv_escape', array(
-                $inv_number,
-                $inv_type,
-                $inv_date,
-                $oid,
-                $name,
-                $cuit,
-                $total,
-            ) ) ) . "\n";
-        }
+        $batch_size = 200;
+        $page       = 1;
+        do {
+            $batch_args             = $query_args;
+            $batch_args['limit']    = $batch_size;
+            $batch_args['page']     = $page;
+            $batch_args['paginate'] = true;
+            $result                 = wc_get_orders( $batch_args );
+            $order_ids              = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+
+            foreach ( $order_ids as $oid ) {
+                $oid   = intval( $oid );
+                $order = wc_get_order( $oid );
+                if ( ! $order ) {
+                    continue;
+                }
+                $name         = $order->get_billing_first_name() . ' ' . $order->get_billing_last_name();
+                $total        = $order->get_total();
+                $cuit         = $order->get_meta( '_wbi_customer_cuit', true );
+                $inv_number   = $order->get_meta( '_wbi_invoice_number', true );
+                $inv_type     = $order->get_meta( '_wbi_invoice_type', true );
+                $inv_date_raw = $order->get_date_created();
+                $inv_date     = $inv_date_raw ? $inv_date_raw->date( 'd/m/Y' ) : '';
+                echo implode( ',', array_map( 'wbi_csv_escape', array(
+                    $inv_number,
+                    $inv_type,
+                    $inv_date,
+                    $oid,
+                    $name,
+                    $cuit,
+                    $total,
+                ) ) ) . "\n";
+            }
+
+            $max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : 0;
+            $has_more  = $max_pages > 0 ? $page < $max_pages : count( $order_ids ) === $batch_size;
+            $page++;
+        } while ( $has_more && ! empty( $order_ids ) );
         exit;
     }
 }

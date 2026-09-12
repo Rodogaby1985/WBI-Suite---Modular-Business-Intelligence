@@ -619,16 +619,6 @@ class WBI_POS_Cash_Admin {
 
         $where_sql = implode( ' AND ', $where );
 
-        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        if ( $params ) {
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-            $sessions = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table_sessions} WHERE {$where_sql} ORDER BY opened_at DESC", ...$params ) );
-        } else {
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-            $sessions = $wpdb->get_results( "SELECT * FROM {$table_sessions} ORDER BY opened_at DESC" );
-        }
-        // phpcs:enable
-
         // Output headers
         header( 'Content-Type: text/csv; charset=utf-8' );
         header( 'Content-Disposition: attachment; filename="caja-pos-' . gmdate( 'Y-m-d' ) . '.csv"' );
@@ -657,30 +647,47 @@ class WBI_POS_Cash_Admin {
             'Nota cierre',
         ), ';' );
 
-        foreach ( $sessions as $session ) {
-            $seller = get_userdata( $session->seller_user_id );
-            $totals = WBI_POS_Cash_Movements::get_session_totals( $session->id, $session->opening_cash );
-            $counted   = ( 'closed' === $session->status && null !== $session->closing_cash_counted )
-                ? (float) $session->closing_cash_counted
-                : '';
-            $difference = '' !== $counted ? round( $counted - $totals['expected_cash'], 2 ) : '';
+        $batch_size = 500;
+        $offset     = 0;
+        do {
+            $batch_params = $params;
+            if ( $batch_params ) {
+                $batch_params[] = $batch_size;
+                $batch_params[] = $offset;
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+                $sessions = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table_sessions} WHERE {$where_sql} ORDER BY opened_at DESC LIMIT %d OFFSET %d", ...$batch_params ) );
+            } else {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+                $sessions = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table_sessions} ORDER BY opened_at DESC LIMIT %d OFFSET %d", $batch_size, $offset ) );
+            }
 
-            fputcsv( $out, array(
-                $session->id,
-                $seller ? $seller->display_name : '#' . $session->seller_user_id,
-                $session->opened_at,
-                $session->closed_at ?: '',
-                $session->status,
-                number_format( (float) $session->opening_cash, 2, '.', '' ),
-                number_format( $totals['total_income'], 2, '.', '' ),
-                number_format( $totals['total_expense'], 2, '.', '' ),
-                number_format( $totals['expected_cash'], 2, '.', '' ),
-                '' !== $counted ? number_format( $counted, 2, '.', '' ) : '',
-                '' !== $difference ? number_format( $difference, 2, '.', '' ) : '',
-                $session->opening_note ?: '',
-                $session->closing_note ?: '',
-            ), ';' );
-        }
+            foreach ( $sessions as $session ) {
+                $seller = get_userdata( $session->seller_user_id );
+                $totals = WBI_POS_Cash_Movements::get_session_totals( $session->id, $session->opening_cash );
+                $counted   = ( 'closed' === $session->status && null !== $session->closing_cash_counted )
+                    ? (float) $session->closing_cash_counted
+                    : '';
+                $difference = '' !== $counted ? round( $counted - $totals['expected_cash'], 2 ) : '';
+
+                fputcsv( $out, array(
+                    $session->id,
+                    $seller ? $seller->display_name : '#' . $session->seller_user_id,
+                    $session->opened_at,
+                    $session->closed_at ?: '',
+                    $session->status,
+                    number_format( (float) $session->opening_cash, 2, '.', '' ),
+                    number_format( $totals['total_income'], 2, '.', '' ),
+                    number_format( $totals['total_expense'], 2, '.', '' ),
+                    number_format( $totals['expected_cash'], 2, '.', '' ),
+                    '' !== $counted ? number_format( $counted, 2, '.', '' ) : '',
+                    '' !== $difference ? number_format( $difference, 2, '.', '' ) : '',
+                    $session->opening_note ?: '',
+                    $session->closing_note ?: '',
+                ), ';' );
+            }
+
+            $offset += $batch_size;
+        } while ( count( $sessions ) === $batch_size );
 
         fclose( $out );
         exit;
