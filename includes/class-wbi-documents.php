@@ -807,9 +807,16 @@ class WBI_Documents_Module {
             $total_pages = 1;
         }
 
-        $export_url = wp_nonce_url(
-            admin_url( 'admin-post.php?action=wbi_document_export_csv&export_type=invoices&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) . '&inv_type=' . urlencode( $type_filter ) ),
-            'wbi_invoice_export'
+        $export_url = WBI_Admin_Query_Helper::build_url(
+            admin_url( 'admin-post.php' ),
+            array(
+                'action'      => 'wbi_document_export_csv',
+                'export_type' => 'invoices',
+                'date_from'   => $date_from,
+                'date_to'     => $date_to,
+                'inv_type'    => $type_filter,
+                '_wpnonce'    => wp_create_nonce( 'wbi_invoice_export' ),
+            )
         );
 
         $base_url = admin_url( 'admin.php?page=wbi-documents&tab=invoices&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) . '&inv_type=' . urlencode( $type_filter ) );
@@ -955,9 +962,15 @@ class WBI_Documents_Module {
             $total_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : max( 1, (int) ceil( $total / $per_page ) );
         }
 
-        $export_url = wp_nonce_url(
-            admin_url( 'admin-post.php?action=wbi_document_export_csv&export_type=remitos&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) ),
-            'wbi_remito_export'
+        $export_url = WBI_Admin_Query_Helper::build_url(
+            admin_url( 'admin-post.php' ),
+            array(
+                'action'      => 'wbi_document_export_csv',
+                'export_type' => 'remitos',
+                'date_from'   => $date_from,
+                'date_to'     => $date_to,
+                '_wpnonce'    => wp_create_nonce( 'wbi_remito_export' ),
+            )
         );
 
         $base_url = admin_url( 'admin.php?page=wbi-documents&tab=remitos&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) );
