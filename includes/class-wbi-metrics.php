@@ -632,13 +632,13 @@ class WBI_Metrics_Engine {
 
     public function get_active_customers_list() {
         if ( $this->is_hpos_active() ) {
-            $sql = "SELECT u.display_name, u.user_email, MAX(o.date_created_gmt) as last_buy
+            $sql = "SELECT u.display_name, u.user_email, MAX(o.date_created) as last_buy
                     FROM {$this->wpdb->prefix}wc_orders o
                     JOIN {$this->wpdb->users} u ON u.ID = o.customer_id
                     WHERE o.type = 'shop_order'
                     AND o.status IN ('wc-completed','wc-processing')
                     AND o.customer_id > 0
-                    AND o.date_created_gmt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 60 DAY)
+                    AND o.date_created >= DATE_SUB(NOW(), INTERVAL 60 DAY)
                     GROUP BY u.ID
                     ORDER BY last_buy DESC";
         } else {

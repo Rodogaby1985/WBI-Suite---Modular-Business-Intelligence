@@ -256,7 +256,14 @@ class WBI_API_Module {
 
         list( $from, $to ) = $this->get_date_range( $request );
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
-        $statuses = array( 'wc-completed', 'wc-processing' );
+        $statuses = WBI_Admin_Query_Helper::get_string_array(
+            $request->get_params(),
+            'statuses',
+            array( 'wc-completed', 'wc-processing', 'wc-on-hold', 'wc-pending', 'wc-cancelled', 'wc-failed', 'wc-refunded' )
+        );
+        if ( empty( $statuses ) ) {
+            $statuses = null;
+        }
         $total = $this->engine->count_clients_ranking( $from, $to, $statuses );
         $data = $this->engine->get_clients_ranking( 'revenue', $from, $to, $statuses, $per_page, $offset );
         return rest_ensure_response( $this->wrap( is_array( $data ) ? $data : array(), $total, $page, $per_page ) );

@@ -1143,7 +1143,7 @@ class WBI_Email_Marketing_Module {
 
         // Handle CSV export
         if ( isset( $_GET['wbi_export_subscribers'] ) && isset( $_GET['_wpnonce'] ) ) {
-            if ( wp_verify_nonce( sanitize_key( $_GET['_wpnonce'] ), 'wbi_export_subs' ) ) {
+            if ( wp_verify_nonce( WBI_Admin_Query_Helper::get_string( $_GET, '_wpnonce', '' ), 'wbi_export_subs' ) ) {
                 $this->export_subscribers_csv( $search, $status_f );
             }
         }
