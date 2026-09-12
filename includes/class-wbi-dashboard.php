@@ -375,6 +375,13 @@ class WBI_Dashboard_View {
                 'type'      => 'plain',
             )
         );
+        /* translators: 1: current page, 2: total pages, 3: total products. */
+        $best_pagination_summary = sprintf(
+            __( 'Página %1$d de %2$d · Total de productos: %3$d', 'wbi-suite' ),
+            (int) $top_page,
+            (int) $best_total_pages,
+            (int) $best_total
+        );
 
         $least_pagination_base = add_query_arg(
             $this->get_allowed_query_args( $normalized_query_args, $allowed_query_fields, array( 'wbi_least_page' ) ),
@@ -390,6 +397,13 @@ class WBI_Dashboard_View {
                 'next_text' => __( 'Siguiente', 'wbi-suite' ),
                 'type'      => 'plain',
             )
+        );
+        /* translators: 1: current page, 2: total pages, 3: total products. */
+        $least_pagination_summary = sprintf(
+            __( 'Página %1$d de %2$d · Total de productos: %3$d', 'wbi-suite' ),
+            (int) $least_page,
+            (int) $least_total_pages,
+            (int) $least_total
         );
 
         WBI_Admin_Shell::open_page( 'wbi-dashboard-page' );
@@ -796,7 +810,7 @@ class WBI_Dashboard_View {
                                 </tbody>
                             </table>
                         </div>
-                        <?php WBI_Admin_Shell::render_pagination( $best_pagination_links, sprintf( __( 'Página %1$d de %2$d · Total de productos: %3$d', 'wbi-suite' ), (int) $top_page, (int) $best_total_pages, (int) $best_total ) ); ?>
+                        <?php WBI_Admin_Shell::render_pagination( $best_pagination_links, $best_pagination_summary ); ?>
                     <?php else : ?>
                         <div class="wbi-state wbi-state-empty">
                             <strong><?php esc_html_e( 'Sin ventas en este período.', 'wbi-suite' ); ?></strong>
@@ -840,7 +854,7 @@ class WBI_Dashboard_View {
                                 </tbody>
                             </table>
                         </div>
-                        <?php WBI_Admin_Shell::render_pagination( $least_pagination_links, sprintf( __( 'Página %1$d de %2$d · Total de productos: %3$d', 'wbi-suite' ), (int) $least_page, (int) $least_total_pages, (int) $least_total ) ); ?>
+                        <?php WBI_Admin_Shell::render_pagination( $least_pagination_links, $least_pagination_summary ); ?>
                     <?php else : ?>
                         <div class="wbi-state wbi-state-empty">
                             <strong><?php esc_html_e( 'Sin datos para este ranking.', 'wbi-suite' ); ?></strong>
@@ -1208,7 +1222,12 @@ class WBI_Dashboard_View {
         if ( 'currency' === $type ) {
             $formatted_value = $this->get_plain_price( $value );
         } else {
-            $formatted_value = number_format_i18n( (float) $value );
+            $raw_value = is_scalar( $value ) ? trim( (string) $value ) : '';
+            if ( preg_match( '/^-?\d+$/', $raw_value ) ) {
+                $formatted_value = number_format_i18n( (int) $raw_value );
+            } else {
+                $formatted_value = number_format_i18n( (float) $value );
+            }
         }
 
         return array(
