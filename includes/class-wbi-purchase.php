@@ -203,10 +203,13 @@ class WBI_Purchase_Module {
         $table = $wpdb->prefix . 'wbi_purchase_orders';
 
         // Filters
-        $filter_status   = isset( $_GET['filter_status'] ) ? sanitize_key( $_GET['filter_status'] ) : '';
-        $filter_supplier = isset( $_GET['filter_supplier'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_supplier'] ) ) : '';
-        $filter_from     = isset( $_GET['filter_from'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_from'] ) ) : '';
-        $filter_to       = isset( $_GET['filter_to'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_to'] ) ) : '';
+        $filter_status   = WBI_Admin_Query_Helper::get_key( $_GET, 'filter_status', '' );
+        $filter_supplier = WBI_Admin_Query_Helper::get_string( $_GET, 'filter_supplier', '' );
+        list( $filter_from, $filter_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'filter_from', 'filter_to', '', '' );
+        $allowed_statuses = array_keys( $this->get_statuses() );
+        if ( $filter_status && ! in_array( $filter_status, $allowed_statuses, true ) ) {
+            $filter_status = '';
+        }
 
         $where  = array( '1=1' );
         $params = array();

@@ -115,8 +115,16 @@ class WBI_API_Module {
     // -------------------------------------------------------------------------
 
     private function get_date_range( WP_REST_Request $request ) {
-        $from = sanitize_text_field( $request->get_param( 'date_from' ) ?? date( 'Y-m-d', strtotime( '-30 days' ) ) );
-        $to   = sanitize_text_field( $request->get_param( 'date_to' )   ?? date( 'Y-m-d' ) );
+        list( $from, $to ) = WBI_Admin_Query_Helper::normalize_date_range(
+            array(
+                'date_from' => $request->get_param( 'date_from' ),
+                'date_to'   => $request->get_param( 'date_to' ),
+            ),
+            'date_from',
+            'date_to',
+            date( 'Y-m-d', strtotime( '-30 days' ) ),
+            date( 'Y-m-d' )
+        );
         return array( $from . ' 00:00:00', $to . ' 23:59:59' );
     }
 
@@ -169,8 +177,18 @@ class WBI_API_Module {
         $this->log_request( '/products/best-sellers' );
 
         list( $from, $to ) = $this->get_date_range( $request );
-        $data = $this->engine->get_best_sellers( $from, $to );
-        return rest_ensure_response( $this->wrap( is_array( $data ) ? array_slice( $data, 0, 10 ) : array() ) );
+        list( $per_page, $page, $offset ) = $this->get_pagination( $request );
+        $statuses = WBI_Admin_Query_Helper::get_string_array(
+            $request->get_params(),
+            'statuses',
+            array( 'wc-completed', 'wc-processing', 'wc-on-hold', 'wc-pending', 'wc-cancelled', 'wc-failed', 'wc-refunded' )
+        );
+        if ( empty( $statuses ) ) {
+            $statuses = null;
+        }
+        $total = $this->engine->count_best_sellers( $from, $to, $statuses );
+        $data = $this->engine->get_best_sellers( $from, $to, $statuses, $per_page, $offset );
+        return rest_ensure_response( $this->wrap( is_array( $data ) ? $data : array(), $total, $page, $per_page ) );
     }
 
     public function endpoint_stock( WP_REST_Request $request ) {
@@ -227,19 +245,22 @@ class WBI_API_Module {
     }
 
     public function endpoint_order_status_counts( WP_REST_Request $request ) {
-        global $wpdb;
         if ( ! $this->authenticate( $request ) ) { $this->log_request( '/orders/status-counts', 401 ); return $this->auth_error(); }
         $this->log_request( '/orders/status-counts' );
 
-        $rows = $wpdb->get_results(
-            "SELECT post_status, COUNT(*) AS count
-             FROM {$wpdb->posts}
-             WHERE post_type = 'shop_order'
-             GROUP BY post_status"
-        );
+        $rows = $this->engine->get_order_status_counts();
         $data = array();
         foreach ( $rows as $row ) {
-            $data[ $row->post_status ] = intval( $row->count );
+            $status = '';
+            if ( isset( $row->post_status ) ) {
+                $status = $row->post_status;
+            } elseif ( isset( $row->status ) ) {
+                $status = $row->status;
+            }
+
+            if ( '' !== $status && isset( $row->count ) ) {
+                $data[ $status ] = intval( $row->count );
+            }
         }
         return rest_ensure_response( $this->wrap( $data ) );
     }
@@ -250,9 +271,17 @@ class WBI_API_Module {
 
         list( $from, $to ) = $this->get_date_range( $request );
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
-        $data = $this->engine->get_clients_ranking( 'revenue', $from, $to );
-        $data = is_array( $data ) ? array_slice( $data, $offset, $per_page ) : array();
-        return rest_ensure_response( $this->wrap( $data, null, $page, $per_page ) );
+        $statuses = WBI_Admin_Query_Helper::get_string_array(
+            $request->get_params(),
+            'statuses',
+            array( 'wc-completed', 'wc-processing', 'wc-on-hold', 'wc-pending', 'wc-cancelled', 'wc-failed', 'wc-refunded' )
+        );
+        if ( empty( $statuses ) ) {
+            $statuses = null;
+        }
+        $total = $this->engine->count_clients_ranking( 'revenue', $from, $to, $statuses );
+        $data = $this->engine->get_clients_ranking( 'revenue', $from, $to, $statuses, $per_page, $offset );
+        return rest_ensure_response( $this->wrap( is_array( $data ) ? $data : array(), $total, $page, $per_page ) );
     }
 
     public function endpoint_customer_scoring( WP_REST_Request $request ) {
@@ -268,17 +297,19 @@ class WBI_API_Module {
         $rows = $wpdb->get_results( $wpdb->prepare(
             "SELECT u.ID, u.user_email, um.meta_value AS score
              FROM {$wpdb->users} u
-             INNER JOIN {$wpdb->usermeta} um ON um.user_id = u.ID AND um.meta_key = 'wbi_rfm_score'
+             INNER JOIN {$wpdb->usermeta} um ON um.user_id = u.ID AND um.meta_key = '_wbi_score'
              ORDER BY CAST(um.meta_value AS SIGNED) DESC
              LIMIT %d OFFSET %d",
             $per_page, $offset
         ) );
 
         $data = array_map( function( $r ) {
-            return array( 'id' => intval( $r->ID ), 'email' => $r->user_email, 'rfm_score' => intval( $r->score ) );
+            $score = intval( $r->score );
+            return array( 'id' => intval( $r->ID ), 'email' => $r->user_email, 'score' => $score, 'rfm_score' => $score );
         }, $rows );
 
-        return rest_ensure_response( $this->wrap( $data, null, $page, $per_page ) );
+        $total = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT u.ID) FROM {$wpdb->users} u INNER JOIN {$wpdb->usermeta} um ON um.user_id = u.ID AND um.meta_key = '_wbi_score'" );
+        return rest_ensure_response( $this->wrap( $data, $total, $page, $per_page ) );
     }
 
     public function endpoint_sales_by_period( WP_REST_Request $request ) {
@@ -305,7 +336,6 @@ class WBI_API_Module {
     }
 
     public function endpoint_invoices( WP_REST_Request $request ) {
-        global $wpdb;
         if ( ! $this->authenticate( $request ) ) { $this->log_request( '/invoices', 401 ); return $this->auth_error(); }
         $this->log_request( '/invoices' );
 
@@ -315,31 +345,71 @@ class WBI_API_Module {
 
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
         list( $from, $to ) = $this->get_date_range( $request );
+        $invoice_type = WBI_Admin_Query_Helper::get_string( $request->get_params(), 'inv_type', '' );
+        $date_from    = substr( $from, 0, 10 );
+        $date_to      = substr( $to, 0, 10 );
 
-        $rows = $wpdb->get_results( $wpdb->prepare(
-            "SELECT pm.post_id, pm.meta_value AS inv_number, pm2.meta_value AS inv_type, p.post_date
-             FROM {$wpdb->postmeta} pm
-             INNER JOIN {$wpdb->postmeta} pm2 ON pm2.post_id = pm.post_id AND pm2.meta_key = '_wbi_invoice_type'
-             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-             WHERE pm.meta_key = '_wbi_invoice_number'
-             AND p.post_date BETWEEN %s AND %s
-             ORDER BY pm.post_id DESC
-             LIMIT %d OFFSET %d",
-            $from, $to, $per_page, $offset
-        ) );
+        $query_args = array(
+            'return'     => 'ids',
+            'limit'      => $per_page,
+            'offset'     => $offset,
+            'orderby'    => 'ID',
+            'order'      => 'DESC',
+            'paginate'   => true,
+            'meta_query' => array(
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
+            ),
+        );
+        if ( in_array( $invoice_type, array( 'A', 'B', 'C' ), true ) ) {
+            $query_args['meta_query'] = array(
+                'relation' => 'AND',
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_type',
+                    'value'   => $invoice_type,
+                    'compare' => '=',
+                ),
+            );
+        }
 
-        $data = array_map( function( $r ) {
-            $order = wc_get_order( intval( $r->post_id ) );
+        $result = wc_get_orders( $query_args );
+        if ( is_array( $result ) ) {
+            $order_ids = isset( $result['orders'] ) ? $result['orders'] : $result;
+            $total     = isset( $result['total'] ) ? (int) $result['total'] : count( $order_ids );
+        } else {
+            $order_ids = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+            $total     = is_object( $result ) && isset( $result->total ) ? (int) $result->total : count( $order_ids );
+        }
+        $data = array_map( function( $order_id ) {
+            $order = wc_get_order( intval( $order_id ) );
             return array(
-                'order_id'   => intval( $r->post_id ),
-                'inv_number' => $r->inv_number,
-                'inv_type'   => $r->inv_type,
-                'date'       => $r->post_date,
+                'order_id'   => intval( $order_id ),
+                'inv_number' => $order ? $order->get_meta( '_wbi_invoice_number', true ) : '',
+                'inv_type'   => $order ? $order->get_meta( '_wbi_invoice_type', true ) : '',
+                'date'       => $order ? $order->get_meta( '_wbi_invoice_date', true ) : '',
                 'total'      => $order ? floatval( $order->get_total() ) : null,
             );
-        }, $rows );
+        }, $order_ids );
 
-        return rest_ensure_response( $this->wrap( $data, count( $data ), $page, $per_page ) );
+        return rest_ensure_response( $this->wrap( $data, $total, $page, $per_page ) );
     }
 
     public function endpoint_notifications( WP_REST_Request $request ) {

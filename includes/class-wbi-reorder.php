@@ -143,9 +143,9 @@ class WBI_Reorder_Module {
         }
 
         // Filters
-        $filter_supplier = isset( $_GET['filter_supplier'] ) ? absint( $_GET['filter_supplier'] ) : 0;
-        $filter_active   = isset( $_GET['filter_active'] ) ? sanitize_key( $_GET['filter_active'] ) : '';
-        $filter_below    = isset( $_GET['filter_below'] ) ? (bool) $_GET['filter_below'] : false;
+        $filter_supplier = WBI_Admin_Query_Helper::get_absint( $_GET, 'filter_supplier', 0 );
+        $filter_active   = WBI_Admin_Query_Helper::get_key( $_GET, 'filter_active', '' );
+        $filter_below    = WBI_Admin_Query_Helper::get_bool_flag( $_GET, 'filter_below', false );
 
         // Build query
         $where  = array( '1=1' );
@@ -163,7 +163,7 @@ class WBI_Reorder_Module {
         $where_sql = implode( ' AND ', $where );
 
         $per_page     = 20;
-        $current_page = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
+        $current_page = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
 
         // For "below min stock" filter, we need all rows (to filter in PHP), then paginate.
         if ( $filter_below ) {

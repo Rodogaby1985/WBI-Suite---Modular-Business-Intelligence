@@ -167,18 +167,34 @@ class WBI_Taxes_Module {
             <?php elseif ( $tab === 'report' ) : ?>
 
                 <?php
-                $start    = isset( $_GET['start'] ) ? sanitize_text_field( wp_unslash( $_GET['start'] ) ) : date( 'Y-m-01' );
-                $end      = isset( $_GET['end'] )   ? sanitize_text_field( wp_unslash( $_GET['end'] ) )   : date( 'Y-m-d' );
+                list( $start, $end ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'start', 'end', date( 'Y-m-01' ), date( 'Y-m-d' ) );
                 $default_statuses = array( 'wc-completed', 'wc-processing' );
-                $statuses = isset( $_GET['statuses'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_GET['statuses'] ) ) : $default_statuses;
+                $statuses = WBI_Admin_Query_Helper::get_string_array( $_GET, 'statuses', array_keys( array(
+                    'wc-completed' => true,
+                    'wc-processing' => true,
+                    'wc-on-hold' => true,
+                    'wc-pending' => true,
+                ) ) );
+                if ( empty( $statuses ) ) {
+                    $statuses = $default_statuses;
+                }
                 $all_statuses = array(
                     'wc-completed'  => '✅ Completado',
                     'wc-processing' => '🔄 En proceso',
                     'wc-on-hold'    => '⏸ En espera',
                     'wc-pending'    => '⏳ Pendiente',
                 );
-                $statuses_qs = implode( '', array_map( function( $s ) { return '&statuses[]=' . rawurlencode( $s ); }, $statuses ) );
-                $export_url  = esc_url( admin_url( "admin-post.php?action=wbi_export_dynamic&report_type=taxes_summary&start={$start}&end={$end}{$statuses_qs}" ) );
+                $export_url  = esc_url( WBI_Admin_Query_Helper::build_url(
+                    admin_url( 'admin-post.php' ),
+                    array(
+                        'action'      => 'wbi_export_dynamic',
+                        'report_type' => 'taxes_summary',
+                        'start'       => $start,
+                        'end'         => $end,
+                        'statuses'    => $statuses,
+                        '_wpnonce'    => wp_create_nonce( 'wbi_export_dynamic' ),
+                    )
+                ) );
                 ?>
                 <h2 style="margin-top:0;">📊 Reporte de Impuestos por Provincia</h2>
 

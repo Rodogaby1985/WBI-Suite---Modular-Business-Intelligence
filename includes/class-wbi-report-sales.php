@@ -29,11 +29,18 @@ class WBI_Report_Sales {
     }
 
     public function render() {
-        $tab      = isset($_GET['tab'])      ? sanitize_text_field($_GET['tab'])      : 'period';
-        $start    = isset($_GET['start'])    ? sanitize_text_field($_GET['start'])    : date('Y-m-01'); 
-        $end      = isset($_GET['end'])      ? sanitize_text_field($_GET['end'])      : date('Y-m-d');
+        $tab      = WBI_Admin_Query_Helper::get_key( $_GET, 'tab', 'period' );
+        list( $start, $end ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'start', 'end', date( 'Y-m-01' ), date( 'Y-m-d' ) );
         $default_statuses = array('wc-completed', 'wc-processing');
-        $statuses = isset($_GET['statuses']) ? array_map('sanitize_text_field', (array)$_GET['statuses']) : $default_statuses;
+        $statuses = WBI_Admin_Query_Helper::get_string_array( $_GET, 'statuses', array_keys( array(
+            'wc-completed' => true,
+            'wc-processing' => true,
+            'wc-on-hold' => true,
+            'wc-pending' => true,
+        ) ) );
+        if ( empty( $statuses ) ) {
+            $statuses = $default_statuses;
+        }
 
         $all_statuses = array(
             'wc-completed'  => '✅ Completado',
@@ -43,7 +50,13 @@ class WBI_Report_Sales {
         );
 
         // Build statuses query string for export URLs
-        $statuses_qs = implode('', array_map(function($s){ return '&statuses[]=' . rawurlencode($s); }, $statuses));
+        $export_base_args = array(
+            'action'   => 'wbi_export_dynamic',
+            'start'    => $start,
+            'end'      => $end,
+            'statuses' => $statuses,
+            '_wpnonce' => wp_create_nonce( 'wbi_export_dynamic' ),
+        );
         ?>
         <div class="wrap">
             <h1 class="wp-heading-inline">📊 Análisis Profundo de Ventas</h1>
@@ -78,14 +91,14 @@ class WBI_Report_Sales {
                     <button class="button button-primary">Filtrar Resultados</button>
 
                     <?php if ( $tab === 'period' ) : ?>
-                        <a href="<?php echo esc_url(admin_url("admin-post.php?action=wbi_export_dynamic&report_type=sales_period&start={$start}&end={$end}{$statuses_qs}")); ?>" class="button">📥 Exportar CSV</a>
+                        <a href="<?php echo esc_url( WBI_Admin_Query_Helper::build_url( admin_url( 'admin-post.php' ), array_merge( $export_base_args, array( 'report_type' => 'sales_period' ) ) ) ); ?>" class="button">📥 Exportar CSV</a>
                     <?php elseif ( $tab === 'province' ) : ?>
                         <?php
-                        $province_export = isset($_GET['province']) ? sanitize_text_field($_GET['province']) : '';
+                        $province_export = WBI_Admin_Query_Helper::get_string( $_GET, 'province', '' );
                         if ( $province_export !== '' ) {
-                            $province_export_url = esc_url( admin_url( "admin-post.php?action=wbi_export_dynamic&report_type=sales_province_detail&start={$start}&end={$end}{$statuses_qs}&province=" . rawurlencode( $province_export ) ) );
+                            $province_export_url = esc_url( WBI_Admin_Query_Helper::build_url( admin_url( 'admin-post.php' ), array_merge( $export_base_args, array( 'report_type' => 'sales_province_detail', 'province' => $province_export ) ) ) );
                         } else {
-                            $province_export_url = esc_url( admin_url( "admin-post.php?action=wbi_export_dynamic&report_type=sales_province&start={$start}&end={$end}{$statuses_qs}" ) );
+                            $province_export_url = esc_url( WBI_Admin_Query_Helper::build_url( admin_url( 'admin-post.php' ), array_merge( $export_base_args, array( 'report_type' => 'sales_province' ) ) ) );
                         }
                         ?>
                         <a href="<?php echo $province_export_url; ?>" class="button">📥 Exportar CSV</a>

@@ -84,21 +84,19 @@ class WBI_Dashboard_View {
                 break;
             }
         }
-        $has_valid_filter_nonce = isset( $_GET['wbi_dashboard_nonce'] ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-            && wp_verify_nonce( sanitize_text_field( wp_unslash( (string) $_GET['wbi_dashboard_nonce'] ) ), 'wbi_dashboard_filters' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $has_valid_filter_nonce = ! $has_filter_request || wp_verify_nonce(
+            WBI_Admin_Query_Helper::get_string( $_GET, 'wbi_dashboard_nonce', '' ),
+            'wbi_dashboard_filters'
+        );
+        $request_args = $has_valid_filter_nonce ? $_GET : array();
 
         // --- 1. LÓGICA DE FECHAS (Restaurada) ---
-        $range = ( $has_filter_request && ! $has_valid_filter_nonce ) ? '30d' : ( isset($_GET['wbi_range']) ? $this->sanitize_dashboard_query_arg( 'wbi_range', $_GET['wbi_range'] ) : '30d' );
+        $range = isset( $request_args['wbi_range'] ) ? $this->sanitize_dashboard_query_arg( 'wbi_range', $request_args['wbi_range'] ) : '30d';
         $end_date = date('Y-m-d'); 
         $start_date = date('Y-m-d', strtotime('-30 days'));
 
-        if ( $has_filter_request && ! $has_valid_filter_nonce ) {
-            $range = '30d';
-        }
-
-        if( $range === 'custom' && !empty($_GET['wbi_start']) && !empty($_GET['wbi_end']) && ( ! $has_filter_request || $has_valid_filter_nonce ) ) {
-            $start_date = $this->sanitize_dashboard_query_arg( 'wbi_start', $_GET['wbi_start'] );
-            $end_date = $this->sanitize_dashboard_query_arg( 'wbi_end', $_GET['wbi_end'] );
+        if ( $range === 'custom' && ! empty( $request_args['wbi_start'] ) && ! empty( $request_args['wbi_end'] ) ) {
+            list( $start_date, $end_date ) = WBI_Admin_Query_Helper::normalize_date_range( $request_args, 'wbi_start', 'wbi_end', $start_date, $end_date );
         } else {
             switch($range) {
                 case 'today': $start_date = date('Y-m-d'); break;
@@ -111,7 +109,7 @@ class WBI_Dashboard_View {
         }
 
         // --- 2. COMPARACIÓN DE PERIODO ---
-        $compare = ( $has_filter_request && ! $has_valid_filter_nonce ) ? 'none' : ( isset($_GET['wbi_compare']) ? $this->sanitize_dashboard_query_arg( 'wbi_compare', $_GET['wbi_compare'] ) : 'none' );
+        $compare = isset( $request_args['wbi_compare'] ) ? $this->sanitize_dashboard_query_arg( 'wbi_compare', $request_args['wbi_compare'] ) : 'none';
         $prev_start = '';
         $prev_end   = '';
 
@@ -123,19 +121,16 @@ class WBI_Dashboard_View {
             } elseif ( $compare === 'prev_year' ) {
                 $prev_start = date('Y-m-d', strtotime($start_date . ' -1 year'));
                 $prev_end   = date('Y-m-d', strtotime($end_date . ' -1 year'));
-            } elseif ( $compare === 'custom_compare' && !empty($_GET['wbi_prev_start']) && !empty($_GET['wbi_prev_end']) && ( ! $has_filter_request || $has_valid_filter_nonce ) ) {
-                $prev_start = $this->sanitize_dashboard_query_arg( 'wbi_prev_start', $_GET['wbi_prev_start'] );
-                $prev_end   = $this->sanitize_dashboard_query_arg( 'wbi_prev_end', $_GET['wbi_prev_end'] );
+            } elseif ( $compare === 'custom_compare' && ! empty( $request_args['wbi_prev_start'] ) && ! empty( $request_args['wbi_prev_end'] ) ) {
+                list( $prev_start, $prev_end ) = WBI_Admin_Query_Helper::normalize_date_range( $request_args, 'wbi_prev_start', 'wbi_prev_end', '', '' );
             }
         }
 
         // --- 3. OBTENER DATOS ---
         $default_statuses = array( 'wc-completed', 'wc-processing' );
-        $statuses = ( $has_filter_request && ! $has_valid_filter_nonce )
-            ? $default_statuses
-            : ( isset($_GET['statuses']) ? array_map( function ( $status ) {
+        $statuses = isset( $request_args['statuses'] ) ? array_map( function ( $status ) {
                 return $this->sanitize_dashboard_query_arg( 'statuses', $status );
-            }, (array) $_GET['statuses'] ) : $default_statuses );
+            }, (array) $request_args['statuses'] ) : $default_statuses;
         $statuses = array_values( array_intersect( $statuses, $this->allowed_statuses ) );
         if ( empty( $statuses ) ) {
             $statuses = $default_statuses;
@@ -151,42 +146,29 @@ class WBI_Dashboard_View {
         $c_cancelled  = $this->get_safe_count($status_raw, 'wc-cancelled');
         $c_failed     = $this->get_safe_count($status_raw, 'wc-failed');
 
-        $least_sold = $this->engine->get_least_sold($start_date, $end_date, $statuses);
-        $best_sold  = $this->engine->get_best_sellers($start_date, $end_date, $statuses);
-
         $top_per_page_allowed = array( 5, 10, 25 );
-        $best_per_page = ( $has_filter_request && ! $has_valid_filter_nonce )
-            ? 5
-            : ( isset( $_GET['wbi_top_per_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_top_per_page', $_GET['wbi_top_per_page'] ) : 5 );
+        $best_per_page = isset( $request_args['wbi_top_per_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_top_per_page', $request_args['wbi_top_per_page'] ) : 5;
         if ( ! in_array( $best_per_page, $top_per_page_allowed, true ) ) {
             $best_per_page = 5;
         }
-        $top_page = ( $has_filter_request && ! $has_valid_filter_nonce )
-            ? 1
-            : ( isset( $_GET['wbi_top_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_top_page', $_GET['wbi_top_page'] ) : 1 );
+        $top_page = isset( $request_args['wbi_top_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_top_page', $request_args['wbi_top_page'] ) : 1;
         $top_page = max( 1, $top_page );
-
-        $best_sold = is_array( $best_sold ) ? $best_sold : array();
-        $least_sold = is_array( $least_sold ) ? $least_sold : array();
-        $best_total = count( $best_sold );
-        $least_total = count( $least_sold );
+        $best_total = $this->engine->count_best_sellers( $start_date, $end_date, $statuses );
+        $least_total = $this->engine->count_least_sold( $start_date, $end_date, $statuses );
         $best_has_rows = $best_total > 0;
         $best_total_pages = max( 1, (int) ceil( $best_total / $best_per_page ) );
         if ( $top_page > $best_total_pages ) {
             $top_page = $best_total_pages;
         }
         $top_offset = ( $top_page - 1 ) * $best_per_page;
-        $best_sold_page = array_slice( $best_sold, $top_offset, $best_per_page );
+        $best_sold_page = $this->engine->get_best_sellers( $start_date, $end_date, $statuses, $best_per_page, $top_offset );
+        $best_sold_page = is_array( $best_sold_page ) ? $best_sold_page : array();
 
-        $least_per_page = ( $has_filter_request && ! $has_valid_filter_nonce )
-            ? 5
-            : ( isset( $_GET['wbi_least_per_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_least_per_page', $_GET['wbi_least_per_page'] ) : 5 );
+        $least_per_page = isset( $request_args['wbi_least_per_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_least_per_page', $request_args['wbi_least_per_page'] ) : 5;
         if ( ! in_array( $least_per_page, $top_per_page_allowed, true ) ) {
             $least_per_page = 5;
         }
-        $least_page = ( $has_filter_request && ! $has_valid_filter_nonce )
-            ? 1
-            : ( isset( $_GET['wbi_least_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_least_page', $_GET['wbi_least_page'] ) : 1 );
+        $least_page = isset( $request_args['wbi_least_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_least_page', $request_args['wbi_least_page'] ) : 1;
         $least_page = max( 1, $least_page );
         $least_has_rows = $least_total > 0;
         $least_total_pages = max( 1, (int) ceil( $least_total / $least_per_page ) );
@@ -194,8 +176,8 @@ class WBI_Dashboard_View {
             $least_page = $least_total_pages;
         }
         $least_offset = ( $least_page - 1 ) * $least_per_page;
-        $least_sold_page = array_slice( $least_sold, $least_offset, $least_per_page );
-
+        $least_sold_page = $this->engine->get_least_sold( $start_date, $end_date, $statuses, $least_per_page, $least_offset );
+        $least_sold_page = is_array( $least_sold_page ) ? $least_sold_page : array();
         $allowed_query_fields = array(
             'page',
             'wbi_range',
@@ -750,35 +732,6 @@ class WBI_Dashboard_View {
     }
 
     private function get_allowed_query_args( $allowed_keys = array(), $exclude_keys = array() ) {
-        $filter_keys = array(
-            'wbi_range',
-            'wbi_start',
-            'wbi_end',
-            'wbi_compare',
-            'wbi_prev_start',
-            'wbi_prev_end',
-            'statuses',
-            'wbi_top_page',
-            'wbi_least_page',
-            'wbi_top_per_page',
-            'wbi_least_per_page',
-        );
-        $has_filter_request = false;
-        foreach ( $filter_keys as $filter_key ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-            if ( isset( $_GET[ $filter_key ] ) ) {
-                $has_filter_request = true;
-                break;
-            }
-        }
-        $has_valid_filter_nonce = isset( $_GET['wbi_dashboard_nonce'] ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-            && wp_verify_nonce( sanitize_text_field( wp_unslash( (string) $_GET['wbi_dashboard_nonce'] ) ), 'wbi_dashboard_filters' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-        if ( $has_filter_request && ! $has_valid_filter_nonce ) {
-            return array(
-                'page'                => 'wbi-dashboard-view',
-                'wbi_dashboard_nonce' => wp_create_nonce( 'wbi_dashboard_filters' ),
-            );
-        }
-
         $args = array();
         foreach ( $_GET as $key => $value ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
             if ( 'wbi_dashboard_nonce' === $key ) {
@@ -826,7 +779,7 @@ class WBI_Dashboard_View {
             case 'wbi_end':
             case 'wbi_prev_start':
             case 'wbi_prev_end':
-                return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) ? $raw : '';
+                return WBI_Admin_Query_Helper::is_valid_date_ymd( $raw ) ? $raw : '';
             case 'statuses':
                 $status = sanitize_key( $raw );
                 return in_array( $status, $this->allowed_statuses, true ) ? $status : '';

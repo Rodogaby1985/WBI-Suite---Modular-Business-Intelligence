@@ -97,13 +97,12 @@ class WBI_POS_Cash_Admin {
         $can_see_all          = current_user_can( 'manage_woocommerce' );
 
         // ── Filters ──────────────────────────────────────────────────────────
-        $filter_user   = isset( $_GET['filter_user'] )   ? absint( $_GET['filter_user'] )                         : 0;
-        $filter_status = isset( $_GET['filter_status'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_status'] ) ) : '';
-        $filter_from   = isset( $_GET['filter_from'] )   ? sanitize_text_field( wp_unslash( $_GET['filter_from'] ) )  : '';
-        $filter_to     = isset( $_GET['filter_to'] )     ? sanitize_text_field( wp_unslash( $_GET['filter_to'] ) )    : '';
-        $current_page  = max( 1, absint( $_GET['paged'] ?? 1 ) );
+        $filter_user   = WBI_Admin_Query_Helper::get_absint( $_GET, 'filter_user', 0 );
+        $filter_status = WBI_Admin_Query_Helper::get_key( $_GET, 'filter_status', '' );
+        list( $filter_from, $filter_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'filter_from', 'filter_to', '', '' );
+        $current_page  = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $allowed_per_page = array( 10, 25, 50, 100 );
-        $requested_per_page = absint( $_GET['per_page'] ?? 25 );
+        $requested_per_page = WBI_Admin_Query_Helper::get_absint( $_GET, 'per_page', 25 );
         $per_page = in_array( $requested_per_page, $allowed_per_page, true ) ? $requested_per_page : 25;
 
         $where  = array( '1=1' );
@@ -588,10 +587,9 @@ class WBI_POS_Cash_Admin {
         $current_user_id = get_current_user_id();
         $can_see_all     = current_user_can( 'manage_woocommerce' );
 
-        $filter_user   = isset( $_GET['filter_user'] )   ? absint( $_GET['filter_user'] )                         : 0;
-        $filter_status = isset( $_GET['filter_status'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_status'] ) ) : '';
-        $filter_from   = isset( $_GET['filter_from'] )   ? sanitize_text_field( wp_unslash( $_GET['filter_from'] ) )  : '';
-        $filter_to     = isset( $_GET['filter_to'] )     ? sanitize_text_field( wp_unslash( $_GET['filter_to'] ) )    : '';
+        $filter_user   = WBI_Admin_Query_Helper::get_absint( $_GET, 'filter_user', 0 );
+        $filter_status = WBI_Admin_Query_Helper::get_key( $_GET, 'filter_status', '' );
+        list( $filter_from, $filter_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'filter_from', 'filter_to', '', '' );
 
         $where  = array( '1=1' );
         $params = array();
@@ -621,16 +619,6 @@ class WBI_POS_Cash_Admin {
 
         $where_sql = implode( ' AND ', $where );
 
-        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        if ( $params ) {
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-            $sessions = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table_sessions} WHERE {$where_sql} ORDER BY opened_at DESC LIMIT 2000", ...$params ) );
-        } else {
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-            $sessions = $wpdb->get_results( "SELECT * FROM {$table_sessions} ORDER BY opened_at DESC LIMIT 2000" );
-        }
-        // phpcs:enable
-
         // Output headers
         header( 'Content-Type: text/csv; charset=utf-8' );
         header( 'Content-Disposition: attachment; filename="caja-pos-' . gmdate( 'Y-m-d' ) . '.csv"' );
@@ -659,30 +647,55 @@ class WBI_POS_Cash_Admin {
             'Nota cierre',
         ), ';' );
 
-        foreach ( $sessions as $session ) {
-            $seller = get_userdata( $session->seller_user_id );
-            $totals = WBI_POS_Cash_Movements::get_session_totals( $session->id, $session->opening_cash );
-            $counted   = ( 'closed' === $session->status && null !== $session->closing_cash_counted )
-                ? (float) $session->closing_cash_counted
-                : '';
-            $difference = '' !== $counted ? round( $counted - $totals['expected_cash'], 2 ) : '';
+        $batch_size     = 500;
+        $last_opened_at = null;
+        $last_id        = 0;
+        do {
+            $batch_params = $params;
+            $batch_where  = $where;
+            if ( null !== $last_opened_at ) {
+                $batch_where[]  = '(opened_at < %s OR (opened_at = %s AND id < %d))';
+                $batch_params[] = $last_opened_at;
+                $batch_params[] = $last_opened_at;
+                $batch_params[] = $last_id;
+            }
+            $batch_where_sql = implode( ' AND ', $batch_where );
+            $batch_params[]  = $batch_size;
 
-            fputcsv( $out, array(
-                $session->id,
-                $seller ? $seller->display_name : '#' . $session->seller_user_id,
-                $session->opened_at,
-                $session->closed_at ?: '',
-                $session->status,
-                number_format( (float) $session->opening_cash, 2, '.', '' ),
-                number_format( $totals['total_income'], 2, '.', '' ),
-                number_format( $totals['total_expense'], 2, '.', '' ),
-                number_format( $totals['expected_cash'], 2, '.', '' ),
-                '' !== $counted ? number_format( $counted, 2, '.', '' ) : '',
-                '' !== $difference ? number_format( $difference, 2, '.', '' ) : '',
-                $session->opening_note ?: '',
-                $session->closing_note ?: '',
-            ), ';' );
-        }
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+            $sessions = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table_sessions} WHERE {$batch_where_sql} ORDER BY opened_at DESC, id DESC LIMIT %d", ...$batch_params ) );
+
+            foreach ( $sessions as $session ) {
+                $seller = get_userdata( $session->seller_user_id );
+                $totals = WBI_POS_Cash_Movements::get_session_totals( $session->id, $session->opening_cash );
+                $counted   = ( 'closed' === $session->status && null !== $session->closing_cash_counted )
+                    ? (float) $session->closing_cash_counted
+                    : '';
+                $difference = '' !== $counted ? round( $counted - $totals['expected_cash'], 2 ) : '';
+
+                fputcsv( $out, array(
+                    $session->id,
+                    $seller ? $seller->display_name : '#' . $session->seller_user_id,
+                    $session->opened_at,
+                    $session->closed_at ?: '',
+                    $session->status,
+                    number_format( (float) $session->opening_cash, 2, '.', '' ),
+                    number_format( $totals['total_income'], 2, '.', '' ),
+                    number_format( $totals['total_expense'], 2, '.', '' ),
+                    number_format( $totals['expected_cash'], 2, '.', '' ),
+                    '' !== $counted ? number_format( $counted, 2, '.', '' ) : '',
+                    '' !== $difference ? number_format( $difference, 2, '.', '' ) : '',
+                    $session->opening_note ?: '',
+                    $session->closing_note ?: '',
+                ), ';' );
+            }
+
+            if ( ! empty( $sessions ) ) {
+                $last_session   = end( $sessions );
+                $last_opened_at = $last_session->opened_at;
+                $last_id        = (int) $last_session->id;
+            }
+        } while ( count( $sessions ) === $batch_size );
 
         fclose( $out );
         exit;

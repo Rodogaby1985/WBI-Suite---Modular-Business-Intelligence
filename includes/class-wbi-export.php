@@ -34,11 +34,24 @@ class WBI_Export_Module {
     // --- PROCESADOR DINÁMICO ---
     public function process_dynamic_export() {
         if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Sin permisos' );
+        if ( ! wp_verify_nonce( WBI_Admin_Query_Helper::get_string( $_GET, '_wpnonce', '' ), 'wbi_export_dynamic' ) ) wp_die( 'Nonce inválido' );
 
-        $type     = isset($_GET['report_type']) ? sanitize_text_field($_GET['report_type']) : '';
-        $start    = isset($_GET['start']) ? sanitize_text_field($_GET['start']) : date('Y-m-01');
-        $end      = isset($_GET['end']) ? sanitize_text_field($_GET['end']) : date('Y-m-d');
-        $statuses = isset($_GET['statuses']) ? array_map('sanitize_text_field', (array)$_GET['statuses']) : null;
+        $type = WBI_Admin_Query_Helper::get_key( $_GET, 'report_type', '' );
+        list( $start, $end ) = WBI_Admin_Query_Helper::normalize_date_range(
+            $_GET,
+            'start',
+            'end',
+            date( 'Y-m-01' ),
+            date( 'Y-m-d' )
+        );
+        $statuses = WBI_Admin_Query_Helper::get_string_array(
+            $_GET,
+            'statuses',
+            array( 'wc-completed', 'wc-processing', 'wc-on-hold', 'wc-pending', 'wc-cancelled', 'wc-failed', 'wc-refunded' )
+        );
+        if ( empty( $statuses ) ) {
+            $statuses = null;
+        }
 
         $output = $this->prepare_csv( 'wbi_reporte_' . $type );
 
@@ -149,7 +162,15 @@ class WBI_Export_Module {
             case 'costs_margins':
                 fputcsv($output, ['Producto', 'SKU', 'Precio Venta', 'Costo', 'Margen %', 'Estado']);
                 $alert_threshold = floatval( get_option( 'wbi_margin_alert_threshold', 20 ) );
-                $data = $this->engine->get_products_with_costs( 10000, 0, 0, -999, 999 );
+                $category_id = WBI_Admin_Query_Helper::get_absint( $_GET, 'category_id', 0 );
+                $min_margin  = WBI_Admin_Query_Helper::get_float( $_GET, 'min_margin', -999 );
+                $max_margin  = WBI_Admin_Query_Helper::get_float( $_GET, 'max_margin', 999 );
+                if ( $min_margin > $max_margin ) {
+                    $swap       = $min_margin;
+                    $min_margin = $max_margin;
+                    $max_margin = $swap;
+                }
+                $data = $this->engine->get_products_with_costs( null, 0, $category_id, $min_margin, $max_margin );
                 foreach ( $data as $row ) {
                     $price  = floatval( $row->price );
                     $cost   = floatval( $row->cost );
@@ -169,7 +190,8 @@ class WBI_Export_Module {
             case 'scoring':
                 fputcsv($output, ['Nombre', 'Email', 'Score', 'Clase', 'Fecha Score']);
                 if ( class_exists( 'WBI_Scoring_Module' ) ) {
-                    $scored_users = WBI_Scoring_Module::get_all_scored_users_for_export();
+                    $score_class  = WBI_Admin_Query_Helper::get_key( $_GET, 'score_class', '' );
+                    $scored_users = WBI_Scoring_Module::get_all_scored_users_for_export( $score_class );
                     foreach ( $scored_users as $u ) {
                         fputcsv($output, [
                             $u->display_name,

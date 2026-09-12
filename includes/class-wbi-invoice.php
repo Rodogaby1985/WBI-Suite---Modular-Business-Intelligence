@@ -502,24 +502,42 @@ if ( ! empty( $custom_fields ) ) :
             return;
         }
 
-        $date_from  = isset( $_GET['date_from'] ) ? sanitize_text_field( wp_unslash( $_GET['date_from'] ) ) : date( 'Y-m-d', strtotime( '-30 days' ) );
-        $date_to    = isset( $_GET['date_to'] )   ? sanitize_text_field( wp_unslash( $_GET['date_to'] ) )   : date( 'Y-m-d' );
-        $type_filter= isset( $_GET['inv_type'] )  ? sanitize_text_field( wp_unslash( $_GET['inv_type'] ) )  : '';
-        $paged      = max( 1, absint( $_GET['paged'] ?? 1 ) );
+        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
+        $type_filter= WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
+        $paged      = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $per_page   = 20;
         $offset     = ( $paged - 1 ) * $per_page;
 
         // Build wc_get_orders() args for HPOS-compatible queries
         $query_args = array(
-            'meta_key'     => '_wbi_invoice_number',
-            'meta_compare' => 'EXISTS',
-            // WooCommerce date_created range format: 'YYYY-MM-DD...YYYY-MM-DD'
-            'date_created' => $date_from . '...' . $date_to,
-            'return'       => 'ids',
-            'limit'        => -1,
+            'return'     => 'ids',
+            'limit'      => -1,
+            'meta_query' => array(
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
+            ),
         );
         if ( in_array( $type_filter, array( 'A', 'B', 'C' ), true ) ) {
             $query_args['meta_query'] = array(
+                'relation' => 'AND',
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
                 array(
                     'key'     => '_wbi_invoice_type',
                     'value'   => $type_filter,
@@ -546,7 +564,7 @@ if ( ! empty( $custom_fields ) ) :
         }
         echo '</select></label> ';
         echo '<button type="submit" class="button">Filtrar</button> ';
-        $export_url = wp_nonce_url( admin_url( 'admin.php?page=wbi-invoices&export=csv&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) ), 'wbi_invoice_export' );
+        $export_url = wp_nonce_url( admin_url( 'admin.php?page=wbi-invoices&export=csv&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) . '&inv_type=' . urlencode( $type_filter ) ), 'wbi_invoice_export' );
         echo '<a href="' . esc_url( $export_url ) . '" class="button">⬇️ Exportar CSV</a>';
         echo '</form>';
 
@@ -564,8 +582,8 @@ if ( ! empty( $custom_fields ) ) :
                 $name   = $order ? esc_html( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ) : '—';
                 $inv_number = $order ? esc_html( $order->get_meta( '_wbi_invoice_number', true ) ) : '';
                 $inv_type   = $order ? esc_html( $order->get_meta( '_wbi_invoice_type', true ) ) : '';
-                $inv_date_raw = $order ? $order->get_date_created() : null;
-                $inv_date   = $inv_date_raw ? $inv_date_raw->date( 'd/m/Y' ) : '—';
+                $inv_date_meta = $order ? $order->get_meta( '_wbi_invoice_date', true ) : '';
+                $inv_date   = $inv_date_meta ? date_i18n( 'd/m/Y', strtotime( $inv_date_meta ) ) : '—';
                 $view_url = wp_nonce_url( admin_url( 'admin-post.php?action=wbi_view_invoice&order_id=' . $oid ), 'wbi_view_invoice_' . $oid );
                 $edit_url = $order ? $order->get_edit_order_url() : '#';
                 echo '<tr>';
@@ -605,40 +623,92 @@ if ( ! empty( $custom_fields ) ) :
     }
 
     private function export_csv() {
-        $order_ids = wc_get_orders( array(
-            'meta_key'     => '_wbi_invoice_number',
-            'meta_compare' => 'EXISTS',
-            'limit'        => 1000,
-            'orderby'      => 'ID',
-            'order'        => 'DESC',
-            'return'       => 'ids',
-        ) );
-
+        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
+        $type_filter = WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
+        $query_args = array(
+            'orderby'    => 'ID',
+            'order'      => 'DESC',
+            'return'     => 'ids',
+            'meta_query' => array(
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
+            ),
+        );
+        if ( in_array( $type_filter, array( 'A', 'B', 'C' ), true ) ) {
+            $query_args['meta_query'] = array(
+                'relation' => 'AND',
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_type',
+                    'value'   => $type_filter,
+                    'compare' => '=',
+                ),
+            );
+        }
         header( 'Content-Type: text/csv; charset=UTF-8' );
         header( 'Content-Disposition: attachment; filename="facturas-wbi-' . date( 'Y-m-d' ) . '.csv"' );
         echo "\xEF\xBB\xBF"; // UTF-8 BOM
         echo "Nro Factura,Tipo,Fecha,Nro Pedido,Cliente,CUIT,Total\n";
-        foreach ( $order_ids as $oid ) {
-            $oid   = intval( $oid );
-            $order = wc_get_order( $oid );
-            if ( ! $order ) continue;
-            $name       = $order->get_billing_first_name() . ' ' . $order->get_billing_last_name();
-            $total      = $order->get_total();
-            $cuit       = $order->get_meta( '_wbi_customer_cuit', true );
-            $inv_number = $order->get_meta( '_wbi_invoice_number', true );
-            $inv_type   = $order->get_meta( '_wbi_invoice_type', true );
-            $inv_date_raw = $order->get_date_created();
-            $inv_date   = $inv_date_raw ? $inv_date_raw->date( 'd/m/Y' ) : '';
-            echo implode( ',', array_map( 'wbi_csv_escape', array(
-                $inv_number,
-                $inv_type,
-                $inv_date,
-                $oid,
-                $name,
-                $cuit,
-                $total,
-            ) ) ) . "\n";
-        }
+        $batch_size = 200;
+        $page       = 1;
+        do {
+            $batch_args             = $query_args;
+            $batch_args['limit']    = $batch_size;
+            $batch_args['page']     = $page;
+            $batch_args['paginate'] = true;
+            $result                 = wc_get_orders( $batch_args );
+            if ( is_array( $result ) ) {
+                $order_ids = isset( $result['orders'] ) ? $result['orders'] : $result;
+                $max_pages = isset( $result['max_num_pages'] ) ? (int) $result['max_num_pages'] : 0;
+            } else {
+                $order_ids = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+                $max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? (int) $result->max_num_pages : 0;
+            }
+
+            foreach ( $order_ids as $oid ) {
+                $oid   = intval( $oid );
+                $order = wc_get_order( $oid );
+                if ( ! $order ) {
+                    continue;
+                }
+                $name         = $order->get_billing_first_name() . ' ' . $order->get_billing_last_name();
+                $total        = $order->get_total();
+                $cuit         = $order->get_meta( '_wbi_customer_cuit', true );
+                $inv_number   = $order->get_meta( '_wbi_invoice_number', true );
+                $inv_type     = $order->get_meta( '_wbi_invoice_type', true );
+                $inv_date_meta = $order->get_meta( '_wbi_invoice_date', true );
+                $inv_date      = $inv_date_meta ? date_i18n( 'd/m/Y', strtotime( $inv_date_meta ) ) : '';
+                echo implode( ',', array_map( 'wbi_csv_escape', array(
+                    $inv_number,
+                    $inv_type,
+                    $inv_date,
+                    $oid,
+                    $name,
+                    $cuit,
+                    $total,
+                ) ) ) . "\n";
+            }
+
+            $has_more  = $max_pages > 0 ? $page < $max_pages : count( $order_ids ) === $batch_size;
+            $page++;
+        } while ( $has_more && ! empty( $order_ids ) );
         exit;
     }
 }
