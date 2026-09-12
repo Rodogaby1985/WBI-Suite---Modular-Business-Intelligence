@@ -115,7 +115,7 @@ class WBI_Admin_Shell {
             echo '<p class="wbi-page-summary">' . esc_html( $summary ) . '</p>';
         }
         echo '<div class="tablenav">';
-        echo '<nav class="tablenav-pages" aria-label="' . esc_attr__( 'Paginación', 'wbi-suite' ) . '">' . wp_kses_post( $pagination ) . '</nav>';
+        echo '<div class="tablenav-pages">' . wp_kses_post( $pagination ) . '</div>';
         echo '</div>';
         echo '</div>';
     }
