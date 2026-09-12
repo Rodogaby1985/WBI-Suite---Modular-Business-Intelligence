@@ -103,13 +103,13 @@ class WBI_Admin_Shell {
             return;
         }
 
-        echo '<div class="wbi-pagination">';
+        echo '<nav class="wbi-pagination tablenav" aria-label="' . esc_attr__( 'Paginación', 'wbi-suite' ) . '">';
         if ( '' !== $summary ) {
             echo '<p class="wbi-page-summary">' . esc_html( $summary ) . '</p>';
         }
         if ( ! empty( $pagination ) ) {
             echo '<div class="tablenav-pages">' . wp_kses_post( $pagination ) . '</div>';
         }
-        echo '</div>';
+        echo '</nav>';
     }
 }

@@ -856,14 +856,16 @@ class WBI_Documents_Module {
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="wbi-filter-field wbi-col-4">
+                <div class="wbi-filter-field wbi-col-3">
                     <div class="wbi-filter-actions">
                         <button type="submit" class="wbi-btn wbi-btn-primary">Filtrar</button>
-                        <a href="<?php echo esc_url( $export_url ); ?>" class="wbi-btn">Exportar CSV</a>
                     </div>
                 </div>
             </div>
         </form>
+        <div class="wbi-page-actions">
+            <a href="<?php echo esc_url( $export_url ); ?>" class="wbi-btn">Exportar CSV</a>
+        </div>
 
         <section class="wbi-card">
         <p class="wbi-page-summary">Total: <strong><?php echo intval( $total_rows ); ?></strong> facturas en el período.</p>
@@ -1005,9 +1007,10 @@ class WBI_Documents_Module {
         echo '<div class="wbi-filter-grid">';
         echo '<div class="wbi-filter-field wbi-col-3"><label for="wbi-docs-remitos-from">Desde</label><input id="wbi-docs-remitos-from" type="date" name="date_from" value="' . esc_attr( $date_from ) . '"></div>';
         echo '<div class="wbi-filter-field wbi-col-3"><label for="wbi-docs-remitos-to">Hasta</label><input id="wbi-docs-remitos-to" type="date" name="date_to" value="' . esc_attr( $date_to ) . '"></div>';
-        echo '<div class="wbi-filter-field wbi-col-4"><div class="wbi-filter-actions"><button type="submit" class="wbi-btn wbi-btn-primary">Filtrar</button><a href="' . esc_url( $export_url ) . '" class="wbi-btn">Exportar CSV</a></div></div>';
+        echo '<div class="wbi-filter-field wbi-col-3"><div class="wbi-filter-actions"><button type="submit" class="wbi-btn wbi-btn-primary">Filtrar</button></div></div>';
         echo '</div>';
         echo '</form>';
+        echo '<div class="wbi-page-actions"><a href="' . esc_url( $export_url ) . '" class="wbi-btn">Exportar CSV</a></div>';
         echo '<section class="wbi-card">';
         echo '<p class="wbi-page-summary">Total: <strong>' . intval( $total ) . '</strong> remitos.</p>';
         ?>
