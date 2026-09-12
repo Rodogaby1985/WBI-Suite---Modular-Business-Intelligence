@@ -663,7 +663,13 @@ class WBI_Documents_Module {
         $total_pages  = $total > 0 ? (int) ceil( $total / $per_page ) : 1;
         $paged_ids    = array_slice( $pending_ids, $offset, $per_page );
 
-        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=pending' );
+        $base_url = add_query_arg(
+            array(
+                'page' => 'wbi-documents',
+                'tab'  => 'pending',
+            ),
+            admin_url( 'admin.php' )
+        );
 
         echo '<section class="wbi-card">';
         echo '<p class="wbi-page-summary">Total: <strong>' . intval( $total ) . '</strong> pedidos sin documento.</p>';
@@ -1572,7 +1578,13 @@ function wbiClosePdf() { if (!window.close()) { alert('PodÃ©s cerrar esta pestaÃ
         $total_pages = $total > 0 ? (int) ceil( $total / $per_page ) : 1;
         $paged_ids   = array_slice( $all_ids, $offset, $per_page );
 
-        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=ordenes' );
+        $base_url = add_query_arg(
+            array(
+                'page' => 'wbi-documents',
+                'tab'  => 'ordenes',
+            ),
+            admin_url( 'admin.php' )
+        );
 
         echo '<section class="wbi-card">';
         echo '<p class="wbi-page-summary">Total: <strong>' . intval( $total ) . '</strong> pedidos para despachar.</p>';

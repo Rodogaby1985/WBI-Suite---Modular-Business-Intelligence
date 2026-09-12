@@ -257,7 +257,7 @@ class WBI_Report_Products {
                     if ( $data ) {
                         $prod_names = wp_json_encode( array_map( function($r){ return $r->name; }, $data ) );
                         $prod_qtys  = wp_json_encode( array_map( function($r){ return intval($r->qty); }, $data ) );
-                        echo '<div class="wbi-chart-container"><canvas id="wbiBestChart" aria-label="Gráfico de barras de productos más vendidos"></canvas></div>';
+                        echo '<div class="wbi-chart-container"><canvas id="wbiBestChart" role="img" aria-label="Gráfico de barras de productos más vendidos"></canvas></div>';
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiBestChart");
@@ -279,7 +279,7 @@ class WBI_Report_Products {
                     if ( $data ) {
                         $prod_names = wp_json_encode( array_map( function($r){ return $r->name; }, $data ) );
                         $prod_qtys  = wp_json_encode( array_map( function($r){ return intval($r->qty); }, $data ) );
-                        echo '<div class="wbi-chart-container"><canvas id="wbiWorstChart" aria-label="Gráfico de barras de productos menos vendidos"></canvas></div>';
+                        echo '<div class="wbi-chart-container"><canvas id="wbiWorstChart" role="img" aria-label="Gráfico de barras de productos menos vendidos"></canvas></div>';
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiWorstChart");

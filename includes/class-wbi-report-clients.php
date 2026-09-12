@@ -159,7 +159,7 @@ class WBI_Report_Clients {
                         $chart_top = array_slice( $top, 0, 10 );
                         $c_labels  = wp_json_encode( array_map( function( $c ) { return $c->display_name; }, $chart_top ) );
                         $c_data    = wp_json_encode( array_map( function( $c ) { return (float) $c->total_val; }, $chart_top ) );
-                        echo '<div class="wbi-chart-container"><canvas id="wbiClientsChart" aria-label="Gráfico de dona del top de clientes por facturación"></canvas></div>';
+                        echo '<div class="wbi-chart-container"><canvas id="wbiClientsChart" role="img" aria-label="Gráfico de dona del top de clientes por facturación"></canvas></div>';
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiClientsChart");
