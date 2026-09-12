@@ -103,6 +103,13 @@ class WBI_Admin_Shell {
             return;
         }
 
+        if ( empty( $pagination ) ) {
+            if ( '' !== $summary ) {
+                echo '<p class="wbi-page-summary">' . esc_html( $summary ) . '</p>';
+            }
+            return;
+        }
+
         echo '<nav class="wbi-pagination tablenav" aria-label="' . esc_attr__( 'Paginación', 'wbi-suite' ) . '">';
         if ( '' !== $summary ) {
             echo '<p class="wbi-page-summary">' . esc_html( $summary ) . '</p>';
