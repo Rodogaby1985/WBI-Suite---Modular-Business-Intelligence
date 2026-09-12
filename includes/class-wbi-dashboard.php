@@ -529,6 +529,9 @@ class WBI_Dashboard_View {
                         <div class="wbi-compare-value wbi-dashboard-compare-row">
                             <span><?php echo esc_html( $comparison_label ); ?>:</span>
                             <strong><?php echo esc_html( $this->get_plain_price( $prev_revenue ) ); ?></strong>
+                            <?php if ( $prev_start && $prev_end ) : ?>
+                                <span class="wbi-field-help"><?php echo esc_html( sprintf( __( 'Rango comparado: %1$s al %2$s', 'wbi-suite' ), $this->format_display_date( $prev_start ), $this->format_display_date( $prev_end ) ) ); ?></span>
+                            <?php endif; ?>
                             <?php if ( null === $revenue_delta ) : ?>
                                 <span class="wbi-field-help"><?php esc_html_e( 'Sin delta porcentual porque el período comparado fue 0.', 'wbi-suite' ); ?></span>
                             <?php else : ?>
@@ -546,6 +549,9 @@ class WBI_Dashboard_View {
                         <div class="wbi-compare-value wbi-dashboard-compare-row">
                             <span><?php echo esc_html( $comparison_label ); ?>:</span>
                             <strong><?php echo esc_html( number_format_i18n( (int) $prev_units ) ); ?></strong>
+                            <?php if ( $prev_start && $prev_end ) : ?>
+                                <span class="wbi-field-help"><?php echo esc_html( sprintf( __( 'Rango comparado: %1$s al %2$s', 'wbi-suite' ), $this->format_display_date( $prev_start ), $this->format_display_date( $prev_end ) ) ); ?></span>
+                            <?php endif; ?>
                             <?php if ( null === $units_delta ) : ?>
                                 <span class="wbi-field-help"><?php esc_html_e( 'Sin delta porcentual porque el período comparado fue 0.', 'wbi-suite' ); ?></span>
                             <?php else : ?>
@@ -1139,9 +1145,10 @@ class WBI_Dashboard_View {
             if ( false === $date ) {
                 continue;
             }
-            $key      = $date->format( 'Y-m' );
-            $labels[] = $date->format( 'M' );
-            $table[]  = $date->format( 'F Y' );
+            $display_timestamp = $date->setTime( 12, 0, 0 )->getTimestamp();
+            $key               = $date->format( 'Y-m' );
+            $labels[]          = wp_date( 'M', $display_timestamp, wp_timezone() );
+            $table[]           = wp_date( 'F Y', $display_timestamp, wp_timezone() );
             $values[] = isset( $totals_by_month[ $key ] ) ? (float) $totals_by_month[ $key ] : 0.0;
         }
 
@@ -1169,11 +1176,11 @@ class WBI_Dashboard_View {
     private function get_comparison_label( $compare, $prev_start, $prev_end ) {
         switch ( $compare ) {
             case 'prev_period':
-                return sprintf( __( 'Período anterior (%1$s al %2$s)', 'wbi-suite' ), $this->format_display_date( $prev_start ), $this->format_display_date( $prev_end ) );
+                return __( 'Período anterior', 'wbi-suite' );
             case 'prev_year':
-                return sprintf( __( 'Mismo período del año anterior (%1$s al %2$s)', 'wbi-suite' ), $this->format_display_date( $prev_start ), $this->format_display_date( $prev_end ) );
+                return __( 'Mismo período del año anterior', 'wbi-suite' );
             case 'custom_compare':
-                return sprintf( __( 'Comparación personalizada (%1$s al %2$s)', 'wbi-suite' ), $this->format_display_date( $prev_start ), $this->format_display_date( $prev_end ) );
+                return __( 'Comparación personalizada', 'wbi-suite' );
             default:
                 return __( 'Comparación', 'wbi-suite' );
         }
