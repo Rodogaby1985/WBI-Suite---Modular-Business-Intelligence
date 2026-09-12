@@ -529,8 +529,8 @@ class WBI_Dashboard_View {
         </form>
 
         <section aria-labelledby="wbi-dashboard-overview">
-            <h2 class="wbi-section-title" id="wbi-dashboard-overview"><?php esc_html_e( 'Estado global de pedidos', 'wbi-suite' ); ?></h2>
-            <p class="wbi-page-description"><?php esc_html_e( 'Este bloque resume todos los estados del período seleccionado para mantener una vista operativa completa.', 'wbi-suite' ); ?></p>
+            <h2 class="wbi-section-title" id="wbi-dashboard-overview"><?php esc_html_e( 'Estado de pedidos según filtros', 'wbi-suite' ); ?></h2>
+            <p class="wbi-page-description"><?php esc_html_e( 'Este bloque resume los estados incluidos en el período y en la selección actual de estados.', 'wbi-suite' ); ?></p>
             <div class="wbi-grid-4">
                 <?php foreach ( $status_cards as $card ) : ?>
                     <article class="wbi-stat-card wbi-dashboard-stat-card wbi-dashboard-stat-card--<?php echo esc_attr( $card['accent'] ); ?>">
@@ -609,7 +609,7 @@ class WBI_Dashboard_View {
                             <canvas id="wbiMonthlyChart" aria-describedby="wbi-monthly-chart-summary"></canvas>
                         </div>
                         <div class="wbi-state wbi-state-error wbi-dashboard-chart-error wbi-is-hidden"><?php esc_html_e( 'No se pudo cargar el gráfico interactivo. Revisá la tabla de datos.', 'wbi-suite' ); ?></div>
-                        <details class="wbi-dashboard-chart-details">
+                        <details class="wbi-dashboard-chart-details" open>
                             <summary><?php esc_html_e( 'Ver tabla de datos mensual', 'wbi-suite' ); ?></summary>
                             <?php
                             $this->render_chart_table(
@@ -645,7 +645,7 @@ class WBI_Dashboard_View {
                             <canvas id="wbiStatusChart" aria-describedby="wbi-status-chart-summary"></canvas>
                         </div>
                         <div class="wbi-state wbi-state-error wbi-dashboard-chart-error wbi-is-hidden"><?php esc_html_e( 'No se pudo cargar el gráfico interactivo. Revisá la tabla de estados.', 'wbi-suite' ); ?></div>
-                        <details class="wbi-dashboard-chart-details">
+                        <details class="wbi-dashboard-chart-details" open>
                             <summary><?php esc_html_e( 'Ver tabla de estados', 'wbi-suite' ); ?></summary>
                             <?php
                             $this->render_chart_table(
@@ -683,7 +683,7 @@ class WBI_Dashboard_View {
                             <canvas id="wbiRevenueChart" aria-describedby="wbi-daily-chart-summary"></canvas>
                         </div>
                         <div class="wbi-state wbi-state-error wbi-dashboard-chart-error wbi-is-hidden"><?php esc_html_e( 'No se pudo cargar el gráfico interactivo. Revisá la tabla de respaldo.', 'wbi-suite' ); ?></div>
-                        <details class="wbi-dashboard-chart-details">
+                        <details class="wbi-dashboard-chart-details" open>
                             <summary><?php echo esc_html( 'day' === $period_granularity ? __( 'Ver tabla diaria', 'wbi-suite' ) : __( 'Ver tabla semanal', 'wbi-suite' ) ); ?></summary>
                             <?php
                             $this->render_chart_table(
@@ -719,7 +719,7 @@ class WBI_Dashboard_View {
                             <canvas id="wbiTopProductsChart" aria-describedby="wbi-top-products-chart-summary"></canvas>
                         </div>
                         <div class="wbi-state wbi-state-error wbi-dashboard-chart-error wbi-is-hidden"><?php esc_html_e( 'No se pudo cargar el gráfico interactivo. Revisá la tabla de productos.', 'wbi-suite' ); ?></div>
-                        <details class="wbi-dashboard-chart-details">
+                        <details class="wbi-dashboard-chart-details" open>
                             <summary><?php esc_html_e( 'Ver tabla del top de productos', 'wbi-suite' ); ?></summary>
                             <?php
                             $this->render_chart_table(
@@ -762,7 +762,7 @@ class WBI_Dashboard_View {
                             <canvas id="wbiSourceChart" aria-describedby="wbi-source-chart-summary"></canvas>
                         </div>
                         <div class="wbi-state wbi-state-error wbi-dashboard-chart-error wbi-is-hidden"><?php esc_html_e( 'No se pudo cargar el gráfico interactivo. Revisá la tabla por origen.', 'wbi-suite' ); ?></div>
-                        <details class="wbi-dashboard-chart-details">
+                        <details class="wbi-dashboard-chart-details" open>
                             <summary><?php esc_html_e( 'Ver tabla por origen', 'wbi-suite' ); ?></summary>
                             <?php
                             $this->render_chart_table(
@@ -920,6 +920,10 @@ class WBI_Dashboard_View {
                 }
                 return;
             }
+
+            document.querySelectorAll('.wbi-dashboard-chart-details[open]').forEach(function(node) {
+                node.removeAttribute('open');
+            });
 
             var chartLocale = <?php echo $chart_locale_json; ?> || undefined;
             var chartCurrency = <?php echo $chart_currency_json; ?> || 'USD';
