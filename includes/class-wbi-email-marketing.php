@@ -1165,7 +1165,7 @@ class WBI_Email_Marketing_Module {
         }
         $sql = "SELECT email, first_name, last_name, source, status, subscribed_at FROM {$this->tbl_subscribers} WHERE " . implode( ' AND ', $where ) . ' ORDER BY subscribed_at DESC';
         $all = $params
-            ? $this->db->get_results( $this->db->prepare( $sql, $params ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            ? $this->db->get_results( $this->db->prepare( $sql, ...$params ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
             : $this->db->get_results( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         header( 'Content-Type: text/csv; charset=UTF-8' );
         header( 'Content-Disposition: attachment; filename="wbi-subscribers-' . gmdate( 'Y-m-d' ) . '.csv"' );
