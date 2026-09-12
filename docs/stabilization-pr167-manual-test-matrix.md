@@ -15,7 +15,7 @@
 
 ## Export batching policy
 
-- Export flows for stock, best/worst sellers, costs/margins, scoring, subscribers, invoices and remitos process records in bounded batches.
+- Targeted export flows for stock, best/worst sellers, costs/margins, scoring, and subscribers process records in bounded batches.
 - Ordering is deterministic (`opened_at/id`, `subscribed_at/id`, score/id, etc.) to avoid duplicated/skipped rows while iterating.
 
 ## Manual test matrix

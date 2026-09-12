@@ -166,24 +166,19 @@ class WBI_Admin_Query_Helper {
         if ( ! function_exists( 'wc_get_orders' ) || ! function_exists( 'wc_get_order' ) ) {
             return 0;
         }
-        $cache_key = 'wbi_inv_backfill_' . md5( implode( '|', array( (string) $date_from, (string) $date_to, (string) $invoice_type, (string) $batch_size ) ) );
+        $cache_key = 'wbi_inv_backfill_' . md5( implode( '|', array( (string) $invoice_type, (string) $batch_size ) ) );
         if ( false !== get_transient( $cache_key ) ) {
             return 0;
         }
 
         $updated   = 0;
         $limit     = max( 1, (int) $batch_size );
-        $page      = 1;
-        $max_pages = 1;
         do {
             $query_args = array(
                 'return'       => 'ids',
                 'limit'        => $limit,
-                'page'         => $page,
-                'paginate'     => true,
                 'orderby'      => 'ID',
                 'order'        => 'DESC',
-                'date_created' => $date_from . '...' . $date_to,
                 'meta_query'   => array(
                     array(
                         'key'     => '_wbi_invoice_number',
@@ -203,22 +198,15 @@ class WBI_Admin_Query_Helper {
                 );
             }
 
-            $result = wc_get_orders( $query_args );
-            if ( is_object( $result ) ) {
-                $order_ids  = isset( $result->orders ) ? (array) $result->orders : array();
-                $max_pages  = max( $max_pages, isset( $result->max_num_pages ) ? (int) $result->max_num_pages : $page );
-            } elseif ( is_array( $result ) ) {
-                $order_ids = $result;
-                if ( count( $order_ids ) === $limit ) {
-                    $max_pages = max( $max_pages, $page + 1 );
-                }
-            } else {
+            $order_ids = wc_get_orders( $query_args );
+            if ( ! is_array( $order_ids ) ) {
                 $order_ids = array();
             }
             if ( empty( $order_ids ) ) {
                 break;
             }
 
+            $batch_updated = 0;
             foreach ( $order_ids as $order_id ) {
                 $order = wc_get_order( (int) $order_id );
                 if ( ! $order || $order->get_meta( '_wbi_invoice_date', true ) ) {
@@ -230,9 +218,13 @@ class WBI_Admin_Query_Helper {
                 $order->update_meta_data( '_wbi_invoice_date', $date );
                 $order->save();
                 $updated++;
+                $batch_updated++;
             }
-            $page++;
-        } while ( $page <= $max_pages );
+
+            if ( 0 === $batch_updated ) {
+                break;
+            }
+        } while ( count( $order_ids ) === $limit );
 
         set_transient( $cache_key, 1, 15 * MINUTE_IN_SECONDS );
         return $updated;

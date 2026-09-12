@@ -453,21 +453,47 @@ class WBI_Metrics_Engine {
     }
 
     public function count_dormant_stock() {
+        $cutoff = ( new DateTimeImmutable( 'now', wp_timezone() ) )->modify( '-90 days' );
+        if ( false === $cutoff ) {
+            $cutoff = new DateTimeImmutable( 'now', wp_timezone() );
+        }
+        $cutoff_ymdhis = $cutoff->format( 'Y-m-d H:i:s' );
         return (int) $this->wpdb->get_var(
-            "SELECT COUNT(*)
-             FROM {$this->wpdb->posts} p
-             JOIN {$this->wpdb->postmeta} pm ON p.ID = pm.post_id
-             WHERE p.post_type IN ('product','product_variation')
-             AND p.post_status = 'publish'
-             AND pm.meta_key = '_stock'
-             AND pm.meta_value > 0
-             AND p.post_modified < DATE_SUB(NOW(), INTERVAL 90 DAY)"
+            $this->wpdb->prepare(
+                "SELECT COUNT(*)
+                 FROM {$this->wpdb->posts} p
+                 JOIN {$this->wpdb->postmeta} pm ON p.ID = pm.post_id
+                 WHERE p.post_type IN ('product','product_variation')
+                 AND p.post_status = 'publish'
+                 AND pm.meta_key = '_stock'
+                 AND pm.meta_value > 0
+                 AND p.post_modified < %s",
+                $cutoff_ymdhis
+            )
         );
     }
 
     public function get_dormant_stock( $limit = null, $offset = 0 ) {
+        $cutoff = ( new DateTimeImmutable( 'now', wp_timezone() ) )->modify( '-90 days' );
+        if ( false === $cutoff ) {
+            $cutoff = new DateTimeImmutable( 'now', wp_timezone() );
+        }
+        $cutoff_ymdhis = $cutoff->format( 'Y-m-d H:i:s' );
         $limit_sql = $this->get_limit_offset_sql( $limit, $offset );
-        $results = $this->wpdb->get_results( "SELECT p.post_title, pm.meta_value as stock, p.post_modified FROM {$this->wpdb->posts} p JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id WHERE p.post_type IN ('product','product_variation') AND p.post_status='publish' AND pm.meta_key='_stock' AND pm.meta_value > 0 AND p.post_modified < DATE_SUB(NOW(), INTERVAL 90 DAY) ORDER BY p.post_modified ASC, p.ID ASC{$limit_sql}" );
+        $results = $this->wpdb->get_results(
+            $this->wpdb->prepare(
+                "SELECT p.post_title, pm.meta_value as stock, p.post_modified
+                 FROM {$this->wpdb->posts} p
+                 JOIN {$this->wpdb->postmeta} pm ON p.ID=pm.post_id
+                 WHERE p.post_type IN ('product','product_variation')
+                 AND p.post_status='publish'
+                 AND pm.meta_key='_stock'
+                 AND pm.meta_value > 0
+                 AND p.post_modified < %s
+                 ORDER BY p.post_modified ASC, p.ID ASC{$limit_sql}",
+                $cutoff_ymdhis
+            )
+        );
         return is_array( $results ) ? $results : array();
     }
 

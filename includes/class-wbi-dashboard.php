@@ -769,28 +769,50 @@ class WBI_Dashboard_View {
             if ( ! in_array( $key, $allowed_keys, true ) || in_array( $key, $exclude_keys, true ) ) {
                 continue;
             }
-            if ( is_array( $value ) ) {
-                $args[ $key ] = array_values( array_filter( array_map( function ( $item ) use ( $key ) {
-                    if ( ! is_scalar( $item ) ) {
-                        return '';
-                    }
-                    $sanitized = sanitize_text_field( (string) $item );
-                    if ( 'statuses' === $key && ! in_array( $sanitized, $this->allowed_statuses, true ) ) {
-                        return '';
-                    }
-                    return $sanitized;
-                }, $value ) ) );
-                if ( empty( $args[ $key ] ) ) {
-                    unset( $args[ $key ] );
+            if ( 'page' === $key ) {
+                $args['page'] = 'wbi-dashboard-view';
+                continue;
+            }
+            if ( 'statuses' === $key ) {
+                $statuses = WBI_Admin_Query_Helper::get_string_array( array( 'statuses' => $value ), 'statuses', $this->allowed_statuses );
+                if ( ! empty( $statuses ) ) {
+                    $args['statuses'] = $statuses;
                 }
-            } else {
-                if ( ! is_scalar( $value ) ) {
-                    continue;
-                }
-                $args[ $key ] = sanitize_text_field( (string) $value );
-                if ( '' === $args[ $key ] ) {
-                    unset( $args[ $key ] );
-                }
+                continue;
+            }
+            if ( ! is_scalar( $value ) ) {
+                continue;
+            }
+
+            switch ( $key ) {
+                case 'wbi_range':
+                    $normalized = WBI_Admin_Query_Helper::get_enum( array( $key => $value ), $key, $this->allowed_ranges, '30d' );
+                    break;
+                case 'wbi_compare':
+                    $normalized = WBI_Admin_Query_Helper::get_enum( array( $key => $value ), $key, $this->allowed_comparisons, 'none' );
+                    break;
+                case 'wbi_start':
+                case 'wbi_end':
+                case 'wbi_prev_start':
+                case 'wbi_prev_end':
+                    $normalized = WBI_Admin_Query_Helper::get_valid_date( array( $key => $value ), $key, '' );
+                    break;
+                case 'wbi_top_per_page':
+                case 'wbi_least_per_page':
+                    $normalized = WBI_Admin_Query_Helper::get_absint( array( $key => $value ), $key, 5 );
+                    $normalized = in_array( $normalized, array( 5, 10, 25 ), true ) ? $normalized : 5;
+                    break;
+                case 'wbi_top_page':
+                case 'wbi_least_page':
+                    $normalized = max( 1, WBI_Admin_Query_Helper::get_absint( array( $key => $value ), $key, 1 ) );
+                    break;
+                default:
+                    $normalized = sanitize_text_field( (string) $value );
+                    break;
+            }
+
+            if ( '' !== $normalized ) {
+                $args[ $key ] = $normalized;
             }
         }
         if ( empty( $args['page'] ) ) {
