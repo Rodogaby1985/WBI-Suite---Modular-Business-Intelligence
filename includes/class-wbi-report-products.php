@@ -130,6 +130,11 @@ class WBI_Report_Products {
                     echo '<form method="get" style="margin:0 0 12px;display:flex;gap:8px;align-items:center;">';
                     echo '<input type="hidden" name="page" value="wbi-products-report">';
                     echo '<input type="hidden" name="tab" value="stock">';
+                    echo '<input type="hidden" name="start" value="' . esc_attr( $start ) . '">';
+                    echo '<input type="hidden" name="end" value="' . esc_attr( $end ) . '">';
+                    foreach ( $statuses as $status_value ) {
+                        echo '<input type="hidden" name="statuses[]" value="' . esc_attr( $status_value ) . '">';
+                    }
                     echo '<label for="wbi-stock-per-page">Por página</label>';
                     echo '<select id="wbi-stock-per-page" name="per_page">';
                     foreach ( $allowed_per_page as $pp ) {
@@ -159,6 +164,11 @@ class WBI_Report_Products {
                     echo '<form method="get" style="margin:0 0 12px;display:flex;gap:8px;align-items:center;">';
                     echo '<input type="hidden" name="page" value="wbi-products-report">';
                     echo '<input type="hidden" name="tab" value="committed">';
+                    echo '<input type="hidden" name="start" value="' . esc_attr( $start ) . '">';
+                    echo '<input type="hidden" name="end" value="' . esc_attr( $end ) . '">';
+                    foreach ( $statuses as $status_value ) {
+                        echo '<input type="hidden" name="statuses[]" value="' . esc_attr( $status_value ) . '">';
+                    }
                     echo '<label for="wbi-committed-per-page">Por página</label>';
                     echo '<select id="wbi-committed-per-page" name="per_page">';
                     foreach ( $allowed_per_page as $pp ) {
@@ -188,6 +198,11 @@ class WBI_Report_Products {
                     echo '<form method="get" style="margin:0 0 12px;display:flex;gap:8px;align-items:center;">';
                     echo '<input type="hidden" name="page" value="wbi-products-report">';
                     echo '<input type="hidden" name="tab" value="dormant">';
+                    echo '<input type="hidden" name="start" value="' . esc_attr( $start ) . '">';
+                    echo '<input type="hidden" name="end" value="' . esc_attr( $end ) . '">';
+                    foreach ( $statuses as $status_value ) {
+                        echo '<input type="hidden" name="statuses[]" value="' . esc_attr( $status_value ) . '">';
+                    }
                     echo '<label for="wbi-dormant-per-page">Por página</label>';
                     echo '<select id="wbi-dormant-per-page" name="per_page">';
                     foreach ( $allowed_per_page as $pp ) {
@@ -258,6 +273,9 @@ class WBI_Report_Products {
                             array(
                                 'page'     => 'wbi-products-report',
                                 'tab'      => $tab,
+                                'start'    => $start,
+                                'end'      => $end,
+                                'statuses' => $statuses,
                                 'per_page' => $per_page,
                                 'paged'    => '%#%',
                             ),

@@ -126,11 +126,11 @@ class WBI_API_Module {
             WBI_Admin_Query_Helper::get_site_date_ymd( '-30 days' ),
             WBI_Admin_Query_Helper::get_site_date_ymd()
         );
-        if ( in_array( $range['error_code'], array( 'invalid_date', 'reversed_range' ), true ) ) {
-            return new WP_Error( 'wbi_invalid_date_range', 'Parámetros date_from/date_to inválidos o invertidos.', array( 'status' => 400 ) );
+        if ( in_array( $range['error_code'], array( 'invalid_date', 'incomplete_range', 'reversed_range' ), true ) ) {
+            return new WP_Error( 'wbi_invalid_date_range', 'Parámetros date_from/date_to inválidos, incompletos o invertidos.', array( 'status' => 400 ) );
         }
 
-        return array( $range['from'] . ' 00:00:00', $range['to'] . ' 23:59:59' );
+        return array( $range['from'], $range['to'] );
     }
 
     private function get_pagination( WP_REST_Request $request ) {
@@ -375,8 +375,8 @@ class WBI_API_Module {
         }
         list( $from, $to ) = $date_range;
         $invoice_type = strtoupper( WBI_Admin_Query_Helper::get_enum( $request->get_params(), 'inv_type', array( 'a', 'b', 'c' ), '' ) );
-        $date_from    = substr( $from, 0, 10 );
-        $date_to      = substr( $to, 0, 10 );
+        $date_from    = $from;
+        $date_to      = $to;
         WBI_Admin_Query_Helper::backfill_missing_invoice_dates( $date_from, $date_to, $invoice_type );
 
         $query_args = array(

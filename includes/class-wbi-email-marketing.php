@@ -1150,7 +1150,7 @@ class WBI_Email_Marketing_Module {
     }
 
     private function export_subscribers_csv( $search = '', $status_f = '' ) {
-        $status_f = in_array( $status_f, array( 'subscribed', 'unsubscribed', 'bounced' ), true ) ? $status_f : '';
+        $status_f = WBI_Admin_Query_Helper::get_enum( array( 'status' => $status_f ), 'status', array( 'subscribed', 'unsubscribed', 'bounced' ), '' );
         $where  = array( '1=1' );
         $params = array();
         if ( $search ) {

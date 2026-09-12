@@ -406,6 +406,9 @@ class WBI_Documents_Module {
             WBI_Admin_Query_Helper::get_site_date_ymd( '-30 days' ),
             WBI_Admin_Query_Helper::get_site_date_ymd()
         );
+        if ( in_array( $date_range['error_code'], array( 'invalid_date', 'incomplete_range', 'reversed_range' ), true ) ) {
+            wp_die( 'Rango de fechas inválido para exportación de facturas.' );
+        }
         $date_from = $date_range['from'];
         $date_to   = $date_range['to'];
         $type_filter = strtoupper( WBI_Admin_Query_Helper::get_enum( $_GET, 'inv_type', array( 'a', 'b', 'c' ), '' ) );
@@ -491,13 +494,18 @@ class WBI_Documents_Module {
     }
 
     private function export_remitos_csv() {
-        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range(
+        $date_range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
             $_GET,
             'date_from',
             'date_to',
             WBI_Admin_Query_Helper::get_site_date_ymd( '-30 days' ),
             WBI_Admin_Query_Helper::get_site_date_ymd()
         );
+        if ( in_array( $date_range['error_code'], array( 'invalid_date', 'incomplete_range', 'reversed_range' ), true ) ) {
+            wp_die( 'Rango de fechas inválido para exportación de remitos.' );
+        }
+        $date_from = $date_range['from'];
+        $date_to   = $date_range['to'];
         $query_args = array(
             'meta_key'     => '_wbi_remito_number',
             'meta_compare' => 'EXISTS',
@@ -710,13 +718,15 @@ class WBI_Documents_Module {
     // =========================================================================
 
     private function render_tab_invoices() {
-        list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range(
+        $date_range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
             $_GET,
             'date_from',
             'date_to',
             WBI_Admin_Query_Helper::get_site_date_ymd( '-30 days' ),
             WBI_Admin_Query_Helper::get_site_date_ymd()
         );
+        $date_from = $date_range['from'];
+        $date_to   = $date_range['to'];
         $type_filter = strtoupper( WBI_Admin_Query_Helper::get_enum( $_GET, 'inv_type', array( 'a', 'b', 'c' ), '' ) );
         $paged       = max( 1, WBI_Admin_Query_Helper::get_absint( $_GET, 'paged', 1 ) );
         $per_page    = 20;

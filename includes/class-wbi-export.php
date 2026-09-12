@@ -248,12 +248,12 @@ class WBI_Export_Module {
             // --- SCORING DE CLIENTES ---
             case 'scoring':
                 fputcsv($output, ['Nombre', 'Email', 'Score', 'Clase', 'Fecha Score']);
-                if ( class_exists( 'WBI_Scoring_Module' ) ) {
-                    $score_class = WBI_Admin_Query_Helper::get_enum( $_GET, 'score_class', array( 'a', 'b', 'c', 'd' ), '' );
+                $score_class = strtoupper( WBI_Admin_Query_Helper::get_enum( $_GET, 'score_class', array( 'a', 'b', 'c', 'd' ), '' ) );
+                if ( class_exists( 'WBI_Scoring_Module' ) && method_exists( 'WBI_Scoring_Module', 'get_scored_users_for_export_batch' ) ) {
                     $batch_size  = 500;
                     $offset      = 0;
                     do {
-                        $scored_users = WBI_Scoring_Module::get_scored_users_for_export_batch( strtoupper( $score_class ), $batch_size, $offset );
+                        $scored_users = WBI_Scoring_Module::get_scored_users_for_export_batch( $score_class, $batch_size, $offset );
                         foreach ( $scored_users as $u ) {
                             fputcsv($output, [
                                 $u->display_name,
@@ -265,6 +265,17 @@ class WBI_Export_Module {
                         }
                         $offset += count( $scored_users );
                     } while ( count( $scored_users ) === $batch_size );
+                } elseif ( class_exists( 'WBI_Scoring_Module' ) ) {
+                    $scored_users = WBI_Scoring_Module::get_all_scored_users_for_export( $score_class );
+                    foreach ( $scored_users as $u ) {
+                        fputcsv($output, [
+                            $u->display_name,
+                            $u->user_email,
+                            $u->score,
+                            $u->class,
+                            $u->score_date ? date_i18n( 'd/m/Y', strtotime( $u->score_date ) ) : '',
+                        ]);
+                    }
                 }
                 break;
 

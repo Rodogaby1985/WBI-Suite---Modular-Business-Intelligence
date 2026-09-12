@@ -162,18 +162,18 @@ class WBI_Admin_Query_Helper {
         return $date->format( 'Y-m-d' );
     }
 
-    public static function backfill_missing_invoice_dates( $date_from, $date_to, $invoice_type = '', $batch_size = 200, $max_batches = 20 ) {
+    public static function backfill_missing_invoice_dates( $date_from, $date_to, $invoice_type = '', $batch_size = 200 ) {
         if ( ! function_exists( 'wc_get_orders' ) || ! function_exists( 'wc_get_order' ) ) {
             return 0;
         }
 
-        $updated = 0;
-        $batch   = 0;
-
+        $updated        = 0;
+        $limit          = max( 1, (int) $batch_size );
+        $last_signature = '';
         do {
             $query_args = array(
                 'return'       => 'ids',
-                'limit'        => max( 1, (int) $batch_size ),
+                'limit'        => $limit,
                 'orderby'      => 'ID',
                 'order'        => 'DESC',
                 'date_created' => $date_from . '...' . $date_to,
@@ -188,7 +188,6 @@ class WBI_Admin_Query_Helper {
                     ),
                 ),
             );
-
             if ( in_array( $invoice_type, array( 'A', 'B', 'C' ), true ) ) {
                 $query_args['meta_query'][] = array(
                     'key'     => '_wbi_invoice_type',
@@ -201,9 +200,14 @@ class WBI_Admin_Query_Helper {
             if ( ! is_array( $order_ids ) || empty( $order_ids ) ) {
                 break;
             }
+            $signature = implode( ',', array_map( 'intval', $order_ids ) );
+            if ( $signature === $last_signature ) {
+                break;
+            }
+            $last_signature = $signature;
 
             foreach ( $order_ids as $order_id ) {
-                $order = wc_get_order( $order_id );
+                $order = wc_get_order( (int) $order_id );
                 if ( ! $order || $order->get_meta( '_wbi_invoice_date', true ) ) {
                     continue;
                 }
@@ -214,9 +218,7 @@ class WBI_Admin_Query_Helper {
                 $order->save();
                 $updated++;
             }
-
-            $batch++;
-        } while ( $batch < max( 1, (int) $max_batches ) );
+        } while ( count( $order_ids ) === $limit );
 
         return $updated;
     }

@@ -10,7 +10,8 @@
 
 - `normalize_date_range_with_meta()` keeps normalization behavior but now exposes metadata (`error_code`, `has_error`, `is_reversed`).
 - Admin screens (Dashboard + main report screens + invoice/document screens) show a warning notice and use safe defaults when the submitted range is invalid or reversed.
-- REST endpoints return HTTP 400 for invalid/reversed `date_from`/`date_to`.
+- REST endpoints return HTTP 400 for invalid, incomplete, or reversed `date_from`/`date_to`.
+- Invoice/remito CSV exports also fail fast on invalid, incomplete, or reversed date ranges.
 
 ## Export batching policy
 

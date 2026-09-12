@@ -96,7 +96,7 @@ class WBI_Dashboard_View {
                 $end_date   = $start_date;
                 break;
             case '7d':
-                $start_date = $today->modify( '-7 days' )->format( 'Y-m-d' );
+                $start_date = $today->modify( '-6 days' )->format( 'Y-m-d' );
                 $end_date   = $today->format( 'Y-m-d' );
                 break;
             case 'this_month':
@@ -147,10 +147,7 @@ class WBI_Dashboard_View {
 
         // --- 3. OBTENER DATOS ---
         $default_statuses = array( 'wc-completed', 'wc-processing' );
-        $statuses = isset( $request_args['statuses'] ) ? array_map( function ( $status ) {
-                return $this->sanitize_dashboard_query_arg( 'statuses', $status );
-            }, (array) $request_args['statuses'] ) : $default_statuses;
-        $statuses = array_values( array_intersect( $statuses, $this->allowed_statuses ) );
+        $statuses = WBI_Admin_Query_Helper::get_string_array( $request_args, 'statuses', $this->allowed_statuses );
         if ( empty( $statuses ) ) {
             $statuses = $default_statuses;
         }
@@ -166,11 +163,11 @@ class WBI_Dashboard_View {
         $c_failed     = $this->get_safe_count($status_raw, 'wc-failed');
 
         $top_per_page_allowed = array( 5, 10, 25 );
-        $best_per_page = isset( $request_args['wbi_top_per_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_top_per_page', $request_args['wbi_top_per_page'] ) : 5;
+        $best_per_page = WBI_Admin_Query_Helper::get_absint( $request_args, 'wbi_top_per_page', 5 );
         if ( ! in_array( $best_per_page, $top_per_page_allowed, true ) ) {
             $best_per_page = 5;
         }
-        $top_page = isset( $request_args['wbi_top_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_top_page', $request_args['wbi_top_page'] ) : 1;
+        $top_page = WBI_Admin_Query_Helper::get_absint( $request_args, 'wbi_top_page', 1 );
         $top_page = max( 1, $top_page );
         $best_total = $this->engine->count_best_sellers( $start_date, $end_date, $statuses );
         $least_total = $this->engine->count_least_sold( $start_date, $end_date, $statuses );
@@ -183,11 +180,11 @@ class WBI_Dashboard_View {
         $best_sold_page = $this->engine->get_best_sellers( $start_date, $end_date, $statuses, $best_per_page, $top_offset );
         $best_sold_page = is_array( $best_sold_page ) ? $best_sold_page : array();
 
-        $least_per_page = isset( $request_args['wbi_least_per_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_least_per_page', $request_args['wbi_least_per_page'] ) : 5;
+        $least_per_page = WBI_Admin_Query_Helper::get_absint( $request_args, 'wbi_least_per_page', 5 );
         if ( ! in_array( $least_per_page, $top_per_page_allowed, true ) ) {
             $least_per_page = 5;
         }
-        $least_page = isset( $request_args['wbi_least_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_least_page', $request_args['wbi_least_page'] ) : 1;
+        $least_page = WBI_Admin_Query_Helper::get_absint( $request_args, 'wbi_least_page', 1 );
         $least_page = max( 1, $least_page );
         $least_has_rows = $least_total > 0;
         $least_total_pages = max( 1, (int) ceil( $least_total / $least_per_page ) );
@@ -773,20 +770,24 @@ class WBI_Dashboard_View {
                 continue;
             }
             if ( is_array( $value ) ) {
-                $args[ $key ] = array_map(
-                    function ( $item ) use ( $key ) {
-                        return $this->sanitize_dashboard_query_arg( $key, $item );
-                    },
-                    $value
-                );
-                $args[ $key ] = array_values( array_filter( $args[ $key ], static function ( $item ) {
-                    return '' !== $item;
-                } ) );
+                $args[ $key ] = array_values( array_filter( array_map( function ( $item ) use ( $key ) {
+                    if ( ! is_scalar( $item ) ) {
+                        return '';
+                    }
+                    $sanitized = sanitize_text_field( (string) $item );
+                    if ( 'statuses' === $key && ! in_array( $sanitized, $this->allowed_statuses, true ) ) {
+                        return '';
+                    }
+                    return $sanitized;
+                }, $value ) ) );
                 if ( empty( $args[ $key ] ) ) {
                     unset( $args[ $key ] );
                 }
             } else {
-                $args[ $key ] = $this->sanitize_dashboard_query_arg( $key, $value );
+                if ( ! is_scalar( $value ) ) {
+                    continue;
+                }
+                $args[ $key ] = sanitize_text_field( (string) $value );
                 if ( '' === $args[ $key ] ) {
                     unset( $args[ $key ] );
                 }
@@ -796,35 +797,5 @@ class WBI_Dashboard_View {
             $args['page'] = 'wbi-dashboard-view';
         }
         return $args;
-    }
-
-    private function sanitize_dashboard_query_arg( $key, $value ) {
-        if ( 'statuses' !== $key && ! is_scalar( $value ) ) {
-            return '';
-        }
-        $raw = wp_unslash( (string) $value );
-        switch ( $key ) {
-            case 'wbi_top_page':
-            case 'wbi_least_page':
-            case 'wbi_top_per_page':
-            case 'wbi_least_per_page':
-                return max( 1, absint( $raw ) );
-            case 'wbi_start':
-            case 'wbi_end':
-            case 'wbi_prev_start':
-            case 'wbi_prev_end':
-                return WBI_Admin_Query_Helper::is_valid_date_ymd( $raw ) ? $raw : '';
-            case 'statuses':
-                $status = sanitize_key( $raw );
-                return in_array( $status, $this->allowed_statuses, true ) ? $status : '';
-            case 'wbi_range':
-                return in_array( sanitize_key( $raw ), $this->allowed_ranges, true ) ? sanitize_key( $raw ) : '30d';
-            case 'wbi_compare':
-                return in_array( sanitize_key( $raw ), $this->allowed_comparisons, true ) ? sanitize_key( $raw ) : 'none';
-            case 'page':
-                return 'wbi-dashboard-view';
-            default:
-                return sanitize_key( $raw );
-        }
     }
 }
