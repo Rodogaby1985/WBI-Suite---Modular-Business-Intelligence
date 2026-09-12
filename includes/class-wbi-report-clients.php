@@ -180,7 +180,7 @@ class WBI_Report_Clients {
                     echo '<h3 class="wbi-card-title">Clientes activos (últimos 60 días)</h3>';
                     echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Última compra</th></tr></thead><tbody>';
-                    if($active) foreach($active as $a) echo "<tr><td>" . esc_html($a->display_name) . "</td><td>" . esc_html($a->user_email) . "</td><td>".esc_html( date_i18n( 'd/m/Y', strtotime($a->last_buy) ) )."</td></tr>";
+                    if($active) foreach($active as $a) echo "<tr><td>" . esc_html($a->display_name) . "</td><td>" . esc_html($a->user_email) . "</td><td>".esc_html( mysql2date( 'd/m/Y', $a->last_buy ) )."</td></tr>";
                     else echo "<tr><td colspan=3>Sin actividad.</td></tr>";
                     echo '</tbody></table>';
                     echo '</div>';
@@ -194,7 +194,7 @@ class WBI_Report_Clients {
                         echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Nombre</th><th>Email</th><th>Fecha de registro</th><th>Ciudad</th></tr></thead><tbody>';
                         if ( $customers ) {
                             foreach ( $customers as $u ) {
-                                echo '<tr><td>' . esc_html( $u->display_name ) . '</td><td>' . esc_html( $u->user_email ) . '</td><td>' . esc_html( date_i18n( 'd/m/Y', strtotime( $u->user_registered ) ) ) . '</td><td>' . esc_html( $u->city ) . '</td></tr>';
+                                echo '<tr><td>' . esc_html( $u->display_name ) . '</td><td>' . esc_html( $u->user_email ) . '</td><td>' . esc_html( get_date_from_gmt( $u->user_registered, 'd/m/Y' ) ) . '</td><td>' . esc_html( $u->city ) . '</td></tr>';
                             }
                         } else {
                             echo '<tr><td colspan="4">Sin datos.</td></tr>';

@@ -244,7 +244,7 @@ class WBI_Report_Products {
                     echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Producto</th><th data-align="right">Stock inmovilizado</th><th>Último movimiento</th></tr></thead><tbody>';
                     if ( ! empty( $data ) ) {
-                        foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td data-align='right'>" . intval($d->stock) . "</td><td>" . esc_html( date_i18n( 'd/m/Y', strtotime($d->post_modified) ) ) . "</td></tr>";
+                        foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td data-align='right'>" . intval($d->stock) . "</td><td>" . esc_html( mysql2date( 'd/m/Y', $d->post_modified ) ) . "</td></tr>";
                     } else {
                         echo '<tr><td colspan="3">No hay productos con stock dormido.</td></tr>';
                     }
