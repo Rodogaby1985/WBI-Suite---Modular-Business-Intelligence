@@ -1079,6 +1079,25 @@ class WBI_Documents_Module {
 
     private function render_generate_interface( $order_id, $generate_type ) {
         $back_url = admin_url( 'admin.php?page=wbi-documents&tab=pending' );
+        if ( ! in_array( $generate_type, array( 'invoice', 'remito', 'orden' ), true ) ) {
+            WBI_Admin_Shell::open_page();
+            WBI_Admin_Shell::render_header(
+                array(
+                    'title'       => 'Documento no disponible',
+                    'description' => 'El tipo de documento solicitado no es válido para este flujo administrativo.',
+                    'back_link'   => array(
+                        'url'   => $back_url,
+                        'label' => 'Volver a pedidos sin documento',
+                    ),
+                )
+            );
+            echo '<section class="wbi-card">';
+            WBI_Admin_Shell::render_notice( esc_html__( 'Tipo de generación inválido.', 'wbi-suite' ), 'danger' );
+            echo '</section>';
+            WBI_Admin_Shell::close_page();
+            return;
+        }
+
         $order = wc_get_order( $order_id );
         if ( ! $order ) {
             WBI_Admin_Shell::open_page();
@@ -1103,25 +1122,6 @@ class WBI_Documents_Module {
         $client_name = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
         $opts        = get_option( 'wbi_invoice_settings', array() );
         $default_type = ! empty( $opts['invoice_type'] ) ? $opts['invoice_type'] : 'B';
-
-        if ( ! in_array( $generate_type, array( 'invoice', 'remito', 'orden' ), true ) ) {
-            WBI_Admin_Shell::open_page();
-            WBI_Admin_Shell::render_header(
-                array(
-                    'title'       => 'Documento no disponible',
-                    'description' => 'El tipo de documento solicitado no es válido para este flujo administrativo.',
-                    'back_link'   => array(
-                        'url'   => $back_url,
-                        'label' => 'Volver a pedidos sin documento',
-                    ),
-                )
-            );
-            echo '<section class="wbi-card">';
-            WBI_Admin_Shell::render_notice( esc_html__( 'Tipo de generación inválido.', 'wbi-suite' ), 'danger' );
-            echo '</section>';
-            WBI_Admin_Shell::close_page();
-            return;
-        }
 
         WBI_Admin_Shell::open_page();
 
