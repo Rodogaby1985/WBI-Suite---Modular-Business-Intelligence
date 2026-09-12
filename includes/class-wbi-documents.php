@@ -819,7 +819,16 @@ class WBI_Documents_Module {
             )
         );
 
-        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=invoices&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) . '&inv_type=' . urlencode( $type_filter ) );
+        $base_url = add_query_arg(
+            array(
+                'page'      => 'wbi-documents',
+                'tab'       => 'invoices',
+                'date_from' => $date_from,
+                'date_to'   => $date_to,
+                'inv_type'  => $type_filter,
+            ),
+            admin_url( 'admin.php' )
+        );
         ?>
         <?php if ( $date_range['has_error'] ) : ?>
             <?php WBI_Admin_Shell::render_notice( esc_html__( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ), 'warning' ); ?>
@@ -973,7 +982,15 @@ class WBI_Documents_Module {
             )
         );
 
-        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=remitos&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) );
+        $base_url = add_query_arg(
+            array(
+                'page'      => 'wbi-documents',
+                'tab'       => 'remitos',
+                'date_from' => $date_from,
+                'date_to'   => $date_to,
+            ),
+            admin_url( 'admin.php' )
+        );
 
         if ( $date_range['has_error'] ) {
             WBI_Admin_Shell::render_notice( esc_html__( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ), 'warning' );
