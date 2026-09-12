@@ -210,7 +210,7 @@ class WBI_Report_Products {
                     echo '<div class="wbi-table-responsive">'; 
                     echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Producto</th><th data-align="right">Cantidad</th><th>Pedido</th></tr></thead><tbody>';
                     if ( ! empty( $data ) ) {
-                        foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td data-align='right'>" . intval($d->qty) . "</td><td><a href='post.php?post=" . intval($d->order_id) . "&action=edit'>#" . intval($d->order_id) . "</a></td></tr>";
+                        foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td data-align='right'>" . intval($d->qty) . "</td><td><a href='" . esc_url( add_query_arg( array( 'post' => intval( $d->order_id ), 'action' => 'edit' ), admin_url( 'post.php' ) ) ) . "'>#" . intval($d->order_id) . "</a></td></tr>";
                     } else {
                         echo '<tr><td colspan="3">No hay stock comprometido actualmente.</td></tr>';
                     }

@@ -153,7 +153,7 @@ class WBI_Report_Clients {
                 <?php
                 if($tab=='ranking'){
                     $top = $this->engine->get_clients_ranking('revenue', $start, $end, $statuses);
-                    echo "<h3 class='wbi-card-title'>Top clientes ({$start} al {$end})</h3>";
+                    echo '<h3 class="wbi-card-title">Top clientes (' . esc_html( $start ) . ' al ' . esc_html( $end ) . ')</h3>';
 
                     if ( $top ) {
                         $chart_top = array_slice( $top, 0, 10 );
