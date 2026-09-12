@@ -263,10 +263,10 @@ class WBI_Dashboard_View {
         $range_start_label = $this->format_display_date( $start_date );
         $range_end_label   = $this->format_display_date( $end_date );
         $comparison_label  = $this->get_comparison_label( $compare );
-        $range_field_value = $custom_range_requested ? 'custom' : $range;
-        $show_custom_range = 'custom' === $range_field_value;
-        $compare_field_value = $custom_compare_requested ? 'custom_compare' : $compare;
-        $show_custom_compare = 'custom_compare' === $compare_field_value;
+        $range_field_value = $range;
+        $show_custom_range = 'custom' === $range || $custom_range_requested;
+        $compare_field_value = $compare;
+        $show_custom_compare = 'custom_compare' === $compare || $custom_compare_requested;
         $period_dataset_label = 'day' === $period_granularity ? __( 'Facturación diaria', 'wbi-suite' ) : __( 'Facturación semanal', 'wbi-suite' );
 
         $top5_names = array();
@@ -438,7 +438,7 @@ class WBI_Dashboard_View {
             <div class="wbi-filter-grid">
                 <div class="wbi-filter-field wbi-col-2">
                     <label for="wbi_range"><?php esc_html_e( 'Período', 'wbi-suite' ); ?></label>
-                    <select name="wbi_range" id="wbi_range" data-wbi-toggle-target="wbi_custom_dates" data-wbi-toggle-value="custom" <?php if ( $custom_range_requested && $custom_range_error ) : ?>aria-describedby="wbi_range_feedback"<?php endif; ?>>
+                    <select name="wbi_range" id="wbi_range" data-wbi-toggle-target="wbi_custom_dates" data-wbi-toggle-value="custom" aria-describedby="wbi_range_feedback">
                         <option value="today" <?php selected( $range_field_value, 'today' ); ?>><?php esc_html_e( 'Hoy', 'wbi-suite' ); ?></option>
                         <option value="yesterday" <?php selected( $range_field_value, 'yesterday' ); ?>><?php esc_html_e( 'Ayer', 'wbi-suite' ); ?></option>
                         <option value="7d" <?php selected( $range_field_value, '7d' ); ?>><?php esc_html_e( 'Últimos 7 días', 'wbi-suite' ); ?></option>
@@ -475,7 +475,7 @@ class WBI_Dashboard_View {
 
                 <div class="wbi-filter-field wbi-col-3">
                     <label for="wbi_compare"><?php esc_html_e( 'Comparación', 'wbi-suite' ); ?></label>
-                    <select name="wbi_compare" id="wbi_compare" data-wbi-toggle-target="wbi_compare_dates" data-wbi-toggle-value="custom_compare" <?php if ( $custom_compare_requested && $custom_compare_error ) : ?>aria-describedby="wbi_compare_feedback"<?php endif; ?>>
+                    <select name="wbi_compare" id="wbi_compare" data-wbi-toggle-target="wbi_compare_dates" data-wbi-toggle-value="custom_compare" aria-describedby="wbi_compare_feedback">
                         <option value="none" <?php selected( $compare_field_value, 'none' ); ?>><?php esc_html_e( 'Sin comparación', 'wbi-suite' ); ?></option>
                         <option value="prev_period" <?php selected( $compare_field_value, 'prev_period' ); ?>><?php esc_html_e( 'Período anterior', 'wbi-suite' ); ?></option>
                         <option value="prev_year" <?php selected( $compare_field_value, 'prev_year' ); ?>><?php esc_html_e( 'Mismo período del año anterior', 'wbi-suite' ); ?></option>
