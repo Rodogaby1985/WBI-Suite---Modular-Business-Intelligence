@@ -1140,8 +1140,8 @@ class WBI_Dashboard_View {
                 continue;
             }
             $key      = $date->format( 'Y-m' );
-            $labels[] = wp_date( 'M', $date->getTimestamp(), wp_timezone() );
-            $table[]  = wp_date( 'F Y', $date->getTimestamp(), wp_timezone() );
+            $labels[] = $date->format( 'M' );
+            $table[]  = $date->format( 'F Y' );
             $values[] = isset( $totals_by_month[ $key ] ) ? (float) $totals_by_month[ $key ] : 0.0;
         }
 
@@ -1212,22 +1212,28 @@ class WBI_Dashboard_View {
         if ( empty( $rows ) ) {
             return;
         }
-
-        echo '<div class="wbi-table-responsive"><table class="wbi-table"><thead><tr>';
-        foreach ( $headers as $index => $header ) {
-            $align = in_array( $index, $numeric_columns, true ) ? ' data-align="right"' : '';
-            echo '<th scope="col"' . $align . '>' . esc_html( $header ) . '</th>';
-        }
-        echo '</tr></thead><tbody>';
-        foreach ( $rows as $row ) {
-            echo '<tr>';
-            foreach ( $row as $index => $cell ) {
-                $align = in_array( $index, $numeric_columns, true ) ? ' data-align="right"' : '';
-                echo '<td' . $align . '>' . esc_html( (string) $cell ) . '</td>';
-            }
-            echo '</tr>';
-        }
-        echo '</tbody></table></div>';
+        ?>
+        <div class="wbi-table-responsive">
+            <table class="wbi-table">
+                <thead>
+                    <tr>
+                        <?php foreach ( $headers as $index => $header ) : ?>
+                            <th scope="col"<?php echo in_array( $index, $numeric_columns, true ) ? ' data-align="right"' : ''; ?>><?php echo esc_html( $header ); ?></th>
+                        <?php endforeach; ?>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ( $rows as $row ) : ?>
+                        <tr>
+                            <?php foreach ( $row as $index => $cell ) : ?>
+                                <td<?php echo in_array( $index, $numeric_columns, true ) ? ' data-align="right"' : ''; ?>><?php echo esc_html( (string) $cell ); ?></td>
+                            <?php endforeach; ?>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php
     }
 
     private function calc_delta( $current, $previous ) {
