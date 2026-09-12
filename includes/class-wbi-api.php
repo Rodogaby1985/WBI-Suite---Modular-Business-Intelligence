@@ -346,20 +346,42 @@ class WBI_API_Module {
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
         list( $from, $to ) = $this->get_date_range( $request );
         $invoice_type = WBI_Admin_Query_Helper::get_string( $request->get_params(), 'inv_type', '' );
+        $date_from    = substr( $from, 0, 10 );
+        $date_to      = substr( $to, 0, 10 );
 
         $query_args = array(
-            'meta_key'     => '_wbi_invoice_number',
-            'meta_compare' => 'EXISTS',
-            'date_created' => substr( $from, 0, 10 ) . '...' . substr( $to, 0, 10 ),
-            'return'       => 'ids',
-            'limit'        => $per_page,
-            'offset'       => $offset,
-            'orderby'      => 'ID',
-            'order'        => 'DESC',
-            'paginate'     => true,
+            'return'     => 'ids',
+            'limit'      => $per_page,
+            'offset'     => $offset,
+            'orderby'    => 'ID',
+            'order'      => 'DESC',
+            'paginate'   => true,
+            'meta_query' => array(
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
+            ),
         );
         if ( in_array( $invoice_type, array( 'A', 'B', 'C' ), true ) ) {
             $query_args['meta_query'] = array(
+                'relation' => 'AND',
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
                 array(
                     'key'     => '_wbi_invoice_type',
                     'value'   => $invoice_type,
@@ -382,7 +404,7 @@ class WBI_API_Module {
                 'order_id'   => intval( $order_id ),
                 'inv_number' => $order ? $order->get_meta( '_wbi_invoice_number', true ) : '',
                 'inv_type'   => $order ? $order->get_meta( '_wbi_invoice_type', true ) : '',
-                'date'       => $order && $order->get_date_created() ? $order->get_date_created()->date( 'Y-m-d H:i:s' ) : null,
+                'date'       => $order ? $order->get_meta( '_wbi_invoice_date', true ) : '',
                 'total'      => $order ? floatval( $order->get_total() ) : null,
             );
         }, $order_ids );

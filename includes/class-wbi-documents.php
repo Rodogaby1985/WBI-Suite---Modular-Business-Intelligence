@@ -402,15 +402,35 @@ class WBI_Documents_Module {
         list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
         $type_filter = WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
         $query_args = array(
-            'meta_key'     => '_wbi_invoice_number',
-            'meta_compare' => 'EXISTS',
-            'date_created' => $date_from . '...' . $date_to,
-            'orderby'      => 'ID',
-            'order'        => 'DESC',
-            'return'       => 'ids',
+            'orderby'    => 'ID',
+            'order'      => 'DESC',
+            'return'     => 'ids',
+            'meta_query' => array(
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
+            ),
         );
         if ( in_array( $type_filter, array( 'A', 'B', 'C' ), true ) ) {
             $query_args['meta_query'] = array(
+                'relation' => 'AND',
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
                 array(
                     'key'     => '_wbi_invoice_type',
                     'value'   => $type_filter,
@@ -444,11 +464,10 @@ class WBI_Documents_Module {
                 if ( ! $order ) {
                     continue;
                 }
-                $inv_date_raw = $order->get_date_created();
                 echo implode( ',', array_map( array( $this, 'csv_escape' ), array(
                     $order->get_meta( '_wbi_invoice_number', true ),
                     $order->get_meta( '_wbi_invoice_type', true ),
-                    $inv_date_raw ? $inv_date_raw->date( 'd/m/Y' ) : '',
+                    $order->get_meta( '_wbi_invoice_date', true ),
                     $oid,
                     trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ),
                     $order->get_meta( '_wbi_customer_cuit', true ),
@@ -683,14 +702,34 @@ class WBI_Documents_Module {
         $offset      = ( $paged - 1 ) * $per_page;
 
         $query_args = array(
-            'meta_key'     => '_wbi_invoice_number',
-            'meta_compare' => 'EXISTS',
-            'date_created' => $date_from . '...' . $date_to,
-            'return'       => 'ids',
-            'limit'        => -1,
+            'return'     => 'ids',
+            'limit'      => -1,
+            'meta_query' => array(
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
+            ),
         );
         if ( in_array( $type_filter, array( 'A', 'B', 'C' ), true ) ) {
             $query_args['meta_query'] = array(
+                'relation' => 'AND',
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
                 array(
                     'key'     => '_wbi_invoice_type',
                     'value'   => $type_filter,
@@ -753,8 +792,8 @@ class WBI_Documents_Module {
                     $cuit       = $order->get_meta( '_wbi_customer_cuit', true );
                     $inv_number = $order->get_meta( '_wbi_invoice_number', true );
                     $inv_type   = $order->get_meta( '_wbi_invoice_type', true );
-                    $inv_date_r = $order->get_date_created();
-                    $inv_date   = $inv_date_r ? $inv_date_r->date( 'd/m/Y' ) : '—';
+                    $inv_date   = $order->get_meta( '_wbi_invoice_date', true );
+                    $inv_date   = $inv_date ? date_i18n( 'd/m/Y', strtotime( $inv_date ) ) : '—';
                     $name       = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
                     $view_url   = wp_nonce_url(
                         admin_url( 'admin-post.php?action=wbi_view_document&type=invoice&order_id=' . $oid ),

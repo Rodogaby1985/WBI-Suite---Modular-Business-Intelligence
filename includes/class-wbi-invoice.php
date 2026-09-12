@@ -510,15 +510,34 @@ if ( ! empty( $custom_fields ) ) :
 
         // Build wc_get_orders() args for HPOS-compatible queries
         $query_args = array(
-            'meta_key'     => '_wbi_invoice_number',
-            'meta_compare' => 'EXISTS',
-            // WooCommerce date_created range format: 'YYYY-MM-DD...YYYY-MM-DD'
-            'date_created' => $date_from . '...' . $date_to,
-            'return'       => 'ids',
-            'limit'        => -1,
+            'return'     => 'ids',
+            'limit'      => -1,
+            'meta_query' => array(
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
+            ),
         );
         if ( in_array( $type_filter, array( 'A', 'B', 'C' ), true ) ) {
             $query_args['meta_query'] = array(
+                'relation' => 'AND',
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
                 array(
                     'key'     => '_wbi_invoice_type',
                     'value'   => $type_filter,
@@ -563,8 +582,8 @@ if ( ! empty( $custom_fields ) ) :
                 $name   = $order ? esc_html( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ) : '—';
                 $inv_number = $order ? esc_html( $order->get_meta( '_wbi_invoice_number', true ) ) : '';
                 $inv_type   = $order ? esc_html( $order->get_meta( '_wbi_invoice_type', true ) ) : '';
-                $inv_date_raw = $order ? $order->get_date_created() : null;
-                $inv_date   = $inv_date_raw ? $inv_date_raw->date( 'd/m/Y' ) : '—';
+                $inv_date_meta = $order ? $order->get_meta( '_wbi_invoice_date', true ) : '';
+                $inv_date   = $inv_date_meta ? date_i18n( 'd/m/Y', strtotime( $inv_date_meta ) ) : '—';
                 $view_url = wp_nonce_url( admin_url( 'admin-post.php?action=wbi_view_invoice&order_id=' . $oid ), 'wbi_view_invoice_' . $oid );
                 $edit_url = $order ? $order->get_edit_order_url() : '#';
                 echo '<tr>';
@@ -607,15 +626,35 @@ if ( ! empty( $custom_fields ) ) :
         list( $date_from, $date_to ) = WBI_Admin_Query_Helper::normalize_date_range( $_GET, 'date_from', 'date_to', date( 'Y-m-d', strtotime( '-30 days' ) ), date( 'Y-m-d' ) );
         $type_filter = WBI_Admin_Query_Helper::get_string( $_GET, 'inv_type', '' );
         $query_args = array(
-            'meta_key'     => '_wbi_invoice_number',
-            'meta_compare' => 'EXISTS',
-            'date_created' => $date_from . '...' . $date_to,
-            'orderby'      => 'ID',
-            'order'        => 'DESC',
-            'return'       => 'ids',
+            'orderby'    => 'ID',
+            'order'      => 'DESC',
+            'return'     => 'ids',
+            'meta_query' => array(
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
+            ),
         );
         if ( in_array( $type_filter, array( 'A', 'B', 'C' ), true ) ) {
             $query_args['meta_query'] = array(
+                'relation' => 'AND',
+                array(
+                    'key'     => '_wbi_invoice_number',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_wbi_invoice_date',
+                    'value'   => array( $date_from, $date_to ),
+                    'compare' => 'BETWEEN',
+                    'type'    => 'DATE',
+                ),
                 array(
                     'key'     => '_wbi_invoice_type',
                     'value'   => $type_filter,
@@ -654,8 +693,8 @@ if ( ! empty( $custom_fields ) ) :
                 $cuit         = $order->get_meta( '_wbi_customer_cuit', true );
                 $inv_number   = $order->get_meta( '_wbi_invoice_number', true );
                 $inv_type     = $order->get_meta( '_wbi_invoice_type', true );
-                $inv_date_raw = $order->get_date_created();
-                $inv_date     = $inv_date_raw ? $inv_date_raw->date( 'd/m/Y' ) : '';
+                $inv_date_meta = $order->get_meta( '_wbi_invoice_date', true );
+                $inv_date      = $inv_date_meta ? date_i18n( 'd/m/Y', strtotime( $inv_date_meta ) ) : '';
                 echo implode( ',', array_map( 'wbi_csv_escape', array(
                     $inv_number,
                     $inv_type,
