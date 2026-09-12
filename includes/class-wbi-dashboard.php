@@ -172,7 +172,7 @@ class WBI_Dashboard_View {
         $revenue = $this->engine->get_revenue( $start_date, $end_date, $statuses ) ?: 0;
         $units   = $this->engine->get_units_sold( $start_date, $end_date, $statuses ) ?: 0;
 
-        $status_raw   = $this->engine->get_order_status_counts( $start_date, $end_date, $statuses );
+        $status_raw   = $this->engine->get_order_status_counts( $start_date, $end_date );
         $c_completed  = $this->get_safe_count( $status_raw, 'wc-completed' );
         $c_processing = $this->get_safe_count( $status_raw, 'wc-processing' );
         $c_hold       = $this->get_safe_count( $status_raw, 'wc-on-hold' );
@@ -242,7 +242,9 @@ class WBI_Dashboard_View {
             'wbi_least_page'     => $least_page,
         );
 
-        $period_data = $this->engine->get_sales_by_period( 'day', $start_date, $end_date, $statuses );
+        $range_days        = $this->count_days_inclusive( $start_date, $end_date );
+        $period_granularity = $range_days > 90 ? 'week' : 'day';
+        $period_data       = $this->engine->get_sales_by_period( $period_granularity, $start_date, $end_date, $statuses );
 
         $current_year   = (int) $today->format( 'Y' );
         $year_start_obj = DateTimeImmutable::createFromFormat( '!Y-m-d', sprintf( '%d-01-01', $current_year ), wp_timezone() );
@@ -251,7 +253,9 @@ class WBI_Dashboard_View {
         $year_end       = $year_end_obj ? $year_end_obj->format( 'Y-m-d' ) : sprintf( '%d-12-31', $current_year );
         $monthly_data = $this->engine->get_sales_by_period( 'month', $year_start, $year_end, $statuses );
 
-        $daily_series   = $this->build_daily_chart_series( $period_data, $start_date, $end_date );
+        $daily_series   = 'day' === $period_granularity
+            ? $this->build_daily_chart_series( $period_data, $start_date, $end_date )
+            : $this->build_grouped_chart_series( $period_data );
         $monthly_series = $this->build_monthly_chart_series( $monthly_data, (int) $today->format( 'Y' ) );
 
         $range_start_label = $this->format_display_date( $start_date );
@@ -507,7 +511,7 @@ class WBI_Dashboard_View {
                         <option value="wc-on-hold" <?php echo in_array( 'wc-on-hold', $statuses, true ) ? 'selected' : ''; ?>><?php esc_html_e( 'En espera', 'wbi-suite' ); ?></option>
                         <option value="wc-pending" <?php echo in_array( 'wc-pending', $statuses, true ) ? 'selected' : ''; ?>><?php esc_html_e( 'Pendiente', 'wbi-suite' ); ?></option>
                     </select>
-                    <p class="wbi-field-help" id="wbi_statuses_help"><?php esc_html_e( 'Usá Ctrl o Cmd para seleccionar varios estados sin perder los demás filtros.', 'wbi-suite' ); ?></p>
+                    <p class="wbi-field-help" id="wbi_statuses_help"><?php esc_html_e( 'Usá Ctrl o Cmd para seleccionar varios estados. Este filtro afecta facturación, unidades y rankings.', 'wbi-suite' ); ?></p>
                 </div>
 
                 <div class="wbi-filter-field wbi-col-3">
@@ -521,6 +525,7 @@ class WBI_Dashboard_View {
 
         <section aria-labelledby="wbi-dashboard-overview">
             <h2 class="wbi-section-title" id="wbi-dashboard-overview"><?php esc_html_e( 'Estado global de pedidos', 'wbi-suite' ); ?></h2>
+            <p class="wbi-page-description"><?php esc_html_e( 'Este bloque resume todos los estados del período seleccionado para mantener una vista operativa completa.', 'wbi-suite' ); ?></p>
             <div class="wbi-grid-4">
                 <?php foreach ( $status_cards as $card ) : ?>
                     <article class="wbi-stat-card wbi-dashboard-stat-card wbi-dashboard-stat-card--<?php echo esc_attr( $card['accent'] ); ?>">
@@ -584,6 +589,7 @@ class WBI_Dashboard_View {
 
         <section aria-labelledby="wbi-dashboard-charts">
             <h2 class="wbi-section-title" id="wbi-dashboard-charts"><?php esc_html_e( 'Gráficos y resúmenes accesibles', 'wbi-suite' ); ?></h2>
+            <p id="wbi-chart-fallback-announcement" class="wbi-visually-hidden" aria-live="polite"></p>
             <div class="wbi-grid-2">
                 <article class="wbi-card wbi-dashboard-chart-card">
                     <div class="wbi-card-header">
@@ -662,8 +668,8 @@ class WBI_Dashboard_View {
                 <article class="wbi-card wbi-dashboard-chart-card">
                     <div class="wbi-card-header">
                         <div>
-                            <h3 class="wbi-card-title"><?php esc_html_e( 'Facturación diaria', 'wbi-suite' ); ?></h3>
-                            <p class="wbi-card-subtitle"><?php esc_html_e( 'Serie diaria completa del período filtrado, incluyendo días sin ventas para mantener la escala estable.', 'wbi-suite' ); ?></p>
+                            <h3 class="wbi-card-title"><?php echo esc_html( 'day' === $period_granularity ? __( 'Facturación diaria', 'wbi-suite' ) : __( 'Facturación por semana', 'wbi-suite' ) ); ?></h3>
+                            <p class="wbi-card-subtitle"><?php echo esc_html( 'day' === $period_granularity ? __( 'Serie diaria completa del período filtrado, incluyendo días sin ventas para mantener la escala estable.', 'wbi-suite' ) : __( 'Cuando el rango supera 90 días, la visualización pasa a semanas para conservar legibilidad y rendimiento.', 'wbi-suite' ) ); ?></p>
                         </div>
                     </div>
                     <?php if ( $daily_has_data ) : ?>
@@ -671,12 +677,12 @@ class WBI_Dashboard_View {
                         <div class="wbi-chart-container wbi-chart-container-tall">
                             <canvas id="wbiRevenueChart" aria-describedby="wbi-daily-chart-summary"></canvas>
                         </div>
-                        <div class="wbi-state wbi-state-error wbi-dashboard-chart-error wbi-is-hidden"><?php esc_html_e( 'No se pudo cargar el gráfico interactivo. Revisá la tabla diaria.', 'wbi-suite' ); ?></div>
+                        <div class="wbi-state wbi-state-error wbi-dashboard-chart-error wbi-is-hidden"><?php esc_html_e( 'No se pudo cargar el gráfico interactivo. Revisá la tabla de respaldo.', 'wbi-suite' ); ?></div>
                         <details class="wbi-dashboard-chart-details">
-                            <summary><?php esc_html_e( 'Ver tabla diaria', 'wbi-suite' ); ?></summary>
+                            <summary><?php echo esc_html( 'day' === $period_granularity ? __( 'Ver tabla diaria', 'wbi-suite' ) : __( 'Ver tabla semanal', 'wbi-suite' ) ); ?></summary>
                             <?php
                             $this->render_chart_table(
-                                array( __( 'Fecha', 'wbi-suite' ), __( 'Facturación', 'wbi-suite' ) ),
+                                array( 'day' === $period_granularity ? __( 'Fecha', 'wbi-suite' ) : __( 'Semana', 'wbi-suite' ), __( 'Facturación', 'wbi-suite' ) ),
                                 array_map(
                                     array( $this, 'format_chart_row' ),
                                     $daily_series['table_labels'],
@@ -893,12 +899,20 @@ class WBI_Dashboard_View {
             });
 
             if (typeof window.Chart === 'undefined') {
+                var liveRegion = document.getElementById('wbi-chart-fallback-announcement');
                 document.querySelectorAll('.wbi-dashboard-chart-error').forEach(function(node) {
                     node.classList.remove('wbi-is-hidden');
                 });
                 document.querySelectorAll('.wbi-dashboard-chart-details').forEach(function(node) {
                     node.setAttribute('open', 'open');
                 });
+                if (liveRegion) {
+                    liveRegion.textContent = '<?php echo esc_js( __( 'No se pudieron cargar los gráficos interactivos. Se muestran las tablas de respaldo.', 'wbi-suite' ) ); ?>';
+                }
+                var firstFallbackSummary = document.querySelector('.wbi-dashboard-chart-details summary');
+                if (firstFallbackSummary) {
+                    firstFallbackSummary.focus();
+                }
                 return;
             }
 
@@ -1142,6 +1156,27 @@ class WBI_Dashboard_View {
         );
     }
 
+    private function build_grouped_chart_series( $rows ) {
+        $labels = array();
+        $values = array();
+
+        foreach ( (array) $rows as $row ) {
+            if ( empty( $row->period ) ) {
+                continue;
+            }
+
+            $label    = (string) $row->period;
+            $labels[] = $label;
+            $values[] = isset( $row->total ) ? (float) $row->total : 0.0;
+        }
+
+        return array(
+            'labels'       => $labels,
+            'table_labels' => $labels,
+            'values'       => $values,
+        );
+    }
+
     private function build_monthly_chart_series( $rows, $year ) {
         $totals_by_month = array();
         foreach ( (array) $rows as $row ) {
@@ -1191,6 +1226,17 @@ class WBI_Dashboard_View {
         }
 
         return '';
+    }
+
+    private function count_days_inclusive( $start_date, $end_date ) {
+        $start = DateTimeImmutable::createFromFormat( '!Y-m-d', (string) $start_date, wp_timezone() );
+        $end   = DateTimeImmutable::createFromFormat( '!Y-m-d', (string) $end_date, wp_timezone() );
+
+        if ( false === $start || false === $end ) {
+            return 0;
+        }
+
+        return (int) $start->diff( $end )->days + 1;
     }
 
     private function get_comparison_label( $compare ) {
