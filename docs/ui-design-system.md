@@ -31,6 +31,7 @@ Definidos en `:root` con variables `--wbi-*`:
 - `.wbi-card`, `.wbi-card-header`, `.wbi-card-title`, `.wbi-card-subtitle`
 - Variantes semánticas: `.wbi-card.green|blue|orange|red|indigo`
 - KPI: `.wbi-stat-card`, `.wbi-number`, `.wbi-label`, `.wbi-compare-value`
+- Comparaciones/deltas: `.wbi-delta.positive|negative|neutral` con significado textual visible (`Subió`, `Bajó`, `Sin cambios`, `Sin base comparable`)
 
 ### 3) Filtros y grillas de campos
 - `.wbi-filter-panel`
@@ -67,6 +68,12 @@ Definidos en `:root` con variables `--wbi-*`:
 - Variantes: `.wbi-state-empty|loading|error|disabled`
 - Indicador: `.wbi-spinner`
 
+### 10) Gráficos y fallback accesible
+- Mantener el canvas dentro de `.wbi-chart-container` con altura mínima estable para evitar distorsión en datasets escasos.
+- Acompañar cada gráfico con un resumen textual breve y una alternativa tabular o expandible (`details/summary`) dentro del mismo card.
+- Cuando no haya datos significativos, reemplazar el canvas por `.wbi-state-empty`.
+- Cuando el módulo fuente no aplique, usar `.wbi-state-disabled`.
+
 ## Accesibilidad
 - Foco visible consistente con `:focus-visible` dentro de `.wbi-wrap`.
 - Etiquetas textuales obligatorias en filtros/formularios.
@@ -85,6 +92,7 @@ Superficie piloto: **Dashboard Ejecutivo** (`includes/class-wbi-dashboard.php`):
 - Tarjetas, tablas y contenedores de gráficos usando componentes reutilizables.
 - Paginación representativa para tablas de productos (con `paginate_links`).
 - Reducción de estilos inline en esa pantalla.
+- Patrón reutilizable para charts con resumen accesible, tabla de respaldo y estados vacíos/disabled.
 
 ## Patrón recomendado para migración gradual (issue #153)
 1. Envolver pantalla con `.wbi-wrap > .wbi-page`.
