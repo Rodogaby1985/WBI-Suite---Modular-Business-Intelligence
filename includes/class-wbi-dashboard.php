@@ -249,6 +249,10 @@ class WBI_Dashboard_View {
         $range_start_label = $this->format_display_date( $start_date );
         $range_end_label   = $this->format_display_date( $end_date );
         $comparison_label  = $this->get_comparison_label( $compare, $prev_start, $prev_end );
+        $range_field_value = $custom_range_requested ? 'custom' : $range;
+        $show_custom_range = 'custom' === $range_field_value;
+        $compare_field_value = $custom_compare_requested ? 'custom_compare' : $compare;
+        $show_custom_compare = 'custom_compare' === $compare_field_value;
 
         $top5_names = array();
         $top5_qtys  = array();
@@ -392,14 +396,14 @@ class WBI_Dashboard_View {
                 <div class="wbi-filter-field wbi-col-2">
                     <label for="wbi_range"><?php esc_html_e( 'Período', 'wbi-suite' ); ?></label>
                     <select name="wbi_range" id="wbi_range" data-wbi-toggle-target="wbi_custom_dates" data-wbi-toggle-value="custom" <?php if ( $custom_range_requested && $custom_range_error ) : ?>aria-describedby="wbi_range_feedback"<?php endif; ?>>
-                        <option value="today" <?php selected( $range, 'today' ); ?>><?php esc_html_e( 'Hoy', 'wbi-suite' ); ?></option>
-                        <option value="yesterday" <?php selected( $range, 'yesterday' ); ?>><?php esc_html_e( 'Ayer', 'wbi-suite' ); ?></option>
-                        <option value="7d" <?php selected( $range, '7d' ); ?>><?php esc_html_e( 'Últimos 7 días', 'wbi-suite' ); ?></option>
-                        <option value="30d" <?php selected( $range, '30d' ); ?>><?php esc_html_e( 'Últimos 30 días', 'wbi-suite' ); ?></option>
-                        <option value="this_month" <?php selected( $range, 'this_month' ); ?>><?php esc_html_e( 'Este mes', 'wbi-suite' ); ?></option>
-                        <option value="last_month" <?php selected( $range, 'last_month' ); ?>><?php esc_html_e( 'Mes pasado', 'wbi-suite' ); ?></option>
-                        <option value="this_year" <?php selected( $range, 'this_year' ); ?>><?php esc_html_e( 'Este año', 'wbi-suite' ); ?></option>
-                        <option value="custom" <?php selected( $custom_range_requested && ! $custom_range_error ? 'custom' : $range, 'custom' ); ?>><?php esc_html_e( 'Rango personalizado', 'wbi-suite' ); ?></option>
+                        <option value="today" <?php selected( $range_field_value, 'today' ); ?>><?php esc_html_e( 'Hoy', 'wbi-suite' ); ?></option>
+                        <option value="yesterday" <?php selected( $range_field_value, 'yesterday' ); ?>><?php esc_html_e( 'Ayer', 'wbi-suite' ); ?></option>
+                        <option value="7d" <?php selected( $range_field_value, '7d' ); ?>><?php esc_html_e( 'Últimos 7 días', 'wbi-suite' ); ?></option>
+                        <option value="30d" <?php selected( $range_field_value, '30d' ); ?>><?php esc_html_e( 'Últimos 30 días', 'wbi-suite' ); ?></option>
+                        <option value="this_month" <?php selected( $range_field_value, 'this_month' ); ?>><?php esc_html_e( 'Este mes', 'wbi-suite' ); ?></option>
+                        <option value="last_month" <?php selected( $range_field_value, 'last_month' ); ?>><?php esc_html_e( 'Mes pasado', 'wbi-suite' ); ?></option>
+                        <option value="this_year" <?php selected( $range_field_value, 'this_year' ); ?>><?php esc_html_e( 'Este año', 'wbi-suite' ); ?></option>
+                        <option value="custom" <?php selected( $range_field_value, 'custom' ); ?>><?php esc_html_e( 'Rango personalizado', 'wbi-suite' ); ?></option>
                     </select>
                     <p class="wbi-field-help<?php echo $custom_range_requested && $custom_range_error ? ' wbi-field-help-error' : ''; ?>" id="wbi_range_feedback">
                         <?php
@@ -412,16 +416,16 @@ class WBI_Dashboard_View {
                     </p>
                 </div>
 
-                <div class="wbi-filter-field wbi-col-4 wbi-dashboard-conditional-field<?php echo 'custom' === $range ? '' : ' wbi-is-hidden'; ?>" id="wbi_custom_dates" aria-hidden="<?php echo 'custom' === $range ? 'false' : 'true'; ?>">
+                <div class="wbi-filter-field wbi-col-4 wbi-dashboard-conditional-field<?php echo $show_custom_range ? '' : ' wbi-is-hidden'; ?>" id="wbi_custom_dates" aria-hidden="<?php echo $show_custom_range ? 'false' : 'true'; ?>">
                     <span class="wbi-filter-label"><?php esc_html_e( 'Fechas del período', 'wbi-suite' ); ?></span>
                     <div class="wbi-dashboard-date-grid">
                         <div class="wbi-dashboard-date-field">
                             <label for="wbi_start"><?php esc_html_e( 'Desde', 'wbi-suite' ); ?></label>
-                            <input id="wbi_start" type="date" name="wbi_start" value="<?php echo esc_attr( 'custom' === $range ? $start_date : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_start', '' ) ); ?>" <?php disabled( 'custom' !== $range ); ?> />
+                            <input id="wbi_start" type="date" name="wbi_start" value="<?php echo esc_attr( 'custom' === $range ? $start_date : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_start', '' ) ); ?>" <?php disabled( ! $show_custom_range ); ?> />
                         </div>
                         <div class="wbi-dashboard-date-field">
                             <label for="wbi_end"><?php esc_html_e( 'Hasta', 'wbi-suite' ); ?></label>
-                            <input id="wbi_end" type="date" name="wbi_end" value="<?php echo esc_attr( 'custom' === $range ? $end_date : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_end', '' ) ); ?>" <?php disabled( 'custom' !== $range ); ?> />
+                            <input id="wbi_end" type="date" name="wbi_end" value="<?php echo esc_attr( 'custom' === $range ? $end_date : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_end', '' ) ); ?>" <?php disabled( ! $show_custom_range ); ?> />
                         </div>
                     </div>
                 </div>
@@ -429,10 +433,10 @@ class WBI_Dashboard_View {
                 <div class="wbi-filter-field wbi-col-3">
                     <label for="wbi_compare"><?php esc_html_e( 'Comparación', 'wbi-suite' ); ?></label>
                     <select name="wbi_compare" id="wbi_compare" data-wbi-toggle-target="wbi_compare_dates" data-wbi-toggle-value="custom_compare" <?php if ( $custom_compare_requested && $custom_compare_error ) : ?>aria-describedby="wbi_compare_feedback"<?php endif; ?>>
-                        <option value="none" <?php selected( $compare, 'none' ); ?>><?php esc_html_e( 'Sin comparación', 'wbi-suite' ); ?></option>
-                        <option value="prev_period" <?php selected( $compare, 'prev_period' ); ?>><?php esc_html_e( 'Período anterior', 'wbi-suite' ); ?></option>
-                        <option value="prev_year" <?php selected( $compare, 'prev_year' ); ?>><?php esc_html_e( 'Mismo período del año anterior', 'wbi-suite' ); ?></option>
-                        <option value="custom_compare" <?php selected( $custom_compare_requested && ! $custom_compare_error ? 'custom_compare' : $compare, 'custom_compare' ); ?>><?php esc_html_e( 'Comparación personalizada', 'wbi-suite' ); ?></option>
+                        <option value="none" <?php selected( $compare_field_value, 'none' ); ?>><?php esc_html_e( 'Sin comparación', 'wbi-suite' ); ?></option>
+                        <option value="prev_period" <?php selected( $compare_field_value, 'prev_period' ); ?>><?php esc_html_e( 'Período anterior', 'wbi-suite' ); ?></option>
+                        <option value="prev_year" <?php selected( $compare_field_value, 'prev_year' ); ?>><?php esc_html_e( 'Mismo período del año anterior', 'wbi-suite' ); ?></option>
+                        <option value="custom_compare" <?php selected( $compare_field_value, 'custom_compare' ); ?>><?php esc_html_e( 'Comparación personalizada', 'wbi-suite' ); ?></option>
                     </select>
                     <p class="wbi-field-help<?php echo $custom_compare_requested && $custom_compare_error ? ' wbi-field-help-error' : ''; ?>" id="wbi_compare_feedback">
                         <?php
@@ -445,16 +449,16 @@ class WBI_Dashboard_View {
                     </p>
                 </div>
 
-                <div class="wbi-filter-field wbi-col-3 wbi-dashboard-conditional-field<?php echo 'custom_compare' === $compare ? '' : ' wbi-is-hidden'; ?>" id="wbi_compare_dates" aria-hidden="<?php echo 'custom_compare' === $compare ? 'false' : 'true'; ?>">
+                <div class="wbi-filter-field wbi-col-3 wbi-dashboard-conditional-field<?php echo $show_custom_compare ? '' : ' wbi-is-hidden'; ?>" id="wbi_compare_dates" aria-hidden="<?php echo $show_custom_compare ? 'false' : 'true'; ?>">
                     <span class="wbi-filter-label"><?php esc_html_e( 'Fechas de comparación', 'wbi-suite' ); ?></span>
                     <div class="wbi-dashboard-date-grid">
                         <div class="wbi-dashboard-date-field">
                             <label for="wbi_prev_start"><?php esc_html_e( 'Desde', 'wbi-suite' ); ?></label>
-                            <input id="wbi_prev_start" type="date" name="wbi_prev_start" value="<?php echo esc_attr( 'custom_compare' === $compare ? $prev_start : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_prev_start', '' ) ); ?>" <?php disabled( 'custom_compare' !== $compare ); ?> />
+                            <input id="wbi_prev_start" type="date" name="wbi_prev_start" value="<?php echo esc_attr( 'custom_compare' === $compare ? $prev_start : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_prev_start', '' ) ); ?>" <?php disabled( ! $show_custom_compare ); ?> />
                         </div>
                         <div class="wbi-dashboard-date-field">
                             <label for="wbi_prev_end"><?php esc_html_e( 'Hasta', 'wbi-suite' ); ?></label>
-                            <input id="wbi_prev_end" type="date" name="wbi_prev_end" value="<?php echo esc_attr( 'custom_compare' === $compare ? $prev_end : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_prev_end', '' ) ); ?>" <?php disabled( 'custom_compare' !== $compare ); ?> />
+                            <input id="wbi_prev_end" type="date" name="wbi_prev_end" value="<?php echo esc_attr( 'custom_compare' === $compare ? $prev_end : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_prev_end', '' ) ); ?>" <?php disabled( ! $show_custom_compare ); ?> />
                         </div>
                     </div>
                 </div>
