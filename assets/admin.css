@@ -678,6 +678,9 @@
 
 .wbi-field-help-error {
     color: #991b1b;
+    font-weight: 600;
+    border-left: 3px solid currentColor;
+    padding-left: var(--wbi-space-2);
 }
 
 /* =========================================================

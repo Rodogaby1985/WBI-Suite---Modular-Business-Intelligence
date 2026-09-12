@@ -9,6 +9,8 @@ class WBI_Dashboard_View {
         'wc-processing',
         'wc-on-hold',
         'wc-pending',
+        'wc-cancelled',
+        'wc-failed',
     );
     private $allowed_ranges = array( 'today', 'yesterday', '7d', '30d', 'this_month', 'last_month', 'this_year', 'custom' );
     private $allowed_comparisons = array( 'none', 'prev_period', 'prev_year', 'custom_compare' );
@@ -172,7 +174,7 @@ class WBI_Dashboard_View {
         $revenue = $this->engine->get_revenue( $start_date, $end_date, $statuses ) ?: 0;
         $units   = $this->engine->get_units_sold( $start_date, $end_date, $statuses ) ?: 0;
 
-        $status_raw   = $this->engine->get_order_status_counts( $start_date, $end_date );
+        $status_raw   = $this->engine->get_order_status_counts( $start_date, $end_date, $statuses );
         $c_completed  = $this->get_safe_count( $status_raw, 'wc-completed' );
         $c_processing = $this->get_safe_count( $status_raw, 'wc-processing' );
         $c_hold       = $this->get_safe_count( $status_raw, 'wc-on-hold' );
@@ -242,7 +244,7 @@ class WBI_Dashboard_View {
             'wbi_least_page'     => $least_page,
         );
 
-        $range_days        = $this->count_days_inclusive( $start_date, $end_date );
+        $range_days         = $this->count_days_inclusive( $start_date, $end_date );
         $period_granularity = $range_days > 90 ? 'week' : 'day';
         $period_data       = $this->engine->get_sales_by_period( $period_granularity, $start_date, $end_date, $statuses );
 
@@ -265,6 +267,7 @@ class WBI_Dashboard_View {
         $show_custom_range = 'custom' === $range_field_value;
         $compare_field_value = $custom_compare_requested ? 'custom_compare' : $compare;
         $show_custom_compare = 'custom_compare' === $compare_field_value;
+        $period_dataset_label = 'day' === $period_granularity ? __( 'Facturación diaria', 'wbi-suite' ) : __( 'Facturación semanal', 'wbi-suite' );
 
         $top5_names = array();
         $top5_qtys  = array();
@@ -510,6 +513,8 @@ class WBI_Dashboard_View {
                         <option value="wc-processing" <?php echo in_array( 'wc-processing', $statuses, true ) ? 'selected' : ''; ?>><?php esc_html_e( 'En proceso', 'wbi-suite' ); ?></option>
                         <option value="wc-on-hold" <?php echo in_array( 'wc-on-hold', $statuses, true ) ? 'selected' : ''; ?>><?php esc_html_e( 'En espera', 'wbi-suite' ); ?></option>
                         <option value="wc-pending" <?php echo in_array( 'wc-pending', $statuses, true ) ? 'selected' : ''; ?>><?php esc_html_e( 'Pendiente', 'wbi-suite' ); ?></option>
+                        <option value="wc-cancelled" <?php echo in_array( 'wc-cancelled', $statuses, true ) ? 'selected' : ''; ?>><?php esc_html_e( 'Cancelado', 'wbi-suite' ); ?></option>
+                        <option value="wc-failed" <?php echo in_array( 'wc-failed', $statuses, true ) ? 'selected' : ''; ?>><?php esc_html_e( 'Fallido', 'wbi-suite' ); ?></option>
                     </select>
                     <p class="wbi-field-help" id="wbi_statuses_help"><?php esc_html_e( 'Usá Ctrl o Cmd para seleccionar varios estados. Este filtro afecta facturación, unidades y rankings.', 'wbi-suite' ); ?></p>
                 </div>
@@ -1056,7 +1061,7 @@ class WBI_Dashboard_View {
                 type: 'bar',
                 labels: <?php echo $daily_labels_json; ?>,
                 values: <?php echo $daily_totals_json; ?>,
-                datasetLabel: '<?php echo esc_js( __( 'Facturación diaria', 'wbi-suite' ) ); ?>',
+                datasetLabel: '<?php echo esc_js( $period_dataset_label ); ?>',
                 backgroundColor: 'rgba(2, 132, 199, 0.75)',
                 borderColor: '#0284c7',
                 borderWidth: 1,
