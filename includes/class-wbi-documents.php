@@ -692,9 +692,9 @@ class WBI_Documents_Module {
                     $client_name = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ) ?: '—';
                     $status      = wc_get_order_status_name( $order->get_status() );
                     $total       = wc_price( $order->get_total() );
-                    $inv_url     = esc_url( admin_url( 'admin.php?page=wbi-documents&generate=invoice&order_id=' . $order_id ) );
-                    $rem_url     = esc_url( admin_url( 'admin.php?page=wbi-documents&generate=remito&order_id=' . $order_id ) );
-                    $orden_url   = esc_url( admin_url( 'admin.php?page=wbi-documents&generate=orden&order_id=' . $order_id ) );
+                    $inv_url     = admin_url( 'admin.php?page=wbi-documents&generate=invoice&order_id=' . $order_id );
+                    $rem_url     = admin_url( 'admin.php?page=wbi-documents&generate=remito&order_id=' . $order_id );
+                    $orden_url   = admin_url( 'admin.php?page=wbi-documents&generate=orden&order_id=' . $order_id );
                     $edit_url    = esc_url( $order->get_edit_order_url() );
                 ?>
                 <tr>
@@ -705,9 +705,9 @@ class WBI_Documents_Module {
                     <td><?php echo $total; ?></td>
                     <td>
                         <div class="wbi-page-actions">
-                            <a href="<?php echo $inv_url; ?>" class="wbi-btn wbi-btn-primary wbi-btn-sm">Generar factura</a>
-                            <a href="<?php echo $rem_url; ?>" class="wbi-btn wbi-btn-sm">Generar remito</a>
-                            <a href="<?php echo $orden_url; ?>" class="wbi-btn wbi-btn-sm">Orden de pedido</a>
+                            <a href="<?php echo esc_url( $inv_url ); ?>" class="wbi-btn wbi-btn-primary wbi-btn-sm">Generar factura</a>
+                            <a href="<?php echo esc_url( $rem_url ); ?>" class="wbi-btn wbi-btn-sm">Generar remito</a>
+                            <a href="<?php echo esc_url( $orden_url ); ?>" class="wbi-btn wbi-btn-sm">Orden de pedido</a>
                         </div>
                     </td>
                 </tr>
@@ -1078,7 +1078,7 @@ class WBI_Documents_Module {
     // =========================================================================
 
     private function render_generate_interface( $order_id, $generate_type ) {
-        $back_url = esc_url( admin_url( 'admin.php?page=wbi-documents&tab=pending' ) );
+        $back_url = admin_url( 'admin.php?page=wbi-documents&tab=pending' );
         $order = wc_get_order( $order_id );
         if ( ! $order ) {
             WBI_Admin_Shell::open_page();
@@ -1099,7 +1099,7 @@ class WBI_Documents_Module {
             return;
         }
 
-        $action_url = esc_url( admin_url( 'admin-post.php' ) );
+        $action_url = admin_url( 'admin-post.php' );
         $client_name = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
         $opts        = get_option( 'wbi_invoice_settings', array() );
         $default_type = ! empty( $opts['invoice_type'] ) ? $opts['invoice_type'] : 'B';
@@ -1167,7 +1167,7 @@ class WBI_Documents_Module {
 
                 <section class="wbi-card">
                     <h2 class="wbi-card-title">Datos fiscales</h2>
-                    <form method="post" action="<?php echo $action_url; ?>" target="_blank">
+                    <form method="post" action="<?php echo esc_url( $action_url ); ?>" target="_blank">
                         <?php wp_nonce_field( 'wbi_generate_document', '_wbi_doc_nonce' ); ?>
                         <input type="hidden" name="action" value="wbi_generate_document">
                         <input type="hidden" name="doc_type" value="invoice">
@@ -1248,7 +1248,7 @@ class WBI_Documents_Module {
                     <tr><th>Total</th><td><?php echo wc_price( $order->get_total() ); ?></td></tr>
                 </table>
 
-                <form method="post" action="<?php echo $action_url; ?>" target="_blank">
+                <form method="post" action="<?php echo esc_url( $action_url ); ?>" target="_blank">
                     <?php wp_nonce_field( 'wbi_generate_document', '_wbi_doc_nonce' ); ?>
                     <input type="hidden" name="action" value="wbi_generate_document">
                     <input type="hidden" name="doc_type" value="remito">
@@ -1286,7 +1286,7 @@ class WBI_Documents_Module {
                     <tr><th>Estado</th><td><?php echo esc_html( wc_get_order_status_name( $order->get_status() ) ); ?></td></tr>
                 </table>
 
-                <form method="post" action="<?php echo $action_url; ?>" target="_blank">
+                <form method="post" action="<?php echo esc_url( $action_url ); ?>" target="_blank">
                     <?php wp_nonce_field( 'wbi_generate_document', '_wbi_doc_nonce' ); ?>
                     <input type="hidden" name="action" value="wbi_generate_document">
                     <input type="hidden" name="doc_type" value="orden">

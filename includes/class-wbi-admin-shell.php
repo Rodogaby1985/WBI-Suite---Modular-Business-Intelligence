@@ -103,20 +103,11 @@ class WBI_Admin_Shell {
             return;
         }
 
-        if ( empty( $pagination ) ) {
-            echo '<div class="wbi-pagination">';
-            echo '<p class="wbi-page-summary">' . esc_html( $summary ) . '</p>';
-            echo '</div>';
-            return;
-        }
-
         echo '<nav class="wbi-pagination tablenav" aria-label="' . esc_attr__( 'Paginación', 'wbi-suite' ) . '">';
         if ( '' !== $summary ) {
             echo '<p class="wbi-page-summary">' . esc_html( $summary ) . '</p>';
         }
-        if ( ! empty( $pagination ) ) {
-            echo '<div class="tablenav-pages">' . wp_kses_post( $pagination ) . '</div>';
-        }
+        echo '<div class="tablenav-pages">' . wp_kses_post( $pagination ) . '</div>';
         echo '</nav>';
     }
 }
