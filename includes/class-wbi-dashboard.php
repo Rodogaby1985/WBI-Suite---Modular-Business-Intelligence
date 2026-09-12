@@ -281,9 +281,13 @@ class WBI_Dashboard_View {
 
         $prev_revenue = 0;
         $prev_units   = 0;
+        $revenue_delta = null;
+        $units_delta   = null;
         if ( 'none' !== $compare && $prev_start && $prev_end ) {
             $prev_revenue = $this->engine->get_revenue( $prev_start, $prev_end, $statuses ) ?: 0;
             $prev_units   = $this->engine->get_units_sold( $prev_start, $prev_end, $statuses ) ?: 0;
+            $revenue_delta = $this->calc_delta( $revenue, $prev_revenue );
+            $units_delta   = $this->calc_delta( $units, $prev_units );
         }
 
         $status_chart_labels = array(
@@ -513,8 +517,12 @@ class WBI_Dashboard_View {
                         <div class="wbi-compare-value wbi-dashboard-compare-row">
                             <span><?php echo esc_html( $comparison_label ); ?>:</span>
                             <strong><?php echo esc_html( $this->get_plain_price( $prev_revenue ) ); ?></strong>
-                            <span aria-hidden="true">·</span>
-                            <?php echo wp_kses_post( $this->render_delta( $this->calc_delta( $revenue, $prev_revenue ) ) ); ?>
+                            <?php if ( null === $revenue_delta ) : ?>
+                                <span class="wbi-field-help"><?php esc_html_e( 'Sin delta porcentual porque el período comparado fue 0.', 'wbi-suite' ); ?></span>
+                            <?php else : ?>
+                                <span aria-hidden="true">·</span>
+                                <?php echo wp_kses_post( $this->render_delta( $revenue_delta ) ); ?>
+                            <?php endif; ?>
                         </div>
                     <?php endif; ?>
                 </article>
@@ -526,8 +534,12 @@ class WBI_Dashboard_View {
                         <div class="wbi-compare-value wbi-dashboard-compare-row">
                             <span><?php echo esc_html( $comparison_label ); ?>:</span>
                             <strong><?php echo esc_html( number_format_i18n( (int) $prev_units ) ); ?></strong>
-                            <span aria-hidden="true">·</span>
-                            <?php echo wp_kses_post( $this->render_delta( $this->calc_delta( $units, $prev_units ) ) ); ?>
+                            <?php if ( null === $units_delta ) : ?>
+                                <span class="wbi-field-help"><?php esc_html_e( 'Sin delta porcentual porque el período comparado fue 0.', 'wbi-suite' ); ?></span>
+                            <?php else : ?>
+                                <span aria-hidden="true">·</span>
+                                <?php echo wp_kses_post( $this->render_delta( $units_delta ) ); ?>
+                            <?php endif; ?>
                         </div>
                     <?php endif; ?>
                 </article>
@@ -1191,7 +1203,7 @@ class WBI_Dashboard_View {
 
     private function render_delta( $delta ) {
         if ( null === $delta ) {
-            return '<span class="wbi-delta neutral">' . esc_html__( 'Sin delta porcentual (anterior en 0)', 'wbi-suite' ) . '</span>';
+            return '';
         }
         if ( $delta > 0 ) {
             return '<span class="wbi-delta positive">' . esc_html__( 'Subió', 'wbi-suite' ) . ' ' . esc_html( $delta ) . '%</span>';
