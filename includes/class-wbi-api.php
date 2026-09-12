@@ -178,8 +178,16 @@ class WBI_API_Module {
 
         list( $from, $to ) = $this->get_date_range( $request );
         list( $per_page, $page, $offset ) = $this->get_pagination( $request );
-        $total = $this->engine->count_best_sellers( $from, $to );
-        $data = $this->engine->get_best_sellers( $from, $to, null, $per_page, $offset );
+        $statuses = WBI_Admin_Query_Helper::get_string_array(
+            $request->get_params(),
+            'statuses',
+            array( 'wc-completed', 'wc-processing', 'wc-on-hold', 'wc-pending', 'wc-cancelled', 'wc-failed', 'wc-refunded' )
+        );
+        if ( empty( $statuses ) ) {
+            $statuses = null;
+        }
+        $total = $this->engine->count_best_sellers( $from, $to, $statuses );
+        $data = $this->engine->get_best_sellers( $from, $to, $statuses, $per_page, $offset );
         return rest_ensure_response( $this->wrap( is_array( $data ) ? $data : array(), $total, $page, $per_page ) );
     }
 
@@ -243,8 +251,15 @@ class WBI_API_Module {
         $rows = $this->engine->get_order_status_counts();
         $data = array();
         foreach ( $rows as $row ) {
-            if ( isset( $row->post_status, $row->count ) ) {
-                $data[ $row->post_status ] = intval( $row->count );
+            $status = '';
+            if ( isset( $row->post_status ) ) {
+                $status = $row->post_status;
+            } elseif ( isset( $row->status ) ) {
+                $status = $row->status;
+            }
+
+            if ( '' !== $status && isset( $row->count ) ) {
+                $data[ $status ] = intval( $row->count );
             }
         }
         return rest_ensure_response( $this->wrap( $data ) );
@@ -292,7 +307,7 @@ class WBI_API_Module {
             return array( 'id' => intval( $r->ID ), 'email' => $r->user_email, 'rfm_score' => intval( $r->score ) );
         }, $rows );
 
-        $total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->usermeta} WHERE meta_key = '_wbi_score' AND meta_value != ''" );
+        $total = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT user_id) FROM {$wpdb->usermeta} WHERE meta_key = '_wbi_score' AND meta_value != ''" );
         return rest_ensure_response( $this->wrap( $data, $total, $page, $per_page ) );
     }
 
