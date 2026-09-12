@@ -72,6 +72,10 @@ class WBI_Dashboard_View {
         $custom_compare_requested = isset( $request_args['wbi_compare'] ) && 'custom_compare' === WBI_Admin_Query_Helper::get_string( $request_args, 'wbi_compare', '' );
         $custom_range_error       = false;
         $custom_compare_error     = false;
+        $submitted_start          = isset( $request_args['wbi_start'] ) && is_scalar( $request_args['wbi_start'] ) ? sanitize_text_field( wp_unslash( (string) $request_args['wbi_start'] ) ) : '';
+        $submitted_end            = isset( $request_args['wbi_end'] ) && is_scalar( $request_args['wbi_end'] ) ? sanitize_text_field( wp_unslash( (string) $request_args['wbi_end'] ) ) : '';
+        $submitted_prev_start     = isset( $request_args['wbi_prev_start'] ) && is_scalar( $request_args['wbi_prev_start'] ) ? sanitize_text_field( wp_unslash( (string) $request_args['wbi_prev_start'] ) ) : '';
+        $submitted_prev_end       = isset( $request_args['wbi_prev_end'] ) && is_scalar( $request_args['wbi_prev_end'] ) ? sanitize_text_field( wp_unslash( (string) $request_args['wbi_prev_end'] ) ) : '';
 
         // --- 1. LÓGICA DE FECHAS (Restaurada) ---
         $range      = WBI_Admin_Query_Helper::get_enum( $request_args, 'wbi_range', $this->allowed_ranges, '30d' );
@@ -431,11 +435,11 @@ class WBI_Dashboard_View {
                     <div class="wbi-dashboard-date-grid">
                         <div class="wbi-dashboard-date-field">
                             <label for="wbi_start"><?php esc_html_e( 'Desde', 'wbi-suite' ); ?></label>
-                            <input id="wbi_start" type="date" name="wbi_start" value="<?php echo esc_attr( 'custom' === $range ? $start_date : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_start', '' ) ); ?>" <?php disabled( ! $show_custom_range ); ?> />
+                            <input id="wbi_start" type="date" name="wbi_start" value="<?php echo esc_attr( $custom_range_requested ? $submitted_start : $start_date ); ?>" <?php disabled( ! $show_custom_range ); ?> />
                         </div>
                         <div class="wbi-dashboard-date-field">
                             <label for="wbi_end"><?php esc_html_e( 'Hasta', 'wbi-suite' ); ?></label>
-                            <input id="wbi_end" type="date" name="wbi_end" value="<?php echo esc_attr( 'custom' === $range ? $end_date : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_end', '' ) ); ?>" <?php disabled( ! $show_custom_range ); ?> />
+                            <input id="wbi_end" type="date" name="wbi_end" value="<?php echo esc_attr( $custom_range_requested ? $submitted_end : $end_date ); ?>" <?php disabled( ! $show_custom_range ); ?> />
                         </div>
                     </div>
                 </div>
@@ -464,11 +468,11 @@ class WBI_Dashboard_View {
                     <div class="wbi-dashboard-date-grid">
                         <div class="wbi-dashboard-date-field">
                             <label for="wbi_prev_start"><?php esc_html_e( 'Desde', 'wbi-suite' ); ?></label>
-                            <input id="wbi_prev_start" type="date" name="wbi_prev_start" value="<?php echo esc_attr( 'custom_compare' === $compare ? $prev_start : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_prev_start', '' ) ); ?>" <?php disabled( ! $show_custom_compare ); ?> />
+                            <input id="wbi_prev_start" type="date" name="wbi_prev_start" value="<?php echo esc_attr( $custom_compare_requested ? $submitted_prev_start : $prev_start ); ?>" <?php disabled( ! $show_custom_compare ); ?> />
                         </div>
                         <div class="wbi-dashboard-date-field">
                             <label for="wbi_prev_end"><?php esc_html_e( 'Hasta', 'wbi-suite' ); ?></label>
-                            <input id="wbi_prev_end" type="date" name="wbi_prev_end" value="<?php echo esc_attr( 'custom_compare' === $compare ? $prev_end : WBI_Admin_Query_Helper::get_valid_date( $request_args, 'wbi_prev_end', '' ) ); ?>" <?php disabled( ! $show_custom_compare ); ?> />
+                            <input id="wbi_prev_end" type="date" name="wbi_prev_end" value="<?php echo esc_attr( $custom_compare_requested ? $submitted_prev_end : $prev_end ); ?>" <?php disabled( ! $show_custom_compare ); ?> />
                         </div>
                     </div>
                 </div>
@@ -1156,7 +1160,10 @@ class WBI_Dashboard_View {
     }
 
     private function get_plain_price( $amount ) {
-        return trim( wp_strip_all_tags( wc_price( $amount ) ) );
+        $plain_price = html_entity_decode( wp_strip_all_tags( wc_price( $amount ) ), ENT_QUOTES, get_bloginfo( 'charset' ) );
+        $plain_price = preg_replace( '/\s+/u', ' ', $plain_price );
+
+        return trim( (string) $plain_price );
     }
 
     private function format_chart_row( $label, $value, $type ) {
