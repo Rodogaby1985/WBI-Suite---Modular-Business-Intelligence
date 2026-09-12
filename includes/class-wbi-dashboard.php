@@ -752,8 +752,8 @@ class WBI_Dashboard_View {
                             <table class="wbi-table">
                                 <thead>
                                     <tr>
-                                        <th><?php esc_html_e( 'Producto', 'wbi-suite' ); ?></th>
-                                        <th data-align="right"><?php esc_html_e( 'Unidades', 'wbi-suite' ); ?></th>
+                                        <th scope="col"><?php esc_html_e( 'Producto', 'wbi-suite' ); ?></th>
+                                        <th scope="col" data-align="right"><?php esc_html_e( 'Unidades', 'wbi-suite' ); ?></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -796,8 +796,8 @@ class WBI_Dashboard_View {
                             <table class="wbi-table">
                                 <thead>
                                     <tr>
-                                        <th><?php esc_html_e( 'Producto', 'wbi-suite' ); ?></th>
-                                        <th data-align="right"><?php esc_html_e( 'Unidades', 'wbi-suite' ); ?></th>
+                                        <th scope="col"><?php esc_html_e( 'Producto', 'wbi-suite' ); ?></th>
+                                        <th scope="col" data-align="right"><?php esc_html_e( 'Unidades', 'wbi-suite' ); ?></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1168,7 +1168,7 @@ class WBI_Dashboard_View {
         echo '<div class="wbi-table-responsive"><table class="wbi-table"><thead><tr>';
         foreach ( $headers as $index => $header ) {
             $align = in_array( $index, $numeric_columns, true ) ? ' data-align="right"' : '';
-            echo '<th' . $align . '>' . esc_html( $header ) . '</th>';
+            echo '<th scope="col"' . $align . '>' . esc_html( $header ) . '</th>';
         }
         echo '</tr></thead><tbody>';
         foreach ( $rows as $row ) {
