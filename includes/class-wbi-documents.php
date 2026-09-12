@@ -805,6 +805,7 @@ class WBI_Documents_Module {
         $result = wc_get_orders( array(
             'meta_key'     => '_wbi_remito_number',
             'meta_compare' => 'EXISTS',
+            'meta_type'    => 'NUMERIC',
             'date_created' => $date_from . '...' . $date_to,
             'return'       => 'ids',
             'limit'        => $per_page,

@@ -675,14 +675,16 @@ class WBI_Metrics_Engine {
             $statuses_in = $this->build_statuses_in( $statuses );
             if ( $this->is_hpos_active() ) {
                 $d   = $this->get_date_query( $s, $e, 'o', 'date_created_gmt' );
-                $sql = "SELECT o.billing_state as province,
+                $sql = "SELECT addr.state as province,
                                COUNT(o.id) as orders,
                                SUM(o.total_amount) as total
                         FROM {$this->wpdb->prefix}wc_orders o
+                        JOIN {$this->wpdb->prefix}wc_order_addresses addr
+                             ON addr.order_id = o.id AND addr.address_type = 'billing'
                         WHERE o.type = 'shop_order'
                         AND o.status IN {$statuses_in}
                         {$d}
-                        GROUP BY o.billing_state
+                        GROUP BY addr.state
                         ORDER BY total DESC";
             } else {
                 $d   = $this->get_date_query( $s, $e, 'p' );
@@ -730,13 +732,15 @@ class WBI_Metrics_Engine {
                             o.date_created_gmt as post_date,
                             o.status as post_status,
                             o.total_amount as total,
-                            o.billing_first_name as first_name,
-                            o.billing_last_name as last_name,
-                            o.billing_email as email
+                            addr.first_name as first_name,
+                            addr.last_name as last_name,
+                            addr.email as email
                      FROM {$this->wpdb->prefix}wc_orders o
+                     JOIN {$this->wpdb->prefix}wc_order_addresses addr
+                          ON addr.order_id = o.id AND addr.address_type = 'billing'
                      WHERE o.type = 'shop_order'
                      AND o.status IN {$statuses_in}
-                     AND o.billing_state = %s
+                     AND addr.state = %s
                      {$d}
                      ORDER BY o.date_created_gmt DESC",
                     $province_code
@@ -942,14 +946,16 @@ class WBI_Metrics_Engine {
             $statuses_in = $this->build_statuses_in( $statuses );
             if ( $this->is_hpos_active() ) {
                 $d = $this->get_date_query( $start, $end, 'o', 'date_created_gmt' );
-                $sql = "SELECT o.billing_state AS province,
+                $sql = "SELECT addr.state AS province,
                                COUNT(o.id) AS orders,
                                SUM(o.total_amount) AS total
                         FROM {$this->wpdb->prefix}wc_orders o
+                        JOIN {$this->wpdb->prefix}wc_order_addresses addr
+                             ON addr.order_id = o.id AND addr.address_type = 'billing'
                         WHERE o.type = 'shop_order'
                         AND o.status IN {$statuses_in}
                         {$d}
-                        GROUP BY o.billing_state
+                        GROUP BY addr.state
                         ORDER BY total DESC";
             } else {
                 $d = $this->get_date_query( $start, $end, 'p' );

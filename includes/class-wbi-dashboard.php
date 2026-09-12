@@ -146,9 +146,6 @@ class WBI_Dashboard_View {
         $c_cancelled  = $this->get_safe_count($status_raw, 'wc-cancelled');
         $c_failed     = $this->get_safe_count($status_raw, 'wc-failed');
 
-        $least_sold = $this->engine->get_least_sold($start_date, $end_date, $statuses);
-        $best_sold  = $this->engine->get_best_sellers($start_date, $end_date, $statuses);
-
         $top_per_page_allowed = array( 5, 10, 25 );
         $best_per_page = isset( $request_args['wbi_top_per_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_top_per_page', $request_args['wbi_top_per_page'] ) : 5;
         if ( ! in_array( $best_per_page, $top_per_page_allowed, true ) ) {
@@ -156,18 +153,16 @@ class WBI_Dashboard_View {
         }
         $top_page = isset( $request_args['wbi_top_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_top_page', $request_args['wbi_top_page'] ) : 1;
         $top_page = max( 1, $top_page );
-
-        $best_sold = is_array( $best_sold ) ? $best_sold : array();
-        $least_sold = is_array( $least_sold ) ? $least_sold : array();
-        $best_total = count( $best_sold );
-        $least_total = count( $least_sold );
+        $best_total = $this->engine->count_best_sellers( $start_date, $end_date, $statuses );
+        $least_total = $this->engine->count_least_sold( $start_date, $end_date, $statuses );
         $best_has_rows = $best_total > 0;
         $best_total_pages = max( 1, (int) ceil( $best_total / $best_per_page ) );
         if ( $top_page > $best_total_pages ) {
             $top_page = $best_total_pages;
         }
         $top_offset = ( $top_page - 1 ) * $best_per_page;
-        $best_sold_page = array_slice( $best_sold, $top_offset, $best_per_page );
+        $best_sold_page = $this->engine->get_best_sellers( $start_date, $end_date, $statuses, $best_per_page, $top_offset );
+        $best_sold_page = is_array( $best_sold_page ) ? $best_sold_page : array();
 
         $least_per_page = isset( $request_args['wbi_least_per_page'] ) ? (int) $this->sanitize_dashboard_query_arg( 'wbi_least_per_page', $request_args['wbi_least_per_page'] ) : 5;
         if ( ! in_array( $least_per_page, $top_per_page_allowed, true ) ) {
@@ -181,8 +176,8 @@ class WBI_Dashboard_View {
             $least_page = $least_total_pages;
         }
         $least_offset = ( $least_page - 1 ) * $least_per_page;
-        $least_sold_page = array_slice( $least_sold, $least_offset, $least_per_page );
-
+        $least_sold_page = $this->engine->get_least_sold( $start_date, $end_date, $statuses, $least_per_page, $least_offset );
+        $least_sold_page = is_array( $least_sold_page ) ? $least_sold_page : array();
         $allowed_query_fields = array(
             'page',
             'wbi_range',
