@@ -393,7 +393,9 @@ class WBI_API_Module {
         if ( is_wp_error( $date_range ) ) {
             return $date_range;
         }
-        list( $from, $to ) = $date_range;
+        list( $from_datetime, $to_datetime ) = $date_range;
+        $from = $this->to_ymd( $from_datetime );
+        $to   = $this->to_ymd( $to_datetime );
         $invoice_type = strtoupper( WBI_Admin_Query_Helper::get_enum( $request->get_params(), 'inv_type', array( 'a', 'b', 'c' ), '' ) );
         $date_from    = $from;
         $date_to      = $to;

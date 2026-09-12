@@ -166,6 +166,10 @@ class WBI_Admin_Query_Helper {
         if ( ! function_exists( 'wc_get_orders' ) || ! function_exists( 'wc_get_order' ) ) {
             return 0;
         }
+        $cache_key = 'wbi_inv_backfill_' . md5( implode( '|', array( (string) $date_from, (string) $date_to, (string) $invoice_type, (string) $batch_size ) ) );
+        if ( false !== get_transient( $cache_key ) ) {
+            return 0;
+        }
 
         $updated   = 0;
         $limit     = max( 1, (int) $batch_size );
@@ -230,6 +234,7 @@ class WBI_Admin_Query_Helper {
             $page++;
         } while ( $page <= $max_pages );
 
+        set_transient( $cache_key, 1, 15 * MINUTE_IN_SECONDS );
         return $updated;
     }
 
