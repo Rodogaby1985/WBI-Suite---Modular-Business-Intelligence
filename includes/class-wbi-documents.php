@@ -1086,7 +1086,6 @@ class WBI_Documents_Module {
     private function render_generate_interface( $order_id, $generate_type ) {
         $back_url = admin_url( 'admin.php?page=wbi-documents&tab=pending' );
         if ( ! in_array( $generate_type, array( 'invoice', 'remito', 'orden' ), true ) ) {
-            status_header( 400 );
             WBI_Admin_Shell::open_page();
             WBI_Admin_Shell::render_header(
                 array(
@@ -1104,10 +1103,8 @@ class WBI_Documents_Module {
             WBI_Admin_Shell::close_page();
             return;
         }
-
         $order = wc_get_order( $order_id );
         if ( ! $order ) {
-            status_header( 404 );
             WBI_Admin_Shell::open_page();
             WBI_Admin_Shell::render_header(
                 array(
