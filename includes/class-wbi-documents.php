@@ -1234,7 +1234,19 @@ class WBI_Documents_Module {
             </section>
             <?php
             else :
+                WBI_Admin_Shell::render_header(
+                    array(
+                        'title'       => 'Documento no disponible',
+                        'description' => 'El tipo de documento solicitado no es válido para este flujo administrativo.',
+                        'back_link'   => array(
+                            'url'   => $back_url,
+                            'label' => 'Volver a pedidos sin documento',
+                        ),
+                    )
+                );
+                echo '<section class="wbi-card">';
                 WBI_Admin_Shell::render_notice( esc_html__( 'Tipo de generación inválido.', 'wbi-suite' ), 'danger' );
+                echo '</section>';
             endif;
         endif;
 
