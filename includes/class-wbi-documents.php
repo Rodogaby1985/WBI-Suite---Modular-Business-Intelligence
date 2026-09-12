@@ -237,6 +237,9 @@ class WBI_Documents_Module {
 
         $order_id = absint( $_POST['order_id'] ?? 0 );
         $doc_type = sanitize_text_field( wp_unslash( $_POST['doc_type'] ?? '' ) );
+        if ( ! in_array( $doc_type, array( 'invoice', 'remito', 'orden' ), true ) ) {
+            wp_die( esc_html__( 'Tipo de documento inválido.', 'wbi-suite' ) );
+        }
 
         $order = wc_get_order( $order_id );
         if ( ! $order ) wp_die( 'Pedido no encontrado.' );
@@ -247,8 +250,6 @@ class WBI_Documents_Module {
             $this->generate_remito( $order );
         } elseif ( $doc_type === 'orden' ) {
             $this->generate_orden( $order );
-        } else {
-            wp_die( 'Tipo de documento inválido.' );
         }
     }
 
@@ -579,28 +580,44 @@ class WBI_Documents_Module {
             return;
         }
 
-        ?>
-        <div class="wrap">
-            <h1>📑 Documentos Comerciales</h1>
+        $header_actions = array(
+            array(
+                'url'   => admin_url( 'admin.php?page=wbi-settings' ),
+                'label' => 'Configuración',
+                'class' => 'wbi-btn',
+            ),
+        );
 
-            <nav class="nav-tab-wrapper wbi-nav-tabs" style="margin-bottom:20px;">
-                <a href="<?php echo esc_url( $base_url . '&tab=pending' ); ?>"
-                   class="nav-tab <?php echo $active_tab === 'pending' ? 'nav-tab-active' : ''; ?>">
-                    📋 Pedidos sin Documento
-                </a>
-                <a href="<?php echo esc_url( $base_url . '&tab=invoices' ); ?>"
-                   class="nav-tab <?php echo $active_tab === 'invoices' ? 'nav-tab-active' : ''; ?>">
-                    📑 Facturas Emitidas
-                </a>
-                <a href="<?php echo esc_url( $base_url . '&tab=remitos' ); ?>"
-                   class="nav-tab <?php echo $active_tab === 'remitos' ? 'nav-tab-active' : ''; ?>">
-                    📄 Remitos Generados
-                </a>
-                <a href="<?php echo esc_url( $base_url . '&tab=ordenes' ); ?>"
-                   class="nav-tab <?php echo $active_tab === 'ordenes' ? 'nav-tab-active' : ''; ?>">
-                    📦 Órdenes de Pedido
-                </a>
-            </nav>
+        if ( 'pending' !== $active_tab ) {
+            array_unshift(
+                $header_actions,
+                array(
+                    'url'   => $base_url . '&tab=pending',
+                    'label' => 'Ver pedidos sin documento',
+                    'class' => 'wbi-btn wbi-btn-primary',
+                )
+            );
+        }
+
+        $tabs = array(
+            'pending'  => array( 'label' => 'Pedidos sin documento', 'url' => $base_url . '&tab=pending' ),
+            'invoices' => array( 'label' => 'Facturas emitidas', 'url' => $base_url . '&tab=invoices' ),
+            'remitos'  => array( 'label' => 'Remitos generados', 'url' => $base_url . '&tab=remitos' ),
+            'ordenes'  => array( 'label' => 'Órdenes de pedido', 'url' => $base_url . '&tab=ordenes' ),
+        );
+
+        ?>
+        <?php WBI_Admin_Shell::open_page(); ?>
+            <?php
+            WBI_Admin_Shell::render_header(
+                array(
+                    'title'       => 'Documentos comerciales',
+                    'description' => 'Gestión unificada de pedidos pendientes, facturas emitidas, remitos y órdenes de pedido.',
+                    'actions'     => $header_actions,
+                )
+            );
+            WBI_Admin_Shell::render_tabs( $tabs, $active_tab, array( 'label' => 'Secciones del módulo de documentos comerciales' ) );
+            ?>
 
             <?php
             if ( $active_tab === 'pending' ) {
@@ -613,7 +630,7 @@ class WBI_Documents_Module {
                 $this->render_tab_ordenes();
             }
             ?>
-        </div>
+        <?php WBI_Admin_Shell::close_page(); ?>
         <?php
     }
 
@@ -647,12 +664,19 @@ class WBI_Documents_Module {
         $total_pages  = $total > 0 ? (int) ceil( $total / $per_page ) : 1;
         $paged_ids    = array_slice( $pending_ids, $offset, $per_page );
 
-        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=pending' );
+        $base_url = add_query_arg(
+            array(
+                'page' => 'wbi-documents',
+                'tab'  => 'pending',
+            ),
+            admin_url( 'admin.php' )
+        );
 
-        echo '<p style="color:#555;">Total: <strong>' . intval( $total ) . '</strong> pedidos sin documento.</p>';
+        echo '<section class="wbi-card">';
+        echo '<p class="wbi-page-summary">Total: <strong>' . intval( $total ) . '</strong> pedidos sin documento.</p>';
         ?>
         <div class="wbi-table-responsive">
-        <table class="widefat striped wbi-sortable">
+        <table class="wbi-table wbi-sortable">
             <thead>
                 <tr>
                     <th>#Pedido</th>
@@ -665,7 +689,7 @@ class WBI_Documents_Module {
             </thead>
             <tbody>
             <?php if ( empty( $paged_ids ) ) : ?>
-                <tr><td colspan="6" style="text-align:center;color:#888;">¡No hay pedidos pendientes de documentar!</td></tr>
+                <tr><td colspan="6">No hay pedidos pendientes de documentar.</td></tr>
             <?php else : ?>
                 <?php foreach ( $paged_ids as $order_id ) :
                     $order = wc_get_order( $order_id );
@@ -675,9 +699,9 @@ class WBI_Documents_Module {
                     $client_name = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ) ?: '—';
                     $status      = wc_get_order_status_name( $order->get_status() );
                     $total       = wc_price( $order->get_total() );
-                    $inv_url     = esc_url( admin_url( 'admin.php?page=wbi-documents&generate=invoice&order_id=' . $order_id ) );
-                    $rem_url     = esc_url( admin_url( 'admin.php?page=wbi-documents&generate=remito&order_id=' . $order_id ) );
-                    $orden_url   = esc_url( admin_url( 'admin.php?page=wbi-documents&generate=orden&order_id=' . $order_id ) );
+                    $inv_url     = admin_url( 'admin.php?page=wbi-documents&generate=invoice&order_id=' . $order_id );
+                    $rem_url     = admin_url( 'admin.php?page=wbi-documents&generate=remito&order_id=' . $order_id );
+                    $orden_url   = admin_url( 'admin.php?page=wbi-documents&generate=orden&order_id=' . $order_id );
                     $edit_url    = esc_url( $order->get_edit_order_url() );
                 ?>
                 <tr>
@@ -687,9 +711,11 @@ class WBI_Documents_Module {
                     <td><?php echo esc_html( $status ); ?></td>
                     <td><?php echo $total; ?></td>
                     <td>
-                        <a href="<?php echo $inv_url; ?>" class="button button-small button-primary">📑 Generar Factura</a>
-                        <a href="<?php echo $rem_url; ?>" class="button button-small" style="margin-left:4px;">📄 Generar Remito</a>
-                        <a href="<?php echo $orden_url; ?>" class="button button-small" style="margin-left:4px;">📦 Orden de Pedido</a>
+                        <div class="wbi-page-actions">
+                            <a href="<?php echo esc_url( $inv_url ); ?>" class="wbi-btn wbi-btn-primary wbi-btn-sm">Generar factura</a>
+                            <a href="<?php echo esc_url( $rem_url ); ?>" class="wbi-btn wbi-btn-sm">Generar remito</a>
+                            <a href="<?php echo esc_url( $orden_url ); ?>" class="wbi-btn wbi-btn-sm">Orden de pedido</a>
+                        </div>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -700,17 +726,18 @@ class WBI_Documents_Module {
 
         <?php
         if ( $total_pages > 1 ) {
-            echo '<div class="tablenav"><div class="tablenav-pages">';
-            echo paginate_links( array(
+            $pagination = paginate_links( array(
                 'base'      => add_query_arg( 'paged', '%#%', $base_url ),
                 'format'    => '',
                 'current'   => $paged,
                 'total'     => $total_pages,
                 'prev_text' => '&laquo;',
                 'next_text' => '&raquo;',
+                'type'      => 'list',
             ) );
-            echo '</div></div>';
+            WBI_Admin_Shell::render_pagination( $pagination, sprintf( 'Página %1$d de %2$d', $paged, $total_pages ) );
         }
+        echo '</section>';
     }
 
     // =========================================================================
@@ -788,36 +815,70 @@ class WBI_Documents_Module {
         }
 
         $export_url = wp_nonce_url(
-            admin_url( 'admin-post.php?action=wbi_document_export_csv&export_type=invoices&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) . '&inv_type=' . urlencode( $type_filter ) ),
+            add_query_arg(
+                array(
+                    'action'      => 'wbi_document_export_csv',
+                    'export_type' => 'invoices',
+                    'date_from'   => $date_from,
+                    'date_to'     => $date_to,
+                    'inv_type'    => $type_filter,
+                ),
+                admin_url( 'admin-post.php' )
+            ),
             'wbi_invoice_export'
         );
 
-        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=invoices&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) . '&inv_type=' . urlencode( $type_filter ) );
+        $base_url = add_query_arg(
+            array(
+                'page'      => 'wbi-documents',
+                'tab'       => 'invoices',
+                'date_from' => $date_from,
+                'date_to'   => $date_to,
+                'inv_type'  => $type_filter,
+            ),
+            admin_url( 'admin.php' )
+        );
         ?>
-        <form method="get" style="margin-bottom:15px;">
-            <?php if ( $date_range['has_error'] ) : ?>
-                <div class="notice notice-warning"><p><?php esc_html_e( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ); ?></p></div>
-            <?php endif; ?>
+        <?php if ( $date_range['has_error'] ) : ?>
+            <?php WBI_Admin_Shell::render_notice( esc_html__( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ), 'warning' ); ?>
+        <?php endif; ?>
+        <form method="get" class="wbi-filter-panel">
             <input type="hidden" name="page" value="wbi-documents">
             <input type="hidden" name="tab" value="invoices">
-            <label>Desde: <input type="date" name="date_from" value="<?php echo esc_attr( $date_from ); ?>"></label>
-            <label style="margin-left:8px;">Hasta: <input type="date" name="date_to" value="<?php echo esc_attr( $date_to ); ?>"></label>
-            <label style="margin-left:8px;">Tipo:
-                <select name="inv_type">
-                    <option value="">Todos</option>
-                    <?php foreach ( array( 'A', 'B', 'C' ) as $t ) : ?>
-                        <option value="<?php echo esc_attr( $t ); ?>" <?php selected( $type_filter, $t ); ?>><?php echo esc_html( $t ); ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-            <button type="submit" class="button" style="margin-left:8px;">Filtrar</button>
-            <a href="<?php echo esc_url( $export_url ); ?>" class="button" style="margin-left:8px;">⬇️ Exportar CSV</a>
+            <div class="wbi-filter-grid">
+                <div class="wbi-filter-field wbi-col-3">
+                    <label for="wbi-docs-invoices-from">Desde</label>
+                    <input id="wbi-docs-invoices-from" type="date" name="date_from" value="<?php echo esc_attr( $date_from ); ?>">
+                </div>
+                <div class="wbi-filter-field wbi-col-3">
+                    <label for="wbi-docs-invoices-to">Hasta</label>
+                    <input id="wbi-docs-invoices-to" type="date" name="date_to" value="<?php echo esc_attr( $date_to ); ?>">
+                </div>
+                <div class="wbi-filter-field wbi-col-2">
+                    <label for="wbi-docs-invoice-type">Tipo</label>
+                    <select id="wbi-docs-invoice-type" name="inv_type">
+                        <option value="">Todos</option>
+                        <?php foreach ( array( 'A', 'B', 'C' ) as $t ) : ?>
+                            <option value="<?php echo esc_attr( $t ); ?>" <?php selected( $type_filter, $t ); ?>><?php echo esc_html( $t ); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="wbi-filter-field wbi-col-3">
+                    <div class="wbi-filter-actions">
+                        <button type="submit" class="wbi-btn wbi-btn-primary">Filtrar</button>
+                    </div>
+                </div>
+            </div>
         </form>
+        <div class="wbi-page-actions">
+            <a href="<?php echo esc_url( $export_url ); ?>" class="wbi-btn">Exportar CSV</a>
+        </div>
 
-        <p style="color:#555;">Total: <strong><?php echo intval( $total_rows ); ?></strong> facturas en el período.</p>
+        <section class="wbi-card">
+        <p class="wbi-page-summary">Total: <strong><?php echo intval( $total_rows ); ?></strong> facturas en el período.</p>
 
         <div class="wbi-table-responsive">
-        <table class="widefat fixed striped wbi-sortable">
+        <table class="wbi-table wbi-sortable">
             <thead>
                 <tr>
                     <th>#Factura</th>
@@ -832,7 +893,7 @@ class WBI_Documents_Module {
             </thead>
             <tbody>
             <?php if ( empty( $page_ids ) ) : ?>
-                <tr><td colspan="8" style="text-align:center;color:#888;">Sin facturas en el período seleccionado.</td></tr>
+                <tr><td colspan="8">Sin facturas en el período seleccionado.</td></tr>
             <?php else : ?>
                 <?php foreach ( $page_ids as $oid ) :
                     $oid   = intval( $oid );
@@ -858,7 +919,7 @@ class WBI_Documents_Module {
                     <td><?php echo esc_html( $name ); ?></td>
                     <td><?php echo esc_html( $cuit ); ?></td>
                     <td><?php echo wc_price( $order->get_total() ); ?></td>
-                    <td><a href="<?php echo esc_url( $view_url ); ?>" target="_blank" class="button button-small">📄 Ver PDF</a></td>
+                    <td><a href="<?php echo esc_url( $view_url ); ?>" target="_blank" class="wbi-btn wbi-btn-sm">Ver PDF</a></td>
                 </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
@@ -868,17 +929,18 @@ class WBI_Documents_Module {
 
         <?php
         if ( $total_pages > 1 ) {
-            echo '<div class="tablenav"><div class="tablenav-pages">';
-            echo paginate_links( array(
+            $pagination = paginate_links( array(
                 'base'      => add_query_arg( 'paged', '%#%', $base_url ),
                 'format'    => '',
                 'current'   => $paged,
                 'total'     => $total_pages,
                 'prev_text' => '&laquo;',
                 'next_text' => '&raquo;',
+                'type'      => 'list',
             ) );
-            echo '</div></div>';
+            WBI_Admin_Shell::render_pagination( $pagination, sprintf( 'Página %1$d de %2$d', $paged, $total_pages ) );
         }
+        echo '</section>';
     }
 
     // =========================================================================
@@ -921,28 +983,46 @@ class WBI_Documents_Module {
         }
 
         $export_url = wp_nonce_url(
-            admin_url( 'admin-post.php?action=wbi_document_export_csv&export_type=remitos&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) ),
+            add_query_arg(
+                array(
+                    'action'      => 'wbi_document_export_csv',
+                    'export_type' => 'remitos',
+                    'date_from'   => $date_from,
+                    'date_to'     => $date_to,
+                ),
+                admin_url( 'admin-post.php' )
+            ),
             'wbi_remito_export'
         );
 
-        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=remitos&date_from=' . urlencode( $date_from ) . '&date_to=' . urlencode( $date_to ) );
+        $base_url = add_query_arg(
+            array(
+                'page'      => 'wbi-documents',
+                'tab'       => 'remitos',
+                'date_from' => $date_from,
+                'date_to'   => $date_to,
+            ),
+            admin_url( 'admin.php' )
+        );
 
-        echo '<form method="get" style="margin-bottom:15px;">';
         if ( $date_range['has_error'] ) {
-            echo '<div class="notice notice-warning"><p>' . esc_html__( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ) . '</p></div>';
+            WBI_Admin_Shell::render_notice( esc_html__( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ), 'warning' );
         }
+        echo '<form method="get" class="wbi-filter-panel">';
         echo '<input type="hidden" name="page" value="wbi-documents">';
         echo '<input type="hidden" name="tab" value="remitos">';
-        echo '<label>Desde: <input type="date" name="date_from" value="' . esc_attr( $date_from ) . '"></label>';
-        echo '<label style="margin-left:8px;">Hasta: <input type="date" name="date_to" value="' . esc_attr( $date_to ) . '"></label>';
-        echo '<button type="submit" class="button" style="margin-left:8px;">Filtrar</button>';
-        echo '<a href="' . esc_url( $export_url ) . '" class="button" style="margin-left:8px;">Exportar CSV</a>';
+        echo '<div class="wbi-filter-grid">';
+        echo '<div class="wbi-filter-field wbi-col-3"><label for="wbi-docs-remitos-from">Desde</label><input id="wbi-docs-remitos-from" type="date" name="date_from" value="' . esc_attr( $date_from ) . '"></div>';
+        echo '<div class="wbi-filter-field wbi-col-3"><label for="wbi-docs-remitos-to">Hasta</label><input id="wbi-docs-remitos-to" type="date" name="date_to" value="' . esc_attr( $date_to ) . '"></div>';
+        echo '<div class="wbi-filter-field wbi-col-3"><div class="wbi-filter-actions"><button type="submit" class="wbi-btn wbi-btn-primary">Filtrar</button></div></div>';
+        echo '</div>';
         echo '</form>';
-        echo '<p style="color:#555;">Total: <strong>' . intval( $total ) . '</strong> remitos &nbsp;';
-        echo '</p>';
+        echo '<div class="wbi-page-actions"><a href="' . esc_url( $export_url ) . '" class="wbi-btn">Exportar CSV</a></div>';
+        echo '<section class="wbi-card">';
+        echo '<p class="wbi-page-summary">Total: <strong>' . intval( $total ) . '</strong> remitos.</p>';
         ?>
         <div class="wbi-table-responsive">
-        <table class="widefat striped wbi-sortable">
+        <table class="wbi-table wbi-sortable">
             <thead>
                 <tr>
                     <th>#Remito</th>
@@ -955,7 +1035,7 @@ class WBI_Documents_Module {
             </thead>
             <tbody>
             <?php if ( empty( $paged_ids ) ) : ?>
-                <tr><td colspan="6" style="text-align:center;color:#888;">Aún no se generaron remitos.</td></tr>
+                <tr><td colspan="6">Aún no se generaron remitos.</td></tr>
             <?php else : ?>
                 <?php foreach ( $paged_ids as $order_id ) :
                     $order = wc_get_order( $order_id );
@@ -976,7 +1056,7 @@ class WBI_Documents_Module {
                     <td><?php echo esc_html( $date_fmt ); ?></td>
                     <td><?php echo esc_html( $name ); ?></td>
                     <td><?php echo wc_price( $order->get_total() ); ?></td>
-                    <td><a href="<?php echo esc_url( $print_url ); ?>" target="_blank" class="button button-small">🖨 Reimprimir</a></td>
+                    <td><a href="<?php echo esc_url( $print_url ); ?>" target="_blank" class="wbi-btn wbi-btn-sm">Reimprimir</a></td>
                 </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
@@ -986,17 +1066,18 @@ class WBI_Documents_Module {
 
         <?php
         if ( $total_pages > 1 ) {
-            echo '<div class="tablenav"><div class="tablenav-pages">';
-            echo paginate_links( array(
+            $pagination = paginate_links( array(
                 'base'      => add_query_arg( 'paged', '%#%', $base_url ),
                 'format'    => '',
                 'current'   => $paged,
                 'total'     => $total_pages,
                 'prev_text' => '&laquo;',
                 'next_text' => '&raquo;',
+                'type'      => 'list',
             ) );
-            echo '</div></div>';
+            WBI_Admin_Shell::render_pagination( $pagination, sprintf( 'Página %1$d de %2$d', $paged, $total_pages ) );
         }
+        echo '</section>';
     }
 
     // =========================================================================
@@ -1004,28 +1085,76 @@ class WBI_Documents_Module {
     // =========================================================================
 
     private function render_generate_interface( $order_id, $generate_type ) {
+        $back_url = add_query_arg(
+            array(
+                'page' => 'wbi-documents',
+                'tab'  => 'pending',
+            ),
+            admin_url( 'admin.php' )
+        );
+        if ( ! in_array( $generate_type, array( 'invoice', 'remito', 'orden' ), true ) ) {
+            WBI_Admin_Shell::open_page();
+            WBI_Admin_Shell::render_header(
+                array(
+                    'title'       => 'Documento no disponible',
+                    'description' => 'El tipo de documento solicitado no es válido para este flujo administrativo.',
+                    'back_link'   => array(
+                        'url'   => $back_url,
+                        'label' => 'Volver a pedidos sin documento',
+                    ),
+                )
+            );
+            echo '<section class="wbi-card">';
+            WBI_Admin_Shell::render_notice( esc_html__( 'Tipo de generación inválido.', 'wbi-suite' ), 'danger' );
+            echo '</section>';
+            WBI_Admin_Shell::close_page();
+            return;
+        }
         $order = wc_get_order( $order_id );
         if ( ! $order ) {
-            echo '<div class="notice notice-error"><p>Pedido no encontrado.</p></div>';
+            WBI_Admin_Shell::open_page();
+            WBI_Admin_Shell::render_header(
+                array(
+                    'title'       => 'Documento no disponible',
+                    'description' => 'No se encontró el pedido solicitado para este flujo administrativo.',
+                    'back_link'   => array(
+                        'url'   => $back_url,
+                        'label' => 'Volver a pedidos sin documento',
+                    ),
+                )
+            );
+            echo '<section class="wbi-card">';
+            WBI_Admin_Shell::render_notice( esc_html__( 'Pedido no encontrado.', 'wbi-suite' ), 'danger' );
+            echo '</section>';
+            WBI_Admin_Shell::close_page();
             return;
         }
 
-        $back_url   = esc_url( admin_url( 'admin.php?page=wbi-documents&tab=pending' ) );
-        $action_url = esc_url( admin_url( 'admin-post.php' ) );
+        $action_url = admin_url( 'admin-post.php' );
         $client_name = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
         $opts        = get_option( 'wbi_invoice_settings', array() );
         $default_type = ! empty( $opts['invoice_type'] ) ? $opts['invoice_type'] : 'B';
 
+        WBI_Admin_Shell::open_page();
+
         if ( $generate_type === 'invoice' ) :
         ?>
-        <div class="wrap">
-            <h1>📑 Generar Factura — Pedido #<?php echo intval( $order_id ); ?></h1>
-            <p><a href="<?php echo $back_url; ?>">&larr; Volver a la lista</a></p>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:900px;">
-                <div style="background:#fff;border:1px solid #c3c4c7;padding:20px;border-radius:6px;">
-                    <h3 style="margin-top:0;">📋 Datos del Pedido</h3>
-                    <table class="widefat striped">
+            <?php
+            WBI_Admin_Shell::render_header(
+                array(
+                    'title'       => 'Generar factura',
+                    'description' => 'Prepará los datos fiscales y emití la factura del pedido seleccionado.',
+                    'back_link'   => array(
+                        'url'   => $back_url,
+                        'label' => 'Volver a pedidos sin documento',
+                    ),
+                )
+            );
+            ?>
+            <div class="wbi-grid-2">
+                <section class="wbi-card">
+                    <h2 class="wbi-card-title">Datos del pedido #<?php echo intval( $order_id ); ?></h2>
+                    <table class="wbi-table">
                         <tr><th>Pedido</th><td>#<?php echo intval( $order_id ); ?></td></tr>
                         <tr><th>Cliente</th><td><?php echo esc_html( $client_name ); ?></td></tr>
                         <tr><th>Email</th><td><?php echo esc_html( $order->get_billing_email() ); ?></td></tr>
@@ -1033,8 +1162,8 @@ class WBI_Documents_Module {
                         <tr><th>Total</th><td><?php echo wc_price( $order->get_total() ); ?></td></tr>
                         <tr><th>Estado</th><td><?php echo esc_html( wc_get_order_status_name( $order->get_status() ) ); ?></td></tr>
                     </table>
-                    <h4>Detalle de Items</h4>
-                    <table class="widefat striped">
+                    <h3 class="wbi-section-title">Detalle de ítems</h3>
+                    <table class="wbi-table">
                         <thead><tr><th>Producto</th><th>Cant.</th><th>Subtotal</th></tr></thead>
                         <tbody>
                         <?php foreach ( $order->get_items() as $item ) : ?>
@@ -1046,11 +1175,11 @@ class WBI_Documents_Module {
                         <?php endforeach; ?>
                         </tbody>
                     </table>
-                </div>
+                </section>
 
-                <div style="background:#fff;border:1px solid #c3c4c7;padding:20px;border-radius:6px;">
-                    <h3 style="margin-top:0;">📑 Datos Fiscales</h3>
-                    <form method="post" action="<?php echo $action_url; ?>" target="_blank">
+                <section class="wbi-card">
+                    <h2 class="wbi-card-title">Datos fiscales</h2>
+                    <form method="post" action="<?php echo esc_url( $action_url ); ?>" target="_blank">
                         <?php wp_nonce_field( 'wbi_generate_document', '_wbi_doc_nonce' ); ?>
                         <input type="hidden" name="action" value="wbi_generate_document">
                         <input type="hidden" name="doc_type" value="invoice">
@@ -1100,55 +1229,68 @@ class WBI_Documents_Module {
                         </table>
 
                         <p class="submit">
-                            <button type="submit" class="button button-primary button-large">
-                                📑 Generar Factura y Ver PDF
+                            <button type="submit" class="wbi-btn wbi-btn-primary">
+                                Generar factura y ver PDF
                             </button>
                         </p>
                     </form>
-                </div>
+                </section>
             </div>
-        </div>
         <?php
         elseif ( $generate_type === 'remito' ) :
         ?>
-        <div class="wrap">
-            <h1>📄 Generar Remito — Pedido #<?php echo intval( $order_id ); ?></h1>
-            <p><a href="<?php echo $back_url; ?>">&larr; Volver a la lista</a></p>
-
-            <div style="max-width:600px;background:#fff;border:1px solid #c3c4c7;padding:20px;border-radius:6px;">
-                <h3 style="margin-top:0;">📋 Resumen del Pedido</h3>
-                <table class="widefat striped" style="margin-bottom:16px;">
+            <?php
+            WBI_Admin_Shell::render_header(
+                array(
+                    'title'       => 'Generar remito',
+                    'description' => 'Emití el remito del pedido seleccionado manteniendo el flujo administrativo actual.',
+                    'back_link'   => array(
+                        'url'   => $back_url,
+                        'label' => 'Volver a pedidos sin documento',
+                    ),
+                )
+            );
+            ?>
+            <section class="wbi-card">
+                <h2 class="wbi-card-title">Resumen del pedido #<?php echo intval( $order_id ); ?></h2>
+                <table class="wbi-table wbi-table-spaced">
                     <tr><th>Pedido</th><td>#<?php echo intval( $order_id ); ?></td></tr>
                     <tr><th>Cliente</th><td><?php echo esc_html( $client_name ); ?></td></tr>
                     <tr><th>Dirección</th><td><?php echo esc_html( $order->get_billing_address_1() . ', ' . $order->get_billing_city() ); ?></td></tr>
                     <tr><th>Total</th><td><?php echo wc_price( $order->get_total() ); ?></td></tr>
                 </table>
 
-                <form method="post" action="<?php echo $action_url; ?>" target="_blank">
+                <form method="post" action="<?php echo esc_url( $action_url ); ?>" target="_blank">
                     <?php wp_nonce_field( 'wbi_generate_document', '_wbi_doc_nonce' ); ?>
                     <input type="hidden" name="action" value="wbi_generate_document">
                     <input type="hidden" name="doc_type" value="remito">
                     <input type="hidden" name="order_id" value="<?php echo intval( $order_id ); ?>">
 
                     <p class="submit">
-                        <button type="submit" class="button button-primary button-large">
-                            📄 Generar Remito y Ver PDF
+                        <button type="submit" class="wbi-btn wbi-btn-primary">
+                            Generar remito y ver PDF
                         </button>
                     </p>
                 </form>
-            </div>
-        </div>
+            </section>
         <?php
-        else :
-            if ( $generate_type === 'orden' ) :
+        elseif ( $generate_type === 'orden' ) :
             ?>
-        <div class="wrap">
-            <h1>📦 Orden de Pedido — Pedido #<?php echo intval( $order_id ); ?></h1>
-            <p><a href="<?php echo $back_url; ?>">&larr; Volver a la lista</a></p>
-
-            <div style="max-width:600px;background:#fff;border:1px solid #c3c4c7;padding:20px;border-radius:6px;">
-                <h3 style="margin-top:0;">📋 Resumen del Pedido</h3>
-                <table class="widefat striped" style="margin-bottom:16px;">
+            <?php
+            WBI_Admin_Shell::render_header(
+                array(
+                    'title'       => 'Orden de pedido',
+                    'description' => 'Generá la orden de pedido del flujo de despacho sin alterar rutas ni permisos del módulo.',
+                    'back_link'   => array(
+                        'url'   => $back_url,
+                        'label' => 'Volver a pedidos sin documento',
+                    ),
+                )
+            );
+            ?>
+            <section class="wbi-card">
+                <h2 class="wbi-card-title">Resumen del pedido #<?php echo intval( $order_id ); ?></h2>
+                <table class="wbi-table wbi-table-spaced">
                     <tr><th>Pedido</th><td>#<?php echo intval( $order_id ); ?></td></tr>
                     <tr><th>Cliente</th><td><?php echo esc_html( $client_name ); ?></td></tr>
                     <tr><th>Dirección</th><td><?php echo esc_html( $order->get_billing_address_1() . ', ' . $order->get_billing_city() ); ?></td></tr>
@@ -1156,25 +1298,23 @@ class WBI_Documents_Module {
                     <tr><th>Estado</th><td><?php echo esc_html( wc_get_order_status_name( $order->get_status() ) ); ?></td></tr>
                 </table>
 
-                <form method="post" action="<?php echo $action_url; ?>" target="_blank">
+                <form method="post" action="<?php echo esc_url( $action_url ); ?>" target="_blank">
                     <?php wp_nonce_field( 'wbi_generate_document', '_wbi_doc_nonce' ); ?>
                     <input type="hidden" name="action" value="wbi_generate_document">
                     <input type="hidden" name="doc_type" value="orden">
                     <input type="hidden" name="order_id" value="<?php echo intval( $order_id ); ?>">
 
                     <p class="submit">
-                        <button type="submit" class="button button-primary button-large">
-                            📦 Generar Orden de Pedido
+                        <button type="submit" class="wbi-btn wbi-btn-primary">
+                            Generar orden de pedido
                         </button>
                     </p>
                 </form>
-            </div>
-        </div>
+            </section>
             <?php
-            else :
-                echo '<div class="notice notice-error"><p>Tipo de generación inválido.</p></div>';
-            endif;
         endif;
+
+        WBI_Admin_Shell::close_page();
     }
 
     // =========================================================================
@@ -1444,12 +1584,19 @@ function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pesta�
         $total_pages = $total > 0 ? (int) ceil( $total / $per_page ) : 1;
         $paged_ids   = array_slice( $all_ids, $offset, $per_page );
 
-        $base_url = admin_url( 'admin.php?page=wbi-documents&tab=ordenes' );
+        $base_url = add_query_arg(
+            array(
+                'page' => 'wbi-documents',
+                'tab'  => 'ordenes',
+            ),
+            admin_url( 'admin.php' )
+        );
 
-        echo '<p style="color:#555;">Total: <strong>' . intval( $total ) . '</strong> pedidos para despachar.</p>';
+        echo '<section class="wbi-card">';
+        echo '<p class="wbi-page-summary">Total: <strong>' . intval( $total ) . '</strong> pedidos para despachar.</p>';
         ?>
         <div class="wbi-table-responsive">
-        <table class="widefat striped wbi-sortable">
+        <table class="wbi-table wbi-sortable">
             <thead>
                 <tr>
                     <th>#Pedido</th>
@@ -1462,7 +1609,7 @@ function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pesta�
             </thead>
             <tbody>
             <?php if ( empty( $paged_ids ) ) : ?>
-                <tr><td colspan="6" style="text-align:center;color:#888;">No hay pedidos para despachar.</td></tr>
+                <tr><td colspan="6">No hay pedidos para despachar.</td></tr>
             <?php else : ?>
                 <?php foreach ( $paged_ids as $order_id ) :
                     $order = wc_get_order( $order_id );
@@ -1488,7 +1635,7 @@ function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pesta�
                     <td><?php echo esc_html( $client_name ); ?></td>
                     <td><?php echo $shipping_name; ?></td>
                     <td><?php echo wc_price( $order->get_total() ); ?></td>
-                    <td><a href="<?php echo esc_url( $view_url ); ?>" target="_blank" class="button button-small">📦 Ver Orden</a></td>
+                    <td><a href="<?php echo esc_url( $view_url ); ?>" target="_blank" class="wbi-btn wbi-btn-sm">Ver orden</a></td>
                 </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
@@ -1498,17 +1645,18 @@ function wbiClosePdf() { if (!window.close()) { alert('Podés cerrar esta pesta�
 
         <?php
         if ( $total_pages > 1 ) {
-            echo '<div class="tablenav"><div class="tablenav-pages">';
-            echo paginate_links( array(
+            $pagination = paginate_links( array(
                 'base'      => add_query_arg( 'paged', '%#%', $base_url ),
                 'format'    => '',
                 'current'   => $paged,
                 'total'     => $total_pages,
                 'prev_text' => '&laquo;',
                 'next_text' => '&raquo;',
+                'type'      => 'list',
             ) );
-            echo '</div></div>';
+            WBI_Admin_Shell::render_pagination( $pagination, sprintf( 'Página %1$d de %2$d', $paged, $total_pages ) );
         }
+        echo '</section>';
     }
 
     // =========================================================================

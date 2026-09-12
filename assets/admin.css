@@ -118,6 +118,13 @@
     margin-bottom: var(--wbi-space-3);
 }
 
+.wbi-page-header-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--wbi-space-2);
+    min-width: 0;
+}
+
 .wbi-page-title {
     margin: 0;
     font-size: 24px;
@@ -136,6 +143,27 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--wbi-space-2);
+}
+
+.wbi-page-back {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--wbi-space-1);
+    color: var(--wbi-primary);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.wbi-page-back:hover {
+    color: var(--wbi-primary-hover);
+    text-decoration: none;
+}
+
+.wbi-page-back .dashicons {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
 }
 
 .wbi-section-title {
@@ -752,6 +780,15 @@
     margin-top: var(--wbi-space-3);
 }
 
+.wbi-page-summary {
+    margin: 0;
+    color: var(--wbi-muted);
+}
+
+.wbi-table-spaced {
+    margin-bottom: var(--wbi-space-4);
+}
+
 .wbi-pagination .tablenav-pages {
     margin: 0;
     display: inline-flex;
@@ -1059,6 +1096,7 @@
     .wbi-wrap { margin: 8px 8px 40px; }
     .wbi-header { padding: 12px 14px; }
     .wbi-header h1, .wbi-header h2 { font-size: 17px; }
+    .wbi-page-header { align-items: stretch; }
     .wbi-card { padding: 14px; }
     .wbi-stat-card { padding: 14px; }
     .wbi-number { font-size: 22px; }
@@ -1070,6 +1108,7 @@
     .wbi-table th,
     .wbi-table td { padding: 8px 8px; font-size: 12px; }
     .wbi-btn { min-height: 44px; font-size: 14px; }
+    .wbi-page-actions { width: 100%; }
     .wbi-nav-tabs a,
     .wbi-nav-tabs .nav-tab { padding: 10px 12px; font-size: 13px; }
     .wbi-config-header { padding: 12px 14px; gap: 10px; }

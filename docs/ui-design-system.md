@@ -96,3 +96,33 @@ Superficie piloto: **Dashboard Ejecutivo** (`includes/class-wbi-dashboard.php`):
 7. Preservar filtros/query params con allowlist explícita (no copiar `$_GET` completo) para evitar propagar parámetros no deseados entre pantallas.
 
 Este patrón permite PRs pequeños por módulo sin refactor masivo ni cambios de lógica de negocio.
+
+## Shell y navegación administrativa compartida (issue #153)
+
+Para las pantallas administrativas que ya usan el design system, la capa PHP compartida queda centralizada en `includes/class-wbi-admin-shell.php`.
+
+### Responsabilidades del helper
+- `WBI_Admin_Shell::open_page()` / `close_page()`: wrapper estándar `wrap wbi-wrap > .wbi-page`.
+- `WBI_Admin_Shell::render_header()`: título, descripción corta, acciones contextuales y back link opcional.
+- `WBI_Admin_Shell::render_tabs()`: tabs con `aria-current="page"` y `aria-label` contextual.
+- `WBI_Admin_Shell::render_notice()`: mensajes/notices con variantes `success|warning|danger|info`.
+- `WBI_Admin_Shell::render_pagination()`: resumen + `paginate_links()` con estilo uniforme.
+
+### Pantallas representativas migradas en este paso
+- `includes/class-wbi-documents.php`
+- `includes/class-wbi-report-products.php`
+- `includes/class-wbi-report-clients.php`
+
+### Patrón recomendado para los próximos módulos (issue #155 y siguientes)
+1. Mantener el slug/capability/ruta actual del screen.
+2. Reemplazar `<div class="wrap">` por `WBI_Admin_Shell::open_page()` y `close_page()`.
+3. Crear un header corto con:
+   - título sin emoji como único indicador;
+   - descripción de una línea;
+   - 1–2 acciones contextuales máximo;
+   - back link solo cuando exista una vista de detalle/retorno.
+4. Usar `WBI_Admin_Shell::render_tabs()` si la pantalla tiene sub-secciones.
+5. Renderizar filtros con `.wbi-filter-panel` + `.wbi-filter-grid`.
+6. Envolver la superficie principal en `.wbi-card`.
+7. Migrar tablas a `.wbi-table` y paginación a `WBI_Admin_Shell::render_pagination()`.
+8. Mantener el scope CSS dentro de `.wbi-wrap` y evitar reglas globales sobre screens nativos de WordPress/WooCommerce.

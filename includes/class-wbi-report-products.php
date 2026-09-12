@@ -22,7 +22,7 @@ class WBI_Report_Products {
 
     public function render() {
         $allowed_tabs = array( 'stock', 'committed', 'dormant', 'best', 'worst' );
-        $tab = WBI_Admin_Query_Helper::get_enum( $_GET, 'tab', $allowed_tabs, 'stock' );
+        $tab          = WBI_Admin_Query_Helper::get_enum( $_GET, 'tab', $allowed_tabs, 'stock' );
         $date_range = WBI_Admin_Query_Helper::normalize_date_range_with_meta(
             $_GET,
             'start',
@@ -77,46 +77,76 @@ class WBI_Report_Products {
                 '_wpnonce'    => wp_create_nonce( 'wbi_export_dynamic' ),
             )
         );
+        $reset_url = admin_url( 'admin.php?page=wbi-products-report' );
+        $tabs      = array(
+            'stock'     => array( 'label' => 'Stock real', 'url' => add_query_arg( array( 'page' => 'wbi-products-report', 'tab' => 'stock' ), admin_url( 'admin.php' ) ) ),
+            'committed' => array( 'label' => 'Stock comprometido', 'url' => add_query_arg( array( 'page' => 'wbi-products-report', 'tab' => 'committed' ), admin_url( 'admin.php' ) ) ),
+            'dormant'   => array( 'label' => 'Stock dormido (+90d)', 'url' => add_query_arg( array( 'page' => 'wbi-products-report', 'tab' => 'dormant' ), admin_url( 'admin.php' ) ) ),
+            'best'      => array( 'label' => 'Más vendidos', 'url' => add_query_arg( array( 'page' => 'wbi-products-report', 'tab' => 'best' ), admin_url( 'admin.php' ) ) ),
+            'worst'     => array( 'label' => 'Menos vendidos', 'url' => add_query_arg( array( 'page' => 'wbi-products-report', 'tab' => 'worst' ), admin_url( 'admin.php' ) ) ),
+        );
 
         ?>
-        <div class="wrap">
+        <?php WBI_Admin_Shell::open_page(); ?>
             <?php if ( $date_range['has_error'] ) : ?>
-                <div class="notice notice-warning"><p><?php esc_html_e( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ); ?></p></div>
+                <?php WBI_Admin_Shell::render_notice( esc_html__( 'El rango de fechas enviado no es válido o estaba invertido. Se aplicó el rango por defecto.', 'wbi-suite' ), 'warning' ); ?>
             <?php endif; ?>
-            <h1 class="wp-heading-inline">📦 Productos & Stock</h1>
-            <a href="<?php echo esc_url($export_url); ?>" class="page-title-action">📥 Exportar esta Tabla a CSV</a>
-            <hr class="wp-header-end">
-            
-            <nav class="nav-tab-wrapper">
-                <a href="?page=wbi-products-report&tab=stock" class="nav-tab <?php echo $tab=='stock'?'nav-tab-active':'';?>">Stock Real</a>
-                <a href="?page=wbi-products-report&tab=committed" class="nav-tab <?php echo $tab=='committed'?'nav-tab-active':'';?>">Stock Comprometido</a>
-                <a href="?page=wbi-products-report&tab=dormant" class="nav-tab <?php echo $tab=='dormant'?'nav-tab-active':'';?>">Stock Dormido (+90d)</a>
-                <a href="?page=wbi-products-report&tab=best" class="nav-tab <?php echo $tab=='best'?'nav-tab-active':'';?>">Más Vendidos</a>
-                <a href="?page=wbi-products-report&tab=worst" class="nav-tab <?php echo $tab=='worst'?'nav-tab-active':'';?>">Menos Vendidos</a>
-            </nav>
+            <?php
+            WBI_Admin_Shell::render_header(
+                array(
+                    'title'       => 'Productos y stock',
+                    'description' => 'Vista administrativa unificada para inventario actual, stock comprometido y desempeño comercial de productos.',
+                    'actions'     => array(
+                        array(
+                            'url'        => $export_url,
+                            'label'      => 'Exportar CSV',
+                            'class'      => 'wbi-btn wbi-btn-primary',
+                            'aria_label' => 'Exportar la tabla actual de productos y stock a CSV',
+                        ),
+                        array(
+                            'url'   => $reset_url,
+                            'label' => 'Restablecer',
+                            'class' => 'wbi-btn',
+                        ),
+                    ),
+                )
+            );
+            WBI_Admin_Shell::render_tabs( $tabs, $tab, array( 'label' => 'Secciones del reporte de productos y stock' ) );
+            ?>
 
             <!-- FILTRO DE FECHAS: SOLO PARA MÁS/MENOS VENDIDOS -->
             <?php if( $tab == 'best' || $tab == 'worst' ): ?>
-            <div style="background:#fff; padding:15px; border:1px solid #c3c4c7; border-top:none; margin-bottom:15px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                <form method="get">
+            <form method="get" class="wbi-filter-panel">
+                <div class="wbi-filter-grid">
                     <input type="hidden" name="page" value="wbi-products-report">
                     <input type="hidden" name="tab" value="<?php echo esc_attr($tab); ?>">
-                    <strong>📅 Filtrar Periodo:</strong> 
-                    Desde <input type="date" name="start" value="<?php echo esc_attr($start); ?>"> 
-                    Hasta <input type="date" name="end" value="<?php echo esc_attr($end); ?>">
-
-                    <strong style="margin-left:8px;">Estados:</strong>
-                    <select name="statuses[]" multiple size="4" style="height:72px; min-width:140px;" title="Mantené Ctrl/Cmd para seleccionar múltiples">
-                        <?php foreach ( $all_statuses as $val => $label ) : ?>
-                            <option value="<?php echo esc_attr($val); ?>" <?php echo in_array($val, $statuses, true) ? 'selected' : ''; ?>><?php echo esc_html($label); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <button class="button button-primary">Actualizar</button>
-                </form>
-            </div>
+                    <div class="wbi-filter-field wbi-col-3">
+                        <label for="wbi-products-start">Desde</label>
+                        <input id="wbi-products-start" type="date" name="start" value="<?php echo esc_attr( $start ); ?>">
+                    </div>
+                    <div class="wbi-filter-field wbi-col-3">
+                        <label for="wbi-products-end">Hasta</label>
+                        <input id="wbi-products-end" type="date" name="end" value="<?php echo esc_attr( $end ); ?>">
+                    </div>
+                    <div class="wbi-filter-field wbi-col-3">
+                        <label for="wbi-products-statuses">Estados del pedido</label>
+                        <select id="wbi-products-statuses" name="statuses[]" multiple size="4" title="Mantené Ctrl/Cmd para seleccionar múltiples">
+                            <?php foreach ( $all_statuses as $val => $label ) : ?>
+                                <option value="<?php echo esc_attr($val); ?>" <?php echo in_array($val, $statuses, true) ? 'selected' : ''; ?>><?php echo esc_html($label); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="wbi-filter-field wbi-col-3">
+                        <div class="wbi-filter-actions">
+                            <button class="wbi-btn wbi-btn-primary" type="submit">Actualizar</button>
+                            <a class="wbi-btn" href="<?php echo esc_url( add_query_arg( array( 'page' => 'wbi-products-report', 'tab' => $tab ), admin_url( 'admin.php' ) ) ); ?>">Limpiar</a>
+                        </div>
+                    </div>
+                </div>
+            </form>
             <?php endif; ?>
 
-            <div style="background:#fff; padding:20px; border:1px solid #c3c4c7; margin-top:10px;">
+            <section class="wbi-card">
                 <?php
                 if($tab=='stock'){
                     $total_rows = $this->engine->count_realtime_stock();
@@ -126,8 +156,8 @@ class WBI_Report_Products {
                         $offset       = ( $current_page - 1 ) * $per_page;
                     }
                     $data = $this->engine->get_realtime_stock( $per_page, $offset );
-                    echo '<p><i>Inventario físico actual en sistema.</i></p>';
-                    echo '<form method="get" style="margin:0 0 12px;display:flex;gap:8px;align-items:center;">';
+                    echo '<p class="wbi-page-summary">Inventario físico actual registrado en el sistema.</p>';
+                    echo '<form method="get" class="wbi-filter-bar">';
                     echo '<input type="hidden" name="page" value="wbi-products-report">';
                     echo '<input type="hidden" name="tab" value="stock">';
                     echo '<input type="hidden" name="start" value="' . esc_attr( $start ) . '">';
@@ -141,12 +171,12 @@ class WBI_Report_Products {
                         echo '<option value="' . esc_attr( $pp ) . '" ' . selected( $per_page, $pp, false ) . '>' . esc_html( $pp ) . '</option>';
                     }
                     echo '</select>';
-                    echo '<button class="button" type="submit">Aplicar</button>';
+                    echo '<button class="wbi-btn" type="submit">Aplicar</button>';
                     echo '</form>';
                     echo '<div class="wbi-table-responsive">'; 
-                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Stock Actual</th></tr></thead><tbody>';
+                    echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Producto</th><th data-align="right">Stock actual</th></tr></thead><tbody>';
                     if ( ! empty( $data ) ) {
-                        foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td><span class='badge'>" . intval($d->stock) . "</span></td></tr>";
+                        foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td data-align='right'><span class='wbi-badge wbi-badge-primary'>" . intval($d->stock) . "</span></td></tr>";
                     } else {
                         echo '<tr><td colspan="2">No hay productos con stock registrado.</td></tr>';
                     }
@@ -160,8 +190,8 @@ class WBI_Report_Products {
                         $offset       = ( $current_page - 1 ) * $per_page;
                     }
                     $data = $this->engine->get_committed_stock( $per_page, $offset );
-                    echo '<p><i>Productos reservados en pedidos pendientes de envío.</i></p>';
-                    echo '<form method="get" style="margin:0 0 12px;display:flex;gap:8px;align-items:center;">';
+                    echo '<p class="wbi-page-summary">Productos reservados en pedidos pendientes de envío.</p>';
+                    echo '<form method="get" class="wbi-filter-bar">';
                     echo '<input type="hidden" name="page" value="wbi-products-report">';
                     echo '<input type="hidden" name="tab" value="committed">';
                     echo '<input type="hidden" name="start" value="' . esc_attr( $start ) . '">';
@@ -175,12 +205,12 @@ class WBI_Report_Products {
                         echo '<option value="' . esc_attr( $pp ) . '" ' . selected( $per_page, $pp, false ) . '>' . esc_html( $pp ) . '</option>';
                     }
                     echo '</select>';
-                    echo '<button class="button" type="submit">Aplicar</button>';
+                    echo '<button class="wbi-btn" type="submit">Aplicar</button>';
                     echo '</form>';
                     echo '<div class="wbi-table-responsive">'; 
-                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Cant.</th><th>Pedido</th></tr></thead><tbody>';
+                    echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Producto</th><th data-align="right">Cantidad</th><th>Pedido</th></tr></thead><tbody>';
                     if ( ! empty( $data ) ) {
-                        foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td>" . intval($d->qty) . "</td><td><a href='post.php?post=" . intval($d->order_id) . "&action=edit'>#" . intval($d->order_id) . "</a></td></tr>";
+                        foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td data-align='right'>" . intval($d->qty) . "</td><td><a href='" . esc_url( add_query_arg( array( 'post' => intval( $d->order_id ), 'action' => 'edit' ), admin_url( 'post.php' ) ) ) . "'>#" . intval($d->order_id) . "</a></td></tr>";
                     } else {
                         echo '<tr><td colspan="3">No hay stock comprometido actualmente.</td></tr>';
                     }
@@ -194,8 +224,8 @@ class WBI_Report_Products {
                         $offset       = ( $current_page - 1 ) * $per_page;
                     }
                     $data = $this->engine->get_dormant_stock( $per_page, $offset );
-                    echo '<p style="color:red;"><i>Productos con stock positivo sin movimiento en 90 días.</i></p>';
-                    echo '<form method="get" style="margin:0 0 12px;display:flex;gap:8px;align-items:center;">';
+                    echo '<p class="wbi-page-summary">Productos con stock positivo sin movimiento en los últimos 90 días.</p>';
+                    echo '<form method="get" class="wbi-filter-bar">';
                     echo '<input type="hidden" name="page" value="wbi-products-report">';
                     echo '<input type="hidden" name="tab" value="dormant">';
                     echo '<input type="hidden" name="start" value="' . esc_attr( $start ) . '">';
@@ -209,12 +239,12 @@ class WBI_Report_Products {
                         echo '<option value="' . esc_attr( $pp ) . '" ' . selected( $per_page, $pp, false ) . '>' . esc_html( $pp ) . '</option>';
                     }
                     echo '</select>';
-                    echo '<button class="button" type="submit">Aplicar</button>';
+                    echo '<button class="wbi-btn" type="submit">Aplicar</button>';
                     echo '</form>';
                     echo '<div class="wbi-table-responsive">'; 
-                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Stock Inmovilizado</th><th>Último Mov.</th></tr></thead><tbody>';
+                    echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Producto</th><th data-align="right">Stock inmovilizado</th><th>Último movimiento</th></tr></thead><tbody>';
                     if ( ! empty( $data ) ) {
-                        foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td>" . intval($d->stock) . "</td><td>" . date('d/m/Y', strtotime($d->post_modified)) . "</td></tr>";
+                        foreach($data as $d) echo "<tr><td>" . esc_html($d->post_title) . "</td><td data-align='right'>" . intval($d->stock) . "</td><td>" . esc_html( mysql2date( 'd/m/Y', $d->post_modified ) ) . "</td></tr>";
                     } else {
                         echo '<tr><td colspan="3">No hay productos con stock dormido.</td></tr>';
                     }
@@ -222,12 +252,12 @@ class WBI_Report_Products {
                     echo '</div>';
                 } elseif($tab=='best'){
                     $data = $this->engine->get_best_sellers($start, $end, $statuses);
-                    echo "<p>Ranking del <b>" . esc_html($start) . "</b> al <b>" . esc_html($end) . "</b>.</p>";
+                    echo "<p class='wbi-page-summary'>Ranking del <strong>" . esc_html($start) . "</strong> al <strong>" . esc_html($end) . "</strong>.</p>";
 
                     if ( $data ) {
                         $prod_names = wp_json_encode( array_map( function($r){ return $r->name; }, $data ) );
                         $prod_qtys  = wp_json_encode( array_map( function($r){ return intval($r->qty); }, $data ) );
-                        echo '<canvas id="wbiBestChart" style="max-height:320px; margin-bottom:20px;"></canvas>';
+                        echo '<div class="wbi-chart-container"><canvas id="wbiBestChart" role="img" aria-label="Gráfico de barras de productos más vendidos"></canvas></div>';
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiBestChart");
@@ -237,19 +267,19 @@ class WBI_Report_Products {
                     }
 
                     echo '<div class="wbi-table-responsive">'; 
-                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Unidades Vendidas</th></tr></thead><tbody>';
-                    if($data) foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td><strong>" . intval($d->qty) . "</strong></td></tr>";
+                    echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Producto</th><th data-align="right">Unidades vendidas</th></tr></thead><tbody>';
+                    if($data) foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td data-align='right'><strong>" . intval($d->qty) . "</strong></td></tr>";
                     else echo "<tr><td colspan=2>Sin ventas en este periodo.</td></tr>";
                     echo '</tbody></table>';
                     echo '</div>';
                 } elseif($tab=='worst'){
                     $data = $this->engine->get_least_sold($start, $end, $statuses);
-                    echo "<p>Productos con menor salida del <b>" . esc_html($start) . "</b> al <b>" . esc_html($end) . "</b> (pero con al menos 1 venta).</p>";
+                    echo "<p class='wbi-page-summary'>Productos con menor salida del <strong>" . esc_html($start) . "</strong> al <strong>" . esc_html($end) . "</strong> (pero con al menos 1 venta).</p>";
 
                     if ( $data ) {
                         $prod_names = wp_json_encode( array_map( function($r){ return $r->name; }, $data ) );
                         $prod_qtys  = wp_json_encode( array_map( function($r){ return intval($r->qty); }, $data ) );
-                        echo '<canvas id="wbiWorstChart" style="max-height:320px; margin-bottom:20px;"></canvas>';
+                        echo '<div class="wbi-chart-container"><canvas id="wbiWorstChart" role="img" aria-label="Gráfico de barras de productos menos vendidos"></canvas></div>';
                         echo '<script>
                         (function(){
                             var ctx = document.getElementById("wbiWorstChart");
@@ -259,8 +289,8 @@ class WBI_Report_Products {
                     }
 
                     echo '<div class="wbi-table-responsive">'; 
-                    echo '<table class="widefat striped wbi-sortable"><thead><tr><th>Producto</th><th>Unidades Vendidas</th></tr></thead><tbody>';
-                    if($data) foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td>" . intval($d->qty) . "</td></tr>";
+                    echo '<table class="wbi-table wbi-sortable"><thead><tr><th>Producto</th><th data-align="right">Unidades vendidas</th></tr></thead><tbody>';
+                    if($data) foreach($data as $d) echo "<tr><td>" . esc_html($d->name) . "</td><td data-align='right'>" . intval($d->qty) . "</td></tr>";
                     else echo "<tr><td colspan=2>Sin datos.</td></tr>";
                     echo '</tbody></table>';
                     echo '</div>';
@@ -289,17 +319,10 @@ class WBI_Report_Products {
                         'type'      => 'list',
                     ) );
                     ?>
-                    <div style="margin-top:12px;">
-                        <p style="margin:0 0 8px;color:#50575e;">
-                            <?php echo esc_html( sprintf( 'Página %1$d de %2$d · Total: %3$d', $current_page, max( 1, $total_pages ), (int) $total_rows ) ); ?>
-                        </p>
-                        <?php if ( $pagination ) : ?>
-                            <div class="tablenav-pages"><?php echo wp_kses_post( $pagination ); ?></div>
-                        <?php endif; ?>
-                    </div>
+                    <?php WBI_Admin_Shell::render_pagination( $pagination, sprintf( 'Página %1$d de %2$d · Total: %3$d', $current_page, max( 1, $total_pages ), (int) $total_rows ) ); ?>
                 <?php endif; ?>
-            </div>
-        </div>
+            </section>
+        <?php WBI_Admin_Shell::close_page(); ?>
         <?php
     }
 }
