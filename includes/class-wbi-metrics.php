@@ -203,20 +203,30 @@ class WBI_Metrics_Engine {
     // --- 1. GENERALES Y DASHBOARD ---
     
     // Esta es la función que probablemente causaba el error si faltaba
-    public function get_order_status_counts() {
-        return $this->cached_query( 'wbi_order_status_counts', function() {
+    public function get_order_status_counts( $start = '', $end = '', $statuses = null ) {
+        $cache_key = 'wbi_order_status_counts_' . md5( wp_json_encode( array( $start, $end, $statuses ) ) );
+
+        return $this->cached_query( $cache_key, function() use ( $start, $end, $statuses ) {
             $all_statuses = "'wc-completed','wc-processing','wc-on-hold','wc-pending','wc-cancelled','wc-failed','wc-refunded'";
+            $statuses_in  = empty( $statuses ) ? "({$all_statuses})" : $this->build_statuses_in( $statuses );
+            $date_sql     = '';
             if ( $this->is_hpos_active() ) {
+                if ( '' !== $start && '' !== $end ) {
+                    $date_sql = $this->get_date_query( $start, $end, 'o', 'date_created_gmt' );
+                }
                 $sql = "SELECT status AS post_status, COUNT(id) AS count
                         FROM {$this->wpdb->prefix}wc_orders
                         WHERE type = 'shop_order'
-                        AND status IN ({$all_statuses})
+                        AND status IN {$statuses_in}{$date_sql}
                         GROUP BY status";
             } else {
+                if ( '' !== $start && '' !== $end ) {
+                    $date_sql = $this->get_date_query( $start, $end, 'p' );
+                }
                 $sql = "SELECT post_status, COUNT(ID) as count 
                         FROM {$this->wpdb->posts} 
                         WHERE post_type = 'shop_order' 
-                        AND post_status IN ({$all_statuses}) 
+                        AND post_status IN {$statuses_in}{$date_sql}
                         GROUP BY post_status";
             }
             return $this->wpdb->get_results( $sql, OBJECT_K );

@@ -256,6 +256,7 @@
 .wbi-delta           { font-weight: 700; }
 .wbi-delta.positive  { color: var(--wbi-success); }
 .wbi-delta.negative  { color: var(--wbi-danger); }
+.wbi-delta.neutral   { color: var(--wbi-text); }
 
 /* =========================================================
    6. GRIDS — MOBILE FIRST
@@ -557,6 +558,14 @@
     margin-bottom: var(--wbi-space-1);
 }
 
+.wbi-filter-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--wbi-muted);
+    margin-bottom: var(--wbi-space-1);
+}
+
 .wbi-filter-actions {
     display: flex;
     align-items: center;
@@ -659,6 +668,19 @@
 
 .wbi-filter-field select[multiple] {
     min-height: 128px;
+}
+
+.wbi-field-help {
+    margin: var(--wbi-space-1) 0 0;
+    color: var(--wbi-muted);
+    font-size: 12px;
+}
+
+.wbi-field-help-error {
+    color: #991b1b;
+    font-weight: 600;
+    border-left: 3px solid currentColor;
+    padding-left: var(--wbi-space-2);
 }
 
 /* =========================================================
@@ -857,6 +879,7 @@
    ========================================================= */
 .wbi-chart-container {
     position: relative;
+    min-height: 260px;
     max-height: 320px;
     width: 100%;
 }
@@ -865,6 +888,104 @@
     max-height: 260px;
     display: flex;
     justify-content: center;
+}
+
+.wbi-chart-container-tall {
+    min-height: 320px;
+    max-height: 320px;
+}
+
+.wbi-chart-container-compact {
+    min-height: 260px;
+    max-height: 260px;
+}
+
+.wbi-dashboard-page .wbi-filter-panel {
+    margin-bottom: var(--wbi-space-6);
+}
+
+.wbi-dashboard-page .wbi-dashboard-conditional-field {
+    align-self: start;
+}
+
+.wbi-dashboard-page .wbi-dashboard-date-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--wbi-space-2);
+}
+
+.wbi-dashboard-page .wbi-dashboard-date-field label {
+    margin-bottom: var(--wbi-space-1);
+}
+
+.wbi-dashboard-page .wbi-dashboard-filter-actions {
+    min-height: 100%;
+    align-items: flex-end;
+}
+
+.wbi-dashboard-page .wbi-dashboard-stat-card {
+    text-align: left;
+    border-top: 3px solid transparent;
+}
+
+.wbi-dashboard-page .wbi-dashboard-stat-card .wbi-number {
+    word-break: break-word;
+}
+
+.wbi-dashboard-page .wbi-dashboard-stat-card--success { border-top-color: var(--wbi-success); }
+.wbi-dashboard-page .wbi-dashboard-stat-card--info { border-top-color: var(--wbi-info); }
+.wbi-dashboard-page .wbi-dashboard-stat-card--warning { border-top-color: var(--wbi-warning); }
+.wbi-dashboard-page .wbi-dashboard-stat-card--danger { border-top-color: var(--wbi-danger); }
+.wbi-dashboard-page .wbi-dashboard-stat-card--primary,
+.wbi-dashboard-page .wbi-dashboard-stat-card--indigo { border-top-color: var(--wbi-primary); }
+
+.wbi-dashboard-page .wbi-dashboard-compare-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--wbi-space-2);
+    align-items: center;
+}
+
+.wbi-dashboard-page .wbi-dashboard-chart-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--wbi-space-3);
+}
+
+.wbi-dashboard-page .wbi-dashboard-chart-summary {
+    margin: 0;
+    color: var(--wbi-muted);
+    font-size: 13px;
+}
+
+.wbi-dashboard-page .wbi-dashboard-chart-error {
+    margin-bottom: 0;
+}
+
+.wbi-dashboard-page .wbi-dashboard-chart-details {
+    border-top: 1px solid var(--wbi-border);
+    padding-top: var(--wbi-space-3);
+}
+
+.wbi-dashboard-page .wbi-dashboard-chart-details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--wbi-primary);
+    margin-bottom: var(--wbi-space-2);
+}
+
+.wbi-dashboard-page .wbi-dashboard-inline-form {
+    justify-content: flex-end;
+}
+
+.wbi-dashboard-page .wbi-dashboard-inline-form label {
+    margin-bottom: 0;
+}
+
+@media (min-width: 783px) {
+    .wbi-dashboard-page .wbi-dashboard-date-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 /* =========================================================
@@ -1473,6 +1594,11 @@
     .wbi-crm-board { gap: 10px; }
     .wbi-crm-column { flex: 0 0 220px; }
     .wbi-crm-modal-inner { padding: 16px; }
+
+    .wbi-dashboard-page .wbi-dashboard-inline-form {
+        width: 100%;
+        justify-content: flex-start;
+    }
 }
 
 /* =========================================================
